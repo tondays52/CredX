@@ -267,6 +267,62 @@ contract CredXHub is ICredXHub {
     //  Internal: Update Borrower Profile with Multi-Factor Data
     // ═══════════════════════════════════════════════════════════════════════
 
+    function _updateProfileMetrics(
+        address borrower,
+        BorrowerProfile storage profile,
+        uint256 sourceChainId,
+        ActionType actionType,
+        uint256 reportedValueUSD
+    ) private {
+        if (borrower == address(0)) revert ZeroAddress();
+
+        profile.totalVerifiedVolumeUSD += reportedValueUSD;
+        profile.totalAttestationsCount += 1;
+        profile.lastAttestationTimestamp = block.number;
+
+        if (sourceChainId == 1) {
+            profile.isMainnetActive = true;
+        }
+
+        uint8 actionBit = uint8(1 << uint8(actionType));
+        if ((borrowerActionBitmap[borrower] & actionBit) == 0) {
+            borrowerActionBitmap[borrower] |= actionBit;
+            profile.protocolDiversityCount += 1;
+        }
+
+        uint256 chainBit = 1 << (sourceChainId % 256);
+        if ((borrowerChainBitmap[borrower] & chainBit) == 0) {
+            borrowerChainBitmap[borrower] |= chainBit;
+            profile.chainDiversityCount += 1;
+        }
+
+        uint256 weight = scoreEngine.getActionWeight(uint256(actionType));
+        profile.weightedActionScore += (reportedValueUSD * weight) / 10000;
+    }
+
+    function _computeScoreWithBoost(address borrower, BorrowerProfile storage profile) private view returns (uint256) {
+        if (borrower == address(0)) revert ZeroAddress();
+
+        uint256 score = scoreEngine.computeScoreMultiFactor(
+            profile.totalVerifiedVolumeUSD,
+            profile.totalAttestationsCount,
+            profile.lastAttestationTimestamp,
+            profile.isMainnetActive,
+            profile.protocolDiversityCount,
+            profile.chainDiversityCount,
+            profile.weightedActionScore
+        );
+
+        CreditDelegation memory delegation = delegatedBoosts[borrower];
+        if (delegation.isActive && delegation.expiry > block.number) {
+            score += delegation.boostAmount;
+            if (score > scoreEngine.MAX_SCORE()) {
+                score = scoreEngine.MAX_SCORE();
+            }
+        }
+        return score;
+    }
+
     function _updateBorrowerProfile(
         address borrower,
         IAttestationVerifier.EventProof calldata proof,
@@ -280,60 +336,11 @@ contract CredXHub is ICredXHub {
         BorrowerProfile storage profile = borrowerProfiles[borrower];
         uint256 oldScore = profile.creditScore == 0 ? scoreEngine.MIN_SCORE() : profile.creditScore;
 
-        // Update cumulative volume
-        profile.totalVerifiedVolumeUSD += reportedValueUSD;
-        profile.totalAttestationsCount += 1;
-        profile.lastAttestationTimestamp = block.number;
-
-        // Track mainnet activity
-        if (proof.sourceChainId == 1) {
-            profile.isMainnetActive = true;
-        }
-
-        // Track protocol diversity (bitmap: each ActionType sets a bit)
-        uint8 actionBit = uint8(1 << uint8(actionType));
-        if ((borrowerActionBitmap[borrower] & actionBit) == 0) {
-            borrowerActionBitmap[borrower] |= actionBit;
-            profile.protocolDiversityCount += 1;
-        }
-
-        // Track chain diversity
-        uint256 chainBit = 1 << (proof.sourceChainId % 256);
-        if ((borrowerChainBitmap[borrower] & chainBit) == 0) {
-            borrowerChainBitmap[borrower] |= chainBit;
-            profile.chainDiversityCount += 1;
-        }
-
-        // Weighted action score (value * weight multiplier)
-        uint256 weight = scoreEngine.getActionWeight(uint256(actionType));
-        profile.weightedActionScore += (reportedValueUSD * weight) / 10000;
-
-        // Compute OCCR multi-factor score
-        newScore = scoreEngine.computeScoreMultiFactor(
-            profile.totalVerifiedVolumeUSD,
-            profile.totalAttestationsCount,
-            profile.lastAttestationTimestamp,
-            profile.isMainnetActive,
-            profile.protocolDiversityCount,
-            profile.chainDiversityCount,
-            profile.weightedActionScore
-        );
-
-        // Apply credit delegation boost if active
-        CreditDelegation memory delegation = delegatedBoosts[borrower];
-        if (delegation.isActive && delegation.expiry > block.number) {
-            newScore += delegation.boostAmount;
-            if (newScore > scoreEngine.MAX_SCORE()) {
-                newScore = scoreEngine.MAX_SCORE();
-            }
-        }
-
+        _updateProfileMetrics(borrower, profile, proof.sourceChainId, actionType, reportedValueUSD);
+        newScore = _computeScoreWithBoost(borrower, profile);
         profile.creditScore = newScore;
 
-        // Privacy-preserving commitment hash (stores commitment, not raw proof data)
         bytes32 privacyCommitment = keccak256(abi.encodePacked(replayKey, borrower, block.number));
-
-        // Store in history
         _borrowerHistory[borrower].push(VerifiedAttestationRecord({
             proofHash: replayKey,
             sourceChainId: proof.sourceChainId,
