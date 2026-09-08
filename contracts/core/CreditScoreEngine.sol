@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import "../interfaces/ICredXHub.sol";
+import {ICredXHub} from "../interfaces/ICredXHub.sol";
 
 /**
  * @title CreditScoreEngine
@@ -41,8 +41,13 @@ contract CreditScoreEngine {
     // Higher weight = more valuable contribution to credit score
     uint256[8] public actionWeights;
 
+    error Unauthorized();
+    error OnlyOwner();
+    error InvalidActionType();
+    error ZeroAddress();
+
     modifier onlyCredXHub() {
-        require(msg.sender == credXHub || msg.sender == owner, "Unauthorized: Only CredXHub");
+        if (msg.sender != credXHub && msg.sender != owner) revert Unauthorized();
         _;
     }
 
@@ -61,7 +66,8 @@ contract CreditScoreEngine {
     }
 
     function setCredXHub(address _credXHub) external {
-        require(msg.sender == owner, "Only owner");
+        if (msg.sender != owner) revert OnlyOwner();
+        if (_credXHub == address(0)) revert ZeroAddress();
         credXHub = _credXHub;
     }
 
@@ -92,83 +98,62 @@ contract CreditScoreEngine {
             return MIN_SCORE;
         }
 
-        uint256 calculatedScore = BASE_SCORE;
+        uint256 calculatedScore = BASE_SCORE +
+            _calculateVolumeBonus(totalVerifiedVolumeUSD) +
+            _calculateDiversityBonus(protocolDiversity, chainDiversity) +
+            _calculateActivityBonus(attestationsCount, lastAttestationTimestamp, isMainnetSource, weightedActionScore);
 
-        // ─── Dimension 1: Volume Score (Up to +200 points) ───
-        uint256 volumeInUSDUnits = totalVerifiedVolumeUSD / 10**18;
-        if (volumeInUSDUnits >= 100_000) {
-            calculatedScore += 200;
-        } else if (volumeInUSDUnits >= 50_000) {
-            calculatedScore += 160;
-        } else if (volumeInUSDUnits >= 10_000) {
-            calculatedScore += 100;
-        } else if (volumeInUSDUnits >= 1_000) {
-            calculatedScore += 50;
-        } else {
-            calculatedScore += (volumeInUSDUnits * 50) / 1000;
-        }
-
-        // ─── Dimension 2: Protocol Diversity (Up to +80 points) ───
-        // Using 3+ different DeFi protocols signals sophisticated, diversified behavior
-        if (protocolDiversity >= 5) {
-            calculatedScore += 80;
-        } else if (protocolDiversity >= 3) {
-            calculatedScore += 50;
-        } else if (protocolDiversity >= 2) {
-            calculatedScore += 25;
-        }
-
-        // ─── Dimension 3: Chain Diversity (Up to +40 points) ───
-        // Proving activity across multiple chains
-        if (chainDiversity >= 3) {
-            calculatedScore += 40;
-        } else if (chainDiversity >= 2) {
-            calculatedScore += 20;
-        }
-
-        // ─── Dimension 4: Attestation Frequency (Up to +80 points) ───
-        if (attestationsCount >= 15) {
-            calculatedScore += 80;
-        } else if (attestationsCount >= 10) {
-            calculatedScore += 60;
-        } else if (attestationsCount >= 5) {
-            calculatedScore += 40;
-        } else {
-            calculatedScore += (attestationsCount * 8);
-        }
-
-        // ─── Dimension 5: Recency Bonus (Up to +50 points) ───
-        if (lastAttestationTimestamp != 0 && (block.timestamp >= lastAttestationTimestamp) && (block.timestamp - lastAttestationTimestamp) <= 30 days) {
-            calculatedScore += 50;
-        } else if (lastAttestationTimestamp != 0 && (block.timestamp >= lastAttestationTimestamp) && (block.timestamp - lastAttestationTimestamp) <= 90 days) {
-            calculatedScore += 25;
-        }
-
-        // ─── Dimension 6: Mainnet Source Quality (+20 points) ───
-        if (isMainnetSource) {
-            calculatedScore += 20;
-        }
-
-        // ─── Dimension 7: Weighted Action Bonus (Up to +80 points) ───
-        // Based on cumulative weighted scores from diverse action types
-        uint256 normalizedActionBonus = weightedActionScore / 10**18;
-        if (normalizedActionBonus >= 50) {
-            calculatedScore += 80;
-        } else if (normalizedActionBonus >= 20) {
-            calculatedScore += 50;
-        } else if (normalizedActionBonus >= 5) {
-            calculatedScore += 25;
-        }
-
-        // Cap score within [MIN_SCORE, MAX_SCORE]
         if (calculatedScore > MAX_SCORE) {
-            calculatedScore = MAX_SCORE;
+            return MAX_SCORE;
         }
         if (calculatedScore < MIN_SCORE) {
-            calculatedScore = MIN_SCORE;
+            return MIN_SCORE;
         }
 
         return calculatedScore;
+    }
+
+    function _calculateVolumeBonus(uint256 totalVerifiedVolumeUSD) internal pure returns (uint256) {
+        uint256 volumeInUSDUnits = totalVerifiedVolumeUSD / 10**18;
+        if (volumeInUSDUnits >= 100_000) return 200;
+        if (volumeInUSDUnits >= 50_000) return 160;
+        if (volumeInUSDUnits >= 10_000) return 100;
+        if (volumeInUSDUnits >= 1_000) return 50;
+        return (volumeInUSDUnits * 50) / 1000;
+    }
+
+    function _calculateDiversityBonus(uint256 protocolDiversity, uint256 chainDiversity) internal pure returns (uint256 bonus) {
+        if (protocolDiversity >= 5) bonus += 80;
+        else if (protocolDiversity >= 3) bonus += 50;
+        else if (protocolDiversity >= 2) bonus += 25;
+
+        if (chainDiversity >= 3) bonus += 40;
+        else if (chainDiversity >= 2) bonus += 20;
+    }
+
+    function _calculateActivityBonus(
+        uint256 attestationsCount,
+        uint256 lastAttestationTimestamp,
+        bool isMainnetSource,
+        uint256 weightedActionScore
+    ) internal view returns (uint256 bonus) {
+        if (attestationsCount >= 15) bonus += 80;
+        else if (attestationsCount >= 10) bonus += 60;
+        else if (attestationsCount >= 5) bonus += 40;
+        else bonus += (attestationsCount * 8);
+
+        if (lastAttestationTimestamp != 0 && block.timestamp >= lastAttestationTimestamp) {
+            uint256 age = block.timestamp - lastAttestationTimestamp;
+            if (age <= 30 days) bonus += 50;
+            else if (age <= 90 days) bonus += 25;
+        }
+
+        if (isMainnetSource) bonus += 20;
+
+        uint256 normalizedActionBonus = weightedActionScore / 10**18;
+        if (normalizedActionBonus >= 50) bonus += 80;
+        else if (normalizedActionBonus >= 20) bonus += 50;
+        else if (normalizedActionBonus >= 5) bonus += 25;
     }
 
     /**
@@ -274,7 +259,7 @@ contract CreditScoreEngine {
      * @notice Returns the action weight multiplier for a given ActionType.
      */
     function getActionWeight(uint256 actionTypeIndex) public view returns (uint256) {
-        require(actionTypeIndex < 8, "Invalid action type");
+        if (actionTypeIndex >= 8) revert InvalidActionType();
         return actionWeights[actionTypeIndex];
     }
 }
