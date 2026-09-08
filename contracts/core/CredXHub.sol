@@ -243,6 +243,7 @@ contract CredXHub is ICredXHub {
      * @param durationDays How long the delegation lasts.
      */
     function delegateCredit(address beneficiary, uint256 boostAmount, uint256 durationDays) external {
+        if (beneficiary == address(0)) revert ZeroAddress();
         if (beneficiary == msg.sender) revert CannotSelfDelegate();
         if (boostAmount == 0 || boostAmount > 100) revert InvalidBoostAmount();
         if (durationDays == 0 || durationDays > 90) revert InvalidDuration();
@@ -274,6 +275,8 @@ contract CredXHub is ICredXHub {
         IAttestationVerifier.AttestationResult memory result,
         bytes32 replayKey
     ) internal returns (uint256 newScore) {
+        if (borrower == address(0)) revert ZeroAddress();
+
         BorrowerProfile storage profile = borrowerProfiles[borrower];
         uint256 oldScore = profile.creditScore == 0 ? scoreEngine.MIN_SCORE() : profile.creditScore;
 
