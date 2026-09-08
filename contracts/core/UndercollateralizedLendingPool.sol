@@ -8,6 +8,13 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+uint256 constant BPS_DIVISOR = 10000;
+uint256 constant CTC_PRICE_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
+uint256 constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
+uint256 constant BLOCKS_PER_YEAR = 2628000; // ~365 days at 12s/block
+uint256 constant INTEREST_DENOMINATOR = BPS_DIVISOR * BLOCKS_PER_YEAR; // 26,280,000,000
+uint256 constant COLLATERAL_DIVISOR = BPS_DIVISOR * CTC_PRICE_USD; // 20,000 * 10**18
+
 /**
  * @title UndercollateralizedLendingPool
  * @notice Capital pool enabling under-collateralized lending (down to 70% collateral ratio)
@@ -21,13 +28,6 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     ICredXHub public credXHub;
     CreditScoreEngine public scoreEngine;
     address public owner;
-
-    uint256 public constant BPS_DIVISOR = 10000;
-    uint256 public constant CTC_PRICE_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
-    uint256 public constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
-    uint256 public constant BLOCKS_PER_YEAR = 2628000; // ~365 days at 12s/block
-    uint256 public constant INTEREST_DENOMINATOR = BPS_DIVISOR * BLOCKS_PER_YEAR; // 26,280,000,000
-    uint256 public constant COLLATERAL_DIVISOR = BPS_DIVISOR * CTC_PRICE_USD; // 20,000 * 10**18
 
     uint256 public nextLoanId = 1;
     uint256 public totalLiquidityUSD;
