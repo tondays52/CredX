@@ -1,9 +1,10 @@
 // CredX Protocol — Frontend Client Logic & Interactive Simulation (v2)
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   if (window.lucide) lucide.createIcons();
   initChart();
   updateScoreGauge(794);
   updateCollateralCalc();
+  await loadContractsConfig();
 });
 
 // App State
@@ -253,7 +254,7 @@ function executeProofSubmission() {
         <td class="p-4 text-cyan-400 font-mono">${txHash.slice(0, 8)}...${txHash.slice(-4)}</td>
         <td class="p-4 font-bold text-emerald-400">$${valueUSD.toLocaleString()}</td>
         <td class="p-4 text-emerald-400">+16 pts (${newScore})</td>
-        <td class="p-4 text-slate-400 font-mono">0x${Math.random().toString(16).substr(2, 4)}...${Math.random().toString(16).substr(2, 4)}</td>
+        <td class="p-4 text-slate-400 font-mono">0x${Math.random().toString(16).slice(2, 6)}...${Math.random().toString(16).slice(2, 6)}</td>
         <td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified</span></td>
       `;
       tbody.prepend(row);
@@ -330,4 +331,19 @@ function executeVouch() {
   const duration = document.getElementById("vouch-duration-days").value;
 
   alert(`🤝 Credit Delegation Successful!\n\nYou delegated +${boost} CTS points to wallet:\n${target}\nValidity: ${duration} Days\n\nThe beneficiary will receive an instant score boost on their next verified Attestcoin proof!`);
+}
+
+// Dynamically load deployed contract addresses from contracts.json
+async function loadContractsConfig() {
+  try {
+    const res = await fetch("contracts.json");
+    if (res.ok) {
+      const data = await res.json();
+      state.contracts = data.contracts;
+      console.log("CredX deployed contract addresses loaded from contracts.json:", data);
+    }
+  } catch (err) {
+    // Non-blocking in static environments
+    console.debug("Contracts JSON not loaded (running in standalone demo mode)");
+  }
 }

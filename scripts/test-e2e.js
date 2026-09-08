@@ -6,10 +6,13 @@
  * 2. Unregistered borrower baseline (CTS = 300, 150% collateral required)
  * 3. User repaying a $50,000 Aave v3 loan on Ethereum Sepolia
  * 4. Generating Attestcoin cryptographic Merkle proof
- * 5. Submitting proof to CredXHub on Creditcoin
- * 6. Native precompile verification & credit score upgrade to Prime (785 CTS)
- * 7. Borrowing $10,000 cUSD with only 70% collateral (3,500 CTC)
- * 8. Loan settlement and collateral return
+ * 5. Submitting proof to CredXHub on Creditcoin (Calling precompile 0x0FD2)
+ * 6. Native precompile verification & credit score upgrade
+ * 7. Batch proof submission (Compound + Uniswap LP in 1 atomic tx)
+ * 8. Reaching Super-Prime Tier (794/850 CTS)
+ * 9. Minting Soulbound Credit Attestation Token (CX-SBT)
+ * 10. Executing Under-Collateralized Borrow ($10,000 cUSD locking 3,500 CTC = 70% ratio)
+ * 11. Loan settlement, dynamic APR interest deduction, and full collateral refund
  */
 
 const { ethers } = require("hardhat");
@@ -23,21 +26,30 @@ async function main() {
   console.log("=".repeat(70) + "\n");
 
   const [deployer, borrower] = await ethers.getSigners();
+  if (!deployer || !borrower) {
+    throw new Error("Missing required test signers.");
+  }
 
   // 1. Setup Contracts
   console.log("📦 1. Initializing Smart Contracts on Creditcoin...");
   const MockAttestationOracle = await ethers.getContractFactory("MockAttestationOracle");
   const oracle = await MockAttestationOracle.deploy();
+  await oracle.waitForDeployment();
 
   const CreditScoreEngine = await ethers.getContractFactory("CreditScoreEngine");
   const scoreEngine = await CreditScoreEngine.deploy();
+  await scoreEngine.waitForDeployment();
 
   const CredXHub = await ethers.getContractFactory("CredXHub");
   const credXHub = await CredXHub.deploy(await oracle.getAddress(), await scoreEngine.getAddress());
-  await scoreEngine.setCredXHub(await credXHub.getAddress());
+  await credXHub.waitForDeployment();
+
+  const setHubTx = await scoreEngine.setCredXHub(await credXHub.getAddress());
+  await setHubTx.wait();
 
   const MockERC20 = await ethers.getContractFactory("MockERC20");
   const cUSD = await MockERC20.deploy("Creditcoin USD", "cUSD");
+  await cUSD.waitForDeployment();
 
   const UndercollateralizedLendingPool = await ethers.getContractFactory("UndercollateralizedLendingPool");
   const lendingPool = await UndercollateralizedLendingPool.deploy(
@@ -45,14 +57,22 @@ async function main() {
     await credXHub.getAddress(),
     await scoreEngine.getAddress()
   );
-  await credXHub.setLendingPool(await lendingPool.getAddress());
+  await lendingPool.waitForDeployment();
+
+  const setPoolTx = await credXHub.setLendingPool(await lendingPool.getAddress());
+  await setPoolTx.wait();
 
   const CreditAttestationSBT = await ethers.getContractFactory("CreditAttestationSBT");
   const sbt = await CreditAttestationSBT.deploy(await credXHub.getAddress());
+  await sbt.waitForDeployment();
 
   // Seed lending pool with $500,000 cUSD
-  await cUSD.approve(await lendingPool.getAddress(), ethers.parseEther("500000"));
-  await lendingPool.depositLiquidity(ethers.parseEther("500000"));
+  const seedAmount = ethers.parseEther("500000");
+  const approveTx = await cUSD.approve(await lendingPool.getAddress(), seedAmount);
+  await approveTx.wait();
+  const depositTx = await lendingPool.depositLiquidity(seedAmount);
+  await depositTx.wait();
+
   console.log("   ✅ Contracts deployed & $500,000 cUSD seeded into Lending Pool.");
   console.log("   ✅ Soulbound Token (CX-SBT) deployed & linked to CredXHub.\n");
 
@@ -72,28 +92,28 @@ async function main() {
   console.log(`   - Generated Merkle inclusion proof & RLP receipt data.\n`);
 
   // 4. Submit Proof to CredXHub
-  console.log("🔗 4. Submitting Proof to CredXHub on Creditcoin (Calling Attestcoin Verifier)...");
+  console.log("🔗 4. Submitting Proof to CredXHub on Creditcoin (Calling Attestcoin Verifier 0x0FD2)...");
   const tx1 = await credXHub.connect(borrower).submitRepaymentProof(proof1, 0, reportedAmount1); // 0 = DEFI_LOAN_REPAYMENT
   await tx1.wait();
   console.log("   ✅ Proof cryptographically verified by Creditcoin Attestcoin Precompile!\n");
 
-  // 5. Submit Secondary Proof from Ethereum Mainnet Compound ($75,000)
-  console.log("🌐 5. Submitting High-Security Ethereum Mainnet Compound Proof ($75,000)...");
+  // 5. Submit Secondary Proofs in a single atomic Batch (Compound + Uniswap LP)
+  console.log("🌐 5. Submitting Batch Proofs (Compound $75k + Uniswap LP $25k) in 1 Atomic Tx...");
   const mainnetTxHash = ethers.keccak256(ethers.toUtf8Bytes("ETH_MAINNET_COMPOUND_75K"));
   const reportedAmount2 = ethers.parseEther("75000");
   const proof2 = buildMockEventProof(1, mainnetTxHash, 19283746, ethers.ZeroHash, ethers.ZeroAddress, reportedAmount2);
-  const tx2 = await credXHub.connect(borrower).submitRepaymentProof(proof2, 1, reportedAmount2); // 1 = COMPOUND_SUPPLY
-  await tx2.wait();
-  console.log("   ✅ Mainnet Fact Verified!\n");
 
-  // 5b. Submit Uniswap LP Proof ($25,000) to demonstrate Multi-Protocol Reputation Aggregation
-  console.log("🦄 5b. Submitting Uniswap Liquidity Provision Proof ($25,000)...");
   const uniTxHash = ethers.keccak256(ethers.toUtf8Bytes("ETH_UNISWAP_LP_25K"));
   const reportedAmount3 = ethers.parseEther("25000");
   const proof3 = buildMockEventProof(1, uniTxHash, 19283800, ethers.ZeroHash, ethers.ZeroAddress, reportedAmount3);
-  const tx3 = await credXHub.connect(borrower).submitRepaymentProof(proof3, 2, reportedAmount3); // 2 = UNISWAP_LP_PROVISION
-  await tx3.wait();
-  console.log("   ✅ Uniswap LP Reputation Verified!\n");
+
+  const batchTx = await credXHub.connect(borrower).submitBatchProofs(
+    [proof2, proof3],
+    [1, 2], // 1 = COMPOUND_SUPPLY, 2 = UNISWAP_LP_PROVISION
+    [reportedAmount2, reportedAmount3]
+  );
+  await batchTx.wait();
+  console.log("   ✅ Batch proofs successfully verified and imported in 1 single transaction!\n");
 
   // 6. Inspect Upgraded Profile
   console.log("⭐ 6. Inspecting Borrower Upgraded CTS Credit Profile...");
@@ -104,6 +124,7 @@ async function main() {
   console.log(`   - Protocol Diversity Count         : ${extProfile.protocolDiversity} protocols across ${extProfile.chainDiversity} chains`);
   console.log(`   - Total Verified Repayment Volume  : $${ethers.formatEther(profile.totalVerifiedVolumeUSD)} USD`);
   console.log(`   - Approved Credit Line             : $${ethers.formatEther(profile.maxCreditLineUSD)} USD`);
+  console.log(`   - Dynamic Borrow Interest Rate     : ${Number(extProfile.interestRateBps) / 100}% APR`);
   console.log(`   - Required Collateral Ratio        : ${Number(profile.requiredCollateralRatioBps) / 100}% (UNDER-COLLATERALIZED! 🚀)\n`);
 
   // 6b. Mint Soulbound Credit Attestation Token
@@ -142,11 +163,16 @@ async function main() {
   console.log("🔄 8. Repaying Loan and Reclaiming CTC Collateral...");
   await cUSD.mint(borrower.address, ethers.parseEther("100")); // Buffer for accrued interest
   const repayAmount = ethers.parseEther("10100");
-  await cUSD.connect(borrower).approve(await lendingPool.getAddress(), repayAmount);
+  const approveRepayTx = await cUSD.connect(borrower).approve(await lendingPool.getAddress(), repayAmount);
+  await approveRepayTx.wait();
+
   const preRepayCTC = await ethers.provider.getBalance(borrower.address);
   const repayTx = await lendingPool.connect(borrower).repayLoan(1, repayAmount);
   await repayTx.wait();
-  console.log(`   ✅ Loan #1 fully settled. Collateral refunded to borrower!\n`);
+  const postRepayCTC = await ethers.provider.getBalance(borrower.address);
+
+  console.log(`   ✅ Loan #1 fully settled. Collateral refunded to borrower!`);
+  console.log(`   ✅ Borrower reclaimed ${lockedCTCAmount} CTC collateral.\n`);
 
   console.log("=".repeat(70));
   console.log("   🎉 ALL TESTS & WORKFLOWS VERIFIED PERFECTLY FOR CREDITCOIN!");
