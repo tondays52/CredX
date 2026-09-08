@@ -35,41 +35,6 @@ interface ICredXHub {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  Events
-    // ═══════════════════════════════════════════════════════════════════════
-    event ProofSubmittedAndVerified(
-        bytes32 indexed proofHash,
-        address indexed borrower,
-        uint256 sourceChainId,
-        bytes32 txHash,
-        ActionType actionType,
-        uint256 valueUSD,
-        uint256 newCreditScore
-    );
-
-    event CreditScoreUpdated(
-        address indexed borrower,
-        uint256 oldScore,
-        uint256 newScore,
-        uint256 maxCreditLineUSD,
-        uint256 requiredCollateralRatioBps
-    );
-
-    event BatchProofsSubmitted(
-        address indexed borrower,
-        uint256 proofsCount,
-        uint256 totalValueUSD,
-        uint256 finalCreditScore
-    );
-
-    event CreditDelegated(
-        address indexed delegator,
-        address indexed beneficiary,
-        uint256 boostAmount,
-        uint256 expiry
-    );
-
-    // ═══════════════════════════════════════════════════════════════════════
     //  Core Functions
     // ═══════════════════════════════════════════════════════════════════════
     function submitRepaymentProof(
