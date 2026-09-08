@@ -5,6 +5,7 @@ import {ICredXHub} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
@@ -14,6 +15,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  */
 contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using Address for address payable;
 
     IERC20 public liquidityToken; // e.g. cUSD / USDC
     ICredXHub public credXHub;
@@ -64,7 +66,6 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     error LoanIsDefaulted();
     error OnlyBorrower();
     error RepaymentAmountInsufficient();
-    error CollateralReturnFailed();
     error LoanNotOverdue();
 
     modifier onlyOwner() {
@@ -212,8 +213,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         // Return collateral to borrower (Checks-Effects-Interactions: state cleared before transfer)
         uint256 refundCollateral = loan.collateralCTC;
         loan.collateralCTC = 0;
-        (bool sent, ) = payable(loan.borrower).call{value: refundCollateral}("");
-        if (!sent) revert CollateralReturnFailed();
+        payable(loan.borrower).sendValue(refundCollateral);
 
         emit LoanRepaid(loanId, msg.sender, totalDueUSD);
     }
