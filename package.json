@@ -1,0 +1,31 @@
+{
+  "name": "credx-protocol",
+  "version": "1.0.0",
+  "description": "CredX Protocol - Cross-Chain Trustless Credit Scoring & Under-Collateralized Lending on Creditcoin using Attestcoin / Universal Smart Contracts (USC)",
+  "main": "index.js",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:creditcoin-testnet": "hardhat run scripts/deploy.js --network creditcoinTestnet",
+    "demo:e2e": "node scripts/test-e2e.js"
+  },
+  "keywords": [
+    "creditcoin",
+    "attestcoin",
+    "usc",
+    "cross-chain",
+    "defi",
+    "rwa",
+    "credit-scoring",
+    "undercollateralized-lending",
+    "solidity",
+    "ethereum"
+  ],
+  "author": "CredX Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "ethers": "^6.13.0",
+    "hardhat": "^2.22.0"
+  }
+}
