@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
-import {ICredXHub} from "../interfaces/ICredXHub.sol";
+import {ICredXHub, ActionType, VerifiedAttestationRecord} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";
 
 /**
@@ -95,26 +95,43 @@ contract CredXHub is ICredXHub {
         uint256 expiry
     );
 
+    event VerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event ScoreEngineUpdated(address indexed oldEngine, address indexed newEngine);
+    event LendingPoolUpdated(address indexed oldPool, address indexed newPool);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Custom Errors
+    // ═══════════════════════════════════════════════════════════════════════
+    error ZeroAddress();
+    error OnlyOwner();
+
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+        if (msg.sender != owner) revert OnlyOwner();
         _;
     }
 
     constructor(address _verifierAddress, address _scoreEngineAddress) {
+        if (_verifierAddress == address(0) || _scoreEngineAddress == address(0)) revert ZeroAddress();
         owner = msg.sender;
         attestationVerifier = IAttestationVerifier(_verifierAddress);
         scoreEngine = CreditScoreEngine(_scoreEngineAddress);
     }
 
     function setVerifier(address _newVerifier) external onlyOwner {
+        if (_newVerifier == address(0)) revert ZeroAddress();
+        emit VerifierUpdated(address(attestationVerifier), _newVerifier);
         attestationVerifier = IAttestationVerifier(_newVerifier);
     }
 
     function setScoreEngine(address _newScoreEngine) external onlyOwner {
+        if (_newScoreEngine == address(0)) revert ZeroAddress();
+        emit ScoreEngineUpdated(address(scoreEngine), _newScoreEngine);
         scoreEngine = CreditScoreEngine(_newScoreEngine);
     }
 
     function setLendingPool(address _lendingPool) external onlyOwner {
+        if (_lendingPool == address(0)) revert ZeroAddress();
+        emit LendingPoolUpdated(lendingPool, _lendingPool);
         lendingPool = _lendingPool;
     }
 
@@ -308,7 +325,7 @@ contract CredXHub is ICredXHub {
             actionType: actionType,
             valueUSD: reportedValueUSD,
             sourceTimestamp: result.sourceBlockTime,
-            verifiedAt: block.timestamp,
+            verifiedAt: block.number,
             privacyCommitment: privacyCommitment
         }));
 
@@ -333,6 +350,7 @@ contract CredXHub is ICredXHub {
         uint256 requiredCollateralRatioBps,
         uint256 lastAttestationTimestamp
     ) {
+        if (borrower == address(0)) revert ZeroAddress();
         BorrowerProfile memory profile = borrowerProfiles[borrower];
         creditScore = profile.creditScore == 0 ? scoreEngine.MIN_SCORE() : profile.creditScore;
         totalVerifiedVolumeUSD = profile.totalVerifiedVolumeUSD;
@@ -356,6 +374,7 @@ contract CredXHub is ICredXHub {
         uint256 interestRateBps,
         uint256 requiredCollateralRatioBps
     ) {
+        if (borrower == address(0)) revert ZeroAddress();
         BorrowerProfile memory profile = borrowerProfiles[borrower];
         creditScore = profile.creditScore == 0 ? scoreEngine.MIN_SCORE() : profile.creditScore;
         totalVerifiedVolumeUSD = profile.totalVerifiedVolumeUSD;
@@ -368,6 +387,7 @@ contract CredXHub is ICredXHub {
     }
 
     function getBorrowerHistory(address borrower) external view returns (VerifiedAttestationRecord[] memory) {
+        if (borrower == address(0)) revert ZeroAddress();
         return borrowerHistory[borrower];
     }
 }
