@@ -3,7 +3,8 @@ pragma solidity 0.8.20;
 import {ILendingPool, LoanPosition} from "../interfaces/ILendingPool.sol";
 import {ICredXHub} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";
-import {MockERC20} from "../mocks/MockERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title UndercollateralizedLendingPool
@@ -11,7 +12,9 @@ import {MockERC20} from "../mocks/MockERC20.sol";
  *         and discounted interest rates based on Creditcoin Attestcoin verified reputation.
  */
 contract UndercollateralizedLendingPool is ILendingPool {
-    MockERC20 public liquidityToken; // e.g. cUSD / USDC
+    using SafeERC20 for IERC20;
+
+    IERC20 public liquidityToken; // e.g. cUSD / USDC
     ICredXHub public credXHub;
     CreditScoreEngine public scoreEngine;
     address public owner;
@@ -44,14 +47,34 @@ contract UndercollateralizedLendingPool is ILendingPool {
     event LoanRepaid(uint256 indexed loanId, address indexed borrower, uint256 totalRepaidUSD);
     event LoanDefaulted(uint256 indexed loanId, address indexed borrower, uint256 collateralLiquidatedCTC);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Custom Errors
+    // ═══════════════════════════════════════════════════════════════════════
+    error ZeroAddress();
+    error OnlyOwner();
+    error InvalidAmount();
+    error InsufficientLenderBalance();
+    error InsufficientPoolLiquidity();
+    error ExceedsApprovedCreditLine();
+    error InsufficientCollateral();
+    error LoanAlreadyRepaid();
+    error LoanIsDefaulted();
+    error OnlyBorrower();
+    error RepaymentAmountInsufficient();
+    error CollateralReturnFailed();
+    error LoanNotOverdue();
+
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+        if (msg.sender != owner) revert OnlyOwner();
         _;
     }
 
     constructor(address _tokenAddress, address _credXHub, address _scoreEngine) {
+        if (_tokenAddress == address(0)) revert ZeroAddress();
+        if (_credXHub == address(0)) revert ZeroAddress();
+        if (_scoreEngine == address(0)) revert ZeroAddress();
         owner = msg.sender;
-        liquidityToken = MockERC20(_tokenAddress);
+        liquidityToken = IERC20(_tokenAddress);
         credXHub = ICredXHub(_credXHub);
         scoreEngine = CreditScoreEngine(_scoreEngine);
     }
@@ -60,11 +83,11 @@ contract UndercollateralizedLendingPool is ILendingPool {
      * @notice Lenders deposit liquidity (cUSD) to earn yield from undercollateralized loans.
      */
     function depositLiquidity(uint256 amountUSD) external override {
-        require(amountUSD > 0, "Amount must be > 0");
-        require(liquidityToken.transferFrom(msg.sender, address(this), amountUSD), "Transfer failed");
+        if (amountUSD == 0) revert InvalidAmount();
 
         lenderBalances[msg.sender] += amountUSD;
         totalLiquidityUSD += amountUSD;
+        liquidityToken.safeTransferFrom(msg.sender, address(this), amountUSD);
 
         emit LiquidityDeposited(msg.sender, amountUSD);
     }
@@ -73,12 +96,12 @@ contract UndercollateralizedLendingPool is ILendingPool {
      * @notice Lenders withdraw their supplied liquidity.
      */
     function withdrawLiquidity(uint256 amountUSD) external override {
-        require(lenderBalances[msg.sender] >= amountUSD, "Insufficient lender balance");
-        require(totalLiquidityUSD - totalBorrowedUSD >= amountUSD, "Insufficient pool liquidity");
+        if (lenderBalances[msg.sender] < amountUSD) revert InsufficientLenderBalance();
+        if (totalLiquidityUSD - totalBorrowedUSD < amountUSD) revert InsufficientPoolLiquidity();
 
         lenderBalances[msg.sender] -= amountUSD;
         totalLiquidityUSD -= amountUSD;
-        require(liquidityToken.transfer(msg.sender, amountUSD), "Transfer failed");
+        liquidityToken.safeTransfer(msg.sender, amountUSD);
 
         emit LiquidityWithdrawn(msg.sender, amountUSD);
     }
@@ -88,8 +111,8 @@ contract UndercollateralizedLendingPool is ILendingPool {
      * @param requestedUSD Amount of cUSD to borrow (18 decimals).
      */
     function borrow(uint256 requestedUSD) external payable override returns (uint256 loanId) {
-        require(requestedUSD > 0, "Borrow amount must be > 0");
-        require(totalLiquidityUSD - totalBorrowedUSD >= requestedUSD, "Pool has insufficient liquidity");
+        if (requestedUSD == 0) revert InvalidAmount();
+        if (totalLiquidityUSD - totalBorrowedUSD < requestedUSD) revert InsufficientPoolLiquidity();
 
         // 1. Fetch Borrower Profile and Collateral Requirements from CredXHub
         (
@@ -101,7 +124,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
             
         ) = credXHub.getBorrowerProfile(msg.sender);
 
-        require(requestedUSD <= maxCreditLineUSD, "Exceeds approved max credit line");
+        if (requestedUSD > maxCreditLineUSD) revert ExceedsApprovedCreditLine();
 
         // 2. Calculate Required Collateral in native CTC
         // Required Collateral USD = requestedUSD * (requiredCollateralRatioBps / 10000)
@@ -109,7 +132,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
         uint256 requiredCollateralUSD = (requestedUSD * requiredCollateralRatioBps) / BPS_DIVISOR;
         uint256 requiredCollateralCTC = (requiredCollateralUSD * 10**18) / CTC_PRICE_USD;
 
-        require(msg.value >= requiredCollateralCTC, "Insufficient CTC collateral sent");
+        if (msg.value < requiredCollateralCTC) revert InsufficientCollateral();
 
         // 3. Compute Interest Rate — Direct FICO-style APR based on credit score
         uint256 finalInterestRateBps = scoreEngine.getInterestRate(creditScore);
@@ -132,8 +155,8 @@ contract UndercollateralizedLendingPool is ILendingPool {
         userLoanIds[msg.sender].push(loanId);
         totalBorrowedUSD += requestedUSD;
 
-        // Disburse borrowed liquidity to borrower
-        require(liquidityToken.transfer(msg.sender, requestedUSD), "Disbursement transfer failed");
+        // Disburse borrowed liquidity to borrower using SafeERC20
+        liquidityToken.safeTransfer(msg.sender, requestedUSD);
 
         emit LoanOriginated(
             loanId,
@@ -153,19 +176,19 @@ contract UndercollateralizedLendingPool is ILendingPool {
      */
     function repayLoan(uint256 loanId, uint256 amountUSD) external override {
         LoanPosition storage loan = loans[loanId];
-        require(!loan.isRepaid, "Loan already repaid");
-        require(!loan.isDefaulted, "Loan is defaulted");
-        require(msg.sender == loan.borrower, "Only borrower can repay");
+        if (loan.isRepaid) revert LoanAlreadyRepaid();
+        if (loan.isDefaulted) revert LoanIsDefaulted();
+        if (msg.sender != loan.borrower) revert OnlyBorrower();
 
         // Calculate interest: principal * (rate / 10000) * (duration / 365 days)
         uint256 elapsed = block.timestamp - loan.borrowedAtTimestamp;
         uint256 interestUSD = (loan.principalUSD * loan.interestRateBps * elapsed) / (BPS_DIVISOR * 365 days);
         uint256 totalDueUSD = loan.principalUSD + interestUSD;
 
-        require(amountUSD >= totalDueUSD, "Repayment amount is less than total due");
+        if (amountUSD < totalDueUSD) revert RepaymentAmountInsufficient();
 
-        // Pull repayment tokens
-        require(liquidityToken.transferFrom(msg.sender, address(this), totalDueUSD), "Token repayment failed");
+        // Pull repayment tokens using SafeERC20
+        liquidityToken.safeTransferFrom(msg.sender, address(this), totalDueUSD);
 
         loan.isRepaid = true;
         totalBorrowedUSD -= loan.principalUSD;
@@ -174,7 +197,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
         uint256 refundCollateral = loan.collateralCTC;
         loan.collateralCTC = 0;
         (bool sent, ) = payable(msg.sender).call{value: refundCollateral}("");
-        require(sent, "Collateral return failed");
+        if (!sent) revert CollateralReturnFailed();
 
         emit LoanRepaid(loanId, msg.sender, totalDueUSD);
     }
@@ -185,9 +208,9 @@ contract UndercollateralizedLendingPool is ILendingPool {
      */
     function liquidateDefaultedLoan(uint256 loanId) external {
         LoanPosition storage loan = loans[loanId];
-        require(!loan.isRepaid, "Loan already repaid");
-        require(!loan.isDefaulted, "Loan is defaulted");
-        require(block.timestamp > loan.dueTimestamp, "Loan not overdue");
+        if (loan.isRepaid) revert LoanAlreadyRepaid();
+        if (loan.isDefaulted) revert LoanIsDefaulted();
+        if (block.timestamp <= loan.dueTimestamp) revert LoanNotOverdue();
 
         loan.isDefaulted = true;
         uint256 liquidatedCollateral = loan.collateralCTC;
