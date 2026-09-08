@@ -97,10 +97,11 @@ contract CreditAttestationSBT {
         CreditTier tier = _scoreToCreditTier(creditScore);
         uint256 minimumScore = _tierToMinimumScore(tier);
 
-        // Privacy commitment: proves exact score without on-chain exposure
-        bytes32 commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.timestamp, blockhash(block.number - 1)));
-
         tokenId = nextTokenId++;
+
+        // Privacy commitment: proves exact score without on-chain exposure, bound to canonical block height (immune to timestamp manipulation)
+        bytes32 commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.number, tokenId));
+
         attestations[tokenId] = Attestation({
             tokenId: tokenId,
             holder: msg.sender,
@@ -135,7 +136,8 @@ contract CreditAttestationSBT {
         att.minimumScore = minimumScore;
         att.attestedAt = block.timestamp;
         att.attestedBlock = block.number;
-        att.commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.timestamp));
+        // Deterministic commitment hash bound to block.number and tokenId (immune to miner timestamp drift)
+        att.commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.number, tokenId));
         att.isValid = true;
 
         emit AttestationRefreshed(tokenId, tier, minimumScore);
@@ -146,6 +148,7 @@ contract CreditAttestationSBT {
      * @param holder The address whose attestation is being revoked.
      */
     function revokeAttestation(address holder) external onlyOwner {
+        if (holder == address(0)) revert ZeroAddress();
         uint256 tokenId = holderTokenId[holder];
         if (tokenId == 0) revert NoAttestationFound();
         if (!attestations[tokenId].isValid) revert AlreadyRevoked();
@@ -160,6 +163,7 @@ contract CreditAttestationSBT {
      * @param requiredTier The minimum tier required.
      */
     function verifyAttestation(address holder, CreditTier requiredTier) external view returns (bool) {
+        if (holder == address(0)) return false;
         uint256 tokenId = holderTokenId[holder];
         if (tokenId == 0) return false;
 
@@ -171,8 +175,10 @@ contract CreditAttestationSBT {
 
     /**
      * @notice Get the attestation details for a holder.
+     * @param holder The address of the attestation holder.
      */
     function getAttestation(address holder) external view returns (Attestation memory) {
+        if (holder == address(0)) revert ZeroAddress();
         uint256 tokenId = holderTokenId[holder];
         if (tokenId == 0) revert NoAttestationFound();
         return attestations[tokenId];
