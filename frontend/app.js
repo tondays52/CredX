@@ -312,6 +312,10 @@ function executeBorrowNFTDemo() {
   alert("🛡️ Zero-Collateral Scholarship Vault Borrowed!\n\nCharacter: Dragon Slayer NFT #42\nCollateral Deposit: $0 (Reputation Gated for CTS ≥ 700)\nNFT transferred to player wallet for guild battle!");
 }
 
+function executeBuyNFTMarketplaceDemo() {
+  alert("🛒 Zero-Fee Gaming Marketplace Purchase!\n\nItem: Mythic Dragon Helm NFT #19\nPrice: 50 GAME Tokens\nMarketplace Fee: 0% ($0.00 saved for Super-Prime tier)\nNFT transferred directly to your inventory on Creditcoin!");
+}
+
 // Track 4: Autonomous AI
 function executeAIRiskUpdateDemo() {
   alert("🤖 AI Risk Oracle Ingestion Completed!\n\nAI Agent pushed cross-chain risk telemetry:\nVolatility Index: 10.0% · Default Rate: 2.0%\nAdjusted Base APR: 6.00% computed autonomously on-chain!");

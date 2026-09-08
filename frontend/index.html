@@ -615,6 +615,56 @@
               <span>Borrow NFT (0 Collateral)</span>
             </button>
           </div>
+
+          <!-- Zero-Fee Marketplace (IMX Style) -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+              <i data-lucide="store" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Zero-Fee Gaming Marketplace</h3>
+            <p class="text-xs text-slate-400">
+              Buy and sell in-game NFT items with 0% marketplace fees for Super-Prime players (vs 2.0% standard).
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Your Fee Tier:</span>
+                <span class="text-emerald-400 font-bold">0% Fee (Super-Prime)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Standard Fee:</span>
+                <span class="text-slate-500 line-through">2.0% Fee</span>
+              </div>
+            </div>
+            <button onclick="executeBuyNFTMarketplaceDemo()" class="w-full py-3 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="shopping-cart" class="w-4 h-4"></i>
+              <span>Buy NFT (0% Trading Fee)</span>
+            </button>
+          </div>
+
+          <!-- PredictBay Binary Paper Trading Game -->
+          <div class="glass-card p-6 rounded-3xl border border-amber-500/30 bg-amber-950/10 space-y-4 md:col-span-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <i data-lucide="swords" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-white">PredictBay: Reputation Arena Game</h3>
+                  <p class="text-xs text-slate-400">Live binary price prediction arena with 3-win streak reputation sync</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30 font-mono">
+                +25 CTS Boost
+              </span>
+            </div>
+            <p class="text-xs text-slate-300">
+              Trade real-time simulated Pyth oracle feeds (BTC, ETH, GOLD, OIL). Win 3 rounds in a row to sync on-chain reputation proof directly to Creditcoin precompile 0x0FD2.
+            </p>
+            <a href="arena.html" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-extrabold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="play" class="w-4 h-4"></i>
+              <span>Launch PredictBay Reputation Arena ➔</span>
+            </a>
+          </div>
         </div>
       </section>
 
