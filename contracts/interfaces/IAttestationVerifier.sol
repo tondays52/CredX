@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-library AttestcoinConstants {
-    /// @dev Canonical Creditcoin Attestcoin / BlockProver precompile address on Creditcoin L1 EVM
-    address public constant PRECOMPILE_ADDRESS = address(0x0FD2);
-}
 
 /**
  * @title IAttestationVerifier
