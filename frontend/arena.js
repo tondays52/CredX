@@ -1,9 +1,19 @@
 /**
- * Predict Bay | CredX Reputation Arena Frontend Logic
- * Live canvas ticker, binary prediction resolution, win streaks & Web3 score sync.
+ * PredictBay | CredX Reputation Arena Frontend Logic
+ * Live canvas ticker, multi-asset markets, timeframe controls, stake multipliers & Web3 score sync.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+
+  // Assets config
+  const ASSETS = {
+    BTC: { name: 'BTC/USD', strike: 78444.52, current: 78418.95, icon: '₿', feed: 'Pyth Oracle · Crypto.BTC/USD', volatility: 8.5, decimals: 2 },
+    ETH: { name: 'ETH/USD', strike: 2685.40, current: 2682.10, icon: 'Ξ', feed: 'Pyth Oracle · Crypto.ETH/USD', volatility: 1.2, decimals: 2 },
+    GOLD: { name: 'XAU/USD', strike: 2652.80, current: 2651.90, icon: '🪙', feed: 'Pyth Oracle · Commodities.XAU/USD', volatility: 0.8, decimals: 2 },
+    OIL: { name: 'WTI/USD', strike: 74.65, current: 74.50, icon: '🛢️', feed: 'Pyth Oracle · Commodities.WTI/USD', volatility: 0.15, decimals: 2 }
+  };
+
+  let activeAssetKey = 'BTC';
 
   // DOM Elements
   const livePriceDisplay = document.getElementById('livePriceDisplay');
@@ -14,15 +24,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const strikeLineLabel = document.getElementById('strikeLineLabel');
   const ticketStrikeHint = document.getElementById('ticketStrikeHint');
 
+  const assetIcon = document.getElementById('assetIcon');
+  const assetPairName = document.getElementById('assetPairName');
+  const assetFeedTag = document.getElementById('assetFeedTag');
+  const assetPillsContainer = document.getElementById('assetPillsContainer');
+  const timeframeGroup = document.getElementById('timeframeGroup');
+
   const paperBalanceDisplay = document.getElementById('paperBalanceDisplay');
   const streakBadge = document.getElementById('streakBadge');
   const syncScoreBtn = document.getElementById('syncScoreBtn');
   const toastMessage = document.getElementById('toastMessage');
   const historyChips = document.getElementById('historyChips');
+  const connectWalletBtn = document.getElementById('connectWalletBtn');
+  const resetBalanceBtn = document.getElementById('resetBalanceBtn');
 
   const btnPredictAbove = document.getElementById('btnPredictAbove');
   const btnPredictBelow = document.getElementById('btnPredictBelow');
-  const stakeButtons = document.querySelectorAll('.stake-btn');
+  const stakeButtons = document.querySelectorAll('.stake-btn[data-stake]');
+  const doubleStakeBtn = document.getElementById('doubleStakeBtn');
+  const halfStakeBtn = document.getElementById('halfStakeBtn');
+  const maxStakeBtn = document.getElementById('maxStakeBtn');
+  const customStakeBtn = document.getElementById('customStakeBtn');
 
   const ratioFillAbove = document.getElementById('ratioFillAbove');
   const ratioFillBelow = document.getElementById('ratioFillBelow');
@@ -30,14 +52,15 @@ document.addEventListener('DOMContentLoaded', () => {
   const belowPct = document.getElementById('belowPct');
 
   // State
-  let strikePrice = 78444.52;
-  let currentPrice = 78418.95;
+  let strikePrice = ASSETS[activeAssetKey].strike;
+  let currentPrice = ASSETS[activeAssetKey].current;
   let selectedStake = 100;
   let paperBalance = 10000;
   let currentWinStreak = 0;
-  let activePrediction = null; // { choice: 'ABOVE' | 'BELOW', stake: 100, placedAt: timestamp }
-  let roundDuration = 90; // seconds
-  let roundTimeRemaining = 83; // starts at 01:23
+  let activePrediction = null; // { choice: 'ABOVE' | 'BELOW', stake: 100, placedPrice: price }
+  let roundDuration = 60; // seconds
+  let roundTimeRemaining = 60;
+  let isConnected = false;
 
   // Chart Canvas & Price History
   const canvas = document.getElementById('predictionChart');
@@ -47,9 +70,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Price History
   function initPriceHistory() {
-    let p = strikePrice - 20;
+    const asset = ASSETS[activeAssetKey];
+    strikePrice = asset.strike;
+    currentPrice = asset.current;
+    priceHistory = [];
+    let p = strikePrice - (asset.volatility * 2);
     for (let i = 0; i < MAX_HISTORY_POINTS; i++) {
-      p += (Math.random() - 0.52) * 8;
+      p += (Math.random() - 0.49) * asset.volatility;
       priceHistory.push(p);
     }
     currentPrice = priceHistory[priceHistory.length - 1];
@@ -57,19 +84,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Draw Smooth Canvas Chart
   function drawChart() {
-    const width = canvas.width = canvas.parentElement.clientWidth;
-    const height = canvas.height = canvas.parentElement.clientHeight;
+    if (!canvas || !canvas.parentElement) return;
+    const width = canvas.width = canvas.parentElement.clientWidth || 800;
+    const height = canvas.height = canvas.parentElement.clientHeight || 340;
 
     ctx.clearRect(0, 0, width, height);
 
-    const minPrice = Math.min(...priceHistory, strikePrice - 40);
-    const maxPrice = Math.max(...priceHistory, strikePrice + 40);
+    const asset = ASSETS[activeAssetKey];
+    const buffer = asset.volatility * 4;
+    const minPrice = Math.min(...priceHistory, strikePrice - buffer);
+    const maxPrice = Math.max(...priceHistory, strikePrice + buffer);
     const priceRange = maxPrice - minPrice || 1;
 
     const getY = (val) => height - ((val - minPrice) / priceRange) * (height - 60) - 30;
     const getX = (idx) => (idx / (MAX_HISTORY_POINTS - 1)) * width;
 
-    // 1. Draw Strike Line (Dashed)
+    // 1. Strike Line (Dashed)
     const strikeY = getY(strikePrice);
     ctx.beginPath();
     ctx.setLineDash([6, 6]);
@@ -80,7 +110,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // 2. Draw Price Path & Gradient
+    // 2. Price Path & Gradient
     ctx.beginPath();
     ctx.moveTo(getX(0), getY(priceHistory[0]));
 
@@ -105,16 +135,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const gradient = ctx.createLinearGradient(0, 0, 0, height);
     if (isAbove) {
-      gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+      gradient.addColorStop(0, 'rgba(16, 185, 129, 0.25)');
       gradient.addColorStop(1, 'rgba(16, 185, 129, 0.0)');
     } else {
-      gradient.addColorStop(0, 'rgba(239, 68, 68, 0.2)');
+      gradient.addColorStop(0, 'rgba(239, 68, 68, 0.25)');
       gradient.addColorStop(1, 'rgba(239, 68, 68, 0.0)');
     }
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // 3. Draw Pulsing Active Price Node
+    // 3. Pulsing Active Price Node
     const lastX = getX(priceHistory.length - 1);
     const lastY = getY(currentPrice);
 
@@ -132,21 +162,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Update Ticker & UI
   function updatePriceUI() {
+    const asset = ASSETS[activeAssetKey];
     const diff = currentPrice - strikePrice;
     const isAbove = diff >= 0;
 
-    livePriceDisplay.innerText = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    livePriceDisplay.innerText = `$${currentPrice.toLocaleString('en-US', { minimumFractionDigits: asset.decimals, maximumFractionDigits: asset.decimals })}`;
     livePriceDisplay.className = `current-price-display ${isAbove ? 'positive' : ''}`;
 
     const sign = diff >= 0 ? '+' : '-';
-    strikeDiffDisplay.innerText = `${sign}$${Math.abs(diff).toFixed(2)} vs strike`;
+    strikeDiffDisplay.innerText = `${sign}$${Math.abs(diff).toFixed(asset.decimals)} vs strike`;
     strikeDiffDisplay.className = `vs-strike-diff ${isAbove ? 'positive' : 'negative'}`;
   }
 
   // Price Fluctuation Simulation Loop
   function tickPrice() {
-    const delta = (Math.random() - 0.49) * 4.5;
-    currentPrice = Math.max(strikePrice - 100, Math.min(strikePrice + 100, currentPrice + delta));
+    const asset = ASSETS[activeAssetKey];
+    const delta = (Math.random() - 0.49) * (asset.volatility / 2);
+    const maxBound = strikePrice + (asset.volatility * 6);
+    const minBound = strikePrice - (asset.volatility * 6);
+    currentPrice = Math.max(minBound, Math.min(maxBound, currentPrice + delta));
     
     priceHistory.shift();
     priceHistory.push(currentPrice);
@@ -160,9 +194,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (roundTimeRemaining > 0) {
       roundTimeRemaining--;
     } else {
-      // Settle Round
       resolveRound();
-      // Start New Round
       startNewRound();
     }
 
@@ -192,21 +224,24 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast(`🎉 Round Won! +$${winPayout} Paper Points!`, 'success');
       } else {
         currentWinStreak = 0;
-        showToast(`❌ Round Lost. Streak reset.`, 'error');
+        showToast(`❌ Round Lost on ${activePrediction.choice}. Streak reset.`, 'error');
       }
 
       activePrediction = null;
+      btnPredictAbove.classList.remove('active-bet');
+      btnPredictBelow.classList.remove('active-bet');
       updateStatsUI();
     }
   }
 
   function startNewRound() {
+    const asset = ASSETS[activeAssetKey];
     strikePrice = currentPrice;
     roundTimeRemaining = roundDuration;
     
-    const formattedStrike = `$${strikePrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    roundTitleText.innerHTML = `$BTC above ${formattedStrike} <span class="round-date">on Sep 9, 01:36 UTC</span>`;
-    strikeLineLabel.innerText = `STRIKE ${strikePrice.toFixed(2)}`;
+    const formattedStrike = `$${strikePrice.toLocaleString('en-US', { minimumFractionDigits: asset.decimals, maximumFractionDigits: asset.decimals })}`;
+    roundTitleText.innerHTML = `$${activeAssetKey} above ${formattedStrike} <span class="round-date" id="roundDateText">on Sep 9 UTC</span>`;
+    strikeLineLabel.innerText = `STRIKE ${formattedStrike}`;
     ticketStrikeHint.innerText = `strike ${formattedStrike}`;
 
     // Randomize market ratio
@@ -225,9 +260,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (currentWinStreak >= 3) {
       syncScoreBtn.disabled = false;
       syncScoreBtn.innerText = `Sync ${currentWinStreak}-Win Streak to Creditcoin (+25 CTS) ✦`;
+      syncScoreBtn.style.background = 'linear-gradient(135deg, #10b981, #06b6d4)';
+      syncScoreBtn.style.color = '#000';
+      syncScoreBtn.style.cursor = 'pointer';
     } else {
       syncScoreBtn.disabled = true;
-      syncScoreBtn.innerText = `Sync Streak to Creditcoin Score (Need 3 Wins)`;
+      syncScoreBtn.innerText = `Sync Streak to Creditcoin Score (Need ${3 - currentWinStreak} More Wins)`;
+      syncScoreBtn.style.background = '';
+      syncScoreBtn.style.color = '';
+      syncScoreBtn.style.cursor = 'not-allowed';
     }
   }
 
@@ -239,14 +280,113 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 4000);
   }
 
+  // Asset Switcher
+  assetPillsContainer.querySelectorAll('.asset-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      assetPillsContainer.querySelectorAll('.asset-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+
+      activeAssetKey = pill.getAttribute('data-asset');
+      const asset = ASSETS[activeAssetKey];
+
+      assetIcon.innerText = asset.icon;
+      assetPairName.innerText = asset.name;
+      assetFeedTag.innerText = asset.feed;
+
+      initPriceHistory();
+      startNewRound();
+      updatePriceUI();
+      drawChart();
+      showToast(`Switched market to ${asset.name}`, 'success');
+    });
+  });
+
+  // Timeframe Switcher
+  timeframeGroup.querySelectorAll('.timeframe-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      timeframeGroup.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+
+      roundDuration = Number(btn.getAttribute('data-sec')) || 60;
+      roundTimeRemaining = roundDuration;
+      showToast(`Timeframe changed to ${btn.innerText}`, 'success');
+    });
+  });
+
   // Stake Buttons
   stakeButtons.forEach(btn => {
     btn.addEventListener('click', () => {
-      stakeButtons.forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('#stakeButtonsContainer .stake-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       selectedStake = Number(btn.getAttribute('data-stake')) || 100;
     });
   });
+
+  if (doubleStakeBtn) {
+    doubleStakeBtn.addEventListener('click', () => {
+      selectedStake = Math.min(paperBalance, selectedStake * 2);
+      highlightCustomStake(`$${selectedStake}`);
+    });
+  }
+
+  if (halfStakeBtn) {
+    halfStakeBtn.addEventListener('click', () => {
+      selectedStake = Math.max(1, Math.floor(selectedStake / 2));
+      highlightCustomStake(`$${selectedStake}`);
+    });
+  }
+
+  if (maxStakeBtn) {
+    maxStakeBtn.addEventListener('click', () => {
+      selectedStake = paperBalance;
+      highlightCustomStake(`$${selectedStake}`);
+    });
+  }
+
+  if (customStakeBtn) {
+    customStakeBtn.addEventListener('click', () => {
+      const val = prompt('Enter custom stake in Paper Points ($):', selectedStake);
+      if (val && !isNaN(val) && Number(val) > 0) {
+        selectedStake = Math.min(paperBalance, Number(val));
+        highlightCustomStake(`$${selectedStake}`);
+      }
+    });
+  }
+
+  function highlightCustomStake(label) {
+    document.querySelectorAll('#stakeButtonsContainer .stake-btn').forEach(b => b.classList.remove('active'));
+    customStakeBtn.classList.add('active');
+    customStakeBtn.innerText = label;
+  }
+
+  // Reset Balance
+  if (resetBalanceBtn) {
+    resetBalanceBtn.addEventListener('click', () => {
+      paperBalance = 10000;
+      currentWinStreak = 0;
+      activePrediction = null;
+      updateStatsUI();
+      showToast('Paper balance reset to $10,000!', 'success');
+    });
+  }
+
+  // Wallet Connect
+  if (connectWalletBtn) {
+    connectWalletBtn.addEventListener('click', () => {
+      isConnected = !isConnected;
+      if (isConnected) {
+        connectWalletBtn.innerText = '0x742d...f44e (Connected)';
+        connectWalletBtn.style.background = '#10b981';
+        connectWalletBtn.style.color = '#000';
+        showToast('Wallet connected to Creditcoin Testnet!', 'success');
+      } else {
+        connectWalletBtn.innerText = 'Connect Wallet';
+        connectWalletBtn.style.background = '';
+        connectWalletBtn.style.color = '';
+        showToast('Wallet disconnected.', 'error');
+      }
+    });
+  }
 
   // Decision Placement
   function placeBet(choice) {
@@ -255,15 +395,21 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
     if (paperBalance < selectedStake) {
-      showToast('Insufficient Paper Points balance!', 'error');
+      showToast('Insufficient Paper Points balance! Click Reset Balance.', 'error');
       return;
     }
 
     paperBalance -= selectedStake;
     activePrediction = { choice, stake: selectedStake, placedAt: Date.now() };
-    updateStatsUI();
 
-    showToast(`✓ Placed $${selectedStake} on ${choice}!`, 'success');
+    if (choice === 'ABOVE') {
+      btnPredictAbove.classList.add('active-bet');
+    } else {
+      btnPredictBelow.classList.add('active-bet');
+    }
+
+    updateStatsUI();
+    showToast(`✓ Locked $${selectedStake} on ${choice}!`, 'success');
   }
 
   btnPredictAbove.addEventListener('click', () => placeBet('ABOVE'));
@@ -271,6 +417,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Keyboard Hotkeys
   window.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT') return;
     if (e.key === 'a' || e.key === 'A') {
       placeBet('ABOVE');
     } else if (e.key === 'b' || e.key === 'B') {
@@ -282,18 +429,19 @@ document.addEventListener('DOMContentLoaded', () => {
   syncScoreBtn.addEventListener('click', async () => {
     if (currentWinStreak < 3) return;
 
-    syncScoreBtn.innerText = 'Syncing to Creditcoin...';
+    syncScoreBtn.innerText = 'Syncing Proof to Creditcoin Precompile 0x0FD2...';
     syncScoreBtn.disabled = true;
 
     setTimeout(() => {
       showToast(`🏆 CredX Score Boosted! +25 CTS credited on Creditcoin Testnet.`, 'success');
       currentWinStreak = 0;
       updateStatsUI();
-    }, 1500);
+    }, 1200);
   });
 
   // Startup
   initPriceHistory();
+  startNewRound();
   updatePriceUI();
   updateStatsUI();
   drawChart();

@@ -1,4 +1,4 @@
-// CredX Protocol — Frontend Client Logic & Interactive Simulation (v2)
+// CredX Protocol — Frontend Client Logic & Interactive Multi-Track Simulation (v2)
 document.addEventListener("DOMContentLoaded", async () => {
   if (window.lucide) lucide.createIcons();
   initChart();
@@ -30,7 +30,12 @@ let state = {
       apr: "2.50%",
       dueDays: 29
     }
-  ]
+  ],
+  nodeRunning: false,
+  nodePoints: 0,
+  nodeUptimeSeconds: 0,
+  nodeBandwidthMB: 0,
+  nodeTimer: null
 };
 
 // Tab Switching
@@ -49,6 +54,7 @@ function switchTab(tabId) {
     selectedNav.classList.remove("text-slate-400");
   }
 
+  window.scrollTo({ top: 0, behavior: 'smooth' });
   if (window.lucide) lucide.createIcons();
 }
 
@@ -79,8 +85,6 @@ function updateScoreGauge(score) {
 
   if (scoreEl) scoreEl.innerText = score;
 
-  // Total circumference is ~264
-  // Min score 300 -> 0%, Max score 850 -> 100%
   const normalized = Math.min(Math.max((score - 300) / 550, 0), 1);
   const offset = 264 - (normalized * 264);
   if (circle) circle.style.strokeDashoffset = offset;
@@ -103,12 +107,11 @@ function updateScoreGauge(score) {
 }
 
 // Chart.js Score Trajectory
-let scoreChartInstance = null;
 function initChart() {
   const ctx = document.getElementById('creditScoreChart');
   if (!ctx) return;
 
-  scoreChartInstance = new Chart(ctx, {
+  new Chart(ctx, {
     type: 'line',
     data: {
       labels: ['Month -4', 'Month -3', 'Month -2', 'Month -1', 'Current (v2 OCCR)'],
@@ -127,9 +130,7 @@ function initChart() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false }
-      },
+      plugins: { legend: { display: false } },
       scales: {
         x: {
           grid: { color: 'rgba(255, 255, 255, 0.05)' },
@@ -146,20 +147,6 @@ function initChart() {
   });
 }
 
-// Batch Mode Toggle
-let isBatchMode = false;
-function toggleBatchMode() {
-  const toggle = document.getElementById("batch-mode-toggle");
-  const submitLabel = document.getElementById("submit-btn-text");
-  isBatchMode = toggle.checked;
-
-  if (isBatchMode) {
-    submitLabel.innerText = "Submit Batch Proofs (3 Proofs in 1 Tx via 0x0FD2) & Upgrade Score";
-  } else {
-    submitLabel.innerText = "Verify Fact via Attestcoin Protocol & Upgrade Score";
-  }
-}
-
 // Presets for Proof Verifier
 function loadPreset(type) {
   const chainSelect = document.getElementById("proof-source-chain");
@@ -169,33 +156,33 @@ function loadPreset(type) {
   const blockInput = document.getElementById("proof-block-num");
 
   if (type === 'aave') {
-    chainSelect.value = "11155111"; // Sepolia
-    actionSelect.value = "0"; // DeFi Loan Repayment
+    chainSelect.value = "11155111";
+    actionSelect.value = "0";
     txHashInput.value = "0xa515e6844f02f0fb90114b7cc1abb0a39b4bed6be8acf114674be8ac19cd6200";
     valueInput.value = "50000";
     blockInput.value = "5928192";
   } else if (type === 'compound') {
-    chainSelect.value = "1"; // Mainnet
-    actionSelect.value = "1"; // Compound Supply
+    chainSelect.value = "1";
+    actionSelect.value = "1";
     txHashInput.value = "0x19283746bc881234567890123456789012345678901234567890abcdef123456";
     valueInput.value = "75000";
     blockInput.value = "19283746";
   } else if (type === 'uniswap') {
-    chainSelect.value = "1"; // Mainnet
-    actionSelect.value = "2"; // Uniswap LP Provision
+    chainSelect.value = "1";
+    actionSelect.value = "2";
     txHashInput.value = "0xfa297710bc881234567890123456789012345678901234567890abcdef7710";
     valueInput.value = "25000";
     blockInput.value = "19283800";
   } else if (type === 'invoice') {
-    chainSelect.value = "1"; // Mainnet
-    actionSelect.value = "5"; // RWA Invoice Settlement
+    chainSelect.value = "1";
+    actionSelect.value = "5";
     txHashInput.value = "0x3d7a89bc4412ef891234567890123456789012345678901234567890abcdef91";
     valueInput.value = "35000";
     blockInput.value = "19283920";
   }
 }
 
-// Attestcoin Proof Simulation Execution
+// Proof Simulation Execution
 function executeProofSubmission() {
   const pipeline = document.getElementById("verification-pipeline");
   const btn = document.getElementById("submit-proof-btn");
@@ -203,9 +190,6 @@ function executeProofSubmission() {
   const step2 = document.getElementById("step-2");
   const step3 = document.getElementById("step-3");
   const valueUSD = parseFloat(document.getElementById("proof-value-usd").value) || 25000;
-  const txHash = document.getElementById("proof-tx-hash").value;
-  const chainId = document.getElementById("proof-source-chain").value;
-  const actionType = document.getElementById("proof-action-type").options[document.getElementById("proof-action-type").selectedIndex].text;
 
   pipeline.classList.remove("hidden");
   btn.disabled = true;
@@ -213,56 +197,34 @@ function executeProofSubmission() {
   if (window.lucide) lucide.createIcons();
 
   setTimeout(() => {
-    step1.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">RLP Receipt & Merkle Proof Extracted for Block ${document.getElementById("proof-block-num").value}</span>`;
+    step1.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">RLP Receipt & Merkle Proof Extracted</span>`;
     step2.className = "flex items-center space-x-2 text-cyan-400";
-    step2.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-cyan-400"></i><span>Precompile 0x0FD2 verifying Merkle inclusion against source headers...</span>`;
+    step2.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-cyan-400"></i><span>Precompile 0x0FD2 verifying root against L1 headers...</span>`;
     if (window.lucide) lucide.createIcons();
   }, 1000);
 
   setTimeout(() => {
-    step2.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">Precompile 0x0FD2 Succeeded: Cryptographic Proof Verified!</span>`;
+    step2.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">Precompile 0x0FD2 Succeeded: Proof Verified!</span>`;
     step3.className = "flex items-center space-x-2 text-cyan-400";
-    step3.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-cyan-400"></i><span>Executing OCCR Multi-Factor Algorithm & Privacy Commitment Hash...</span>`;
+    step3.innerHTML = `<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-cyan-400"></i><span>Executing OCCR Algorithm & Privacy Commitment...</span>`;
     if (window.lucide) lucide.createIcons();
-  }, 2200);
+  }, 2000);
 
   setTimeout(() => {
     const newScore = Math.min(state.creditScore + 16, 850);
-    step3.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">CredXHub Updated: CTS Upgraded to ${newScore} (Super-Prime Tier)!</span>`;
+    step3.innerHTML = `<i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i><span class="text-emerald-300">CredXHub Updated: CTS Upgraded to ${newScore}!</span>`;
     btn.disabled = false;
     btn.className = "w-full py-4 rounded-2xl bg-emerald-500 text-slate-950 font-bold text-base shadow-xl transition-all flex items-center justify-center space-x-2";
     btn.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i><span>Proof Attested by Creditcoin Consensus!</span>`;
     if (window.lucide) lucide.createIcons();
 
-    // Update state
     state.creditScore = newScore;
     state.totalVerifiedUSD += valueUSD;
-    state.attestationsCount += 1;
     updateScoreGauge(newScore);
-
-    // Add row to explorer table
-    const tbody = document.getElementById("attestation-table-body");
-    if (tbody) {
-      const row = document.createElement("tr");
-      row.className = "hover:bg-white/[0.02] bg-cyan-500/10 transition-colors";
-      row.innerHTML = `
-        <td class="p-4 flex items-center space-x-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span>${chainId == "1" ? "Ethereum L1 (1)" : (chainId == "11155111" ? "Sepolia (11155111)" : "Arbitrum (42161)")}</span>
-        </td>
-        <td class="p-4 font-semibold text-white">${actionType.split('&')[0].trim()}</td>
-        <td class="p-4 text-cyan-400 font-mono">${txHash.slice(0, 8)}...${txHash.slice(-4)}</td>
-        <td class="p-4 font-bold text-emerald-400">$${valueUSD.toLocaleString()}</td>
-        <td class="p-4 text-emerald-400">+16 pts (${newScore})</td>
-        <td class="p-4 text-slate-400 font-mono">0x${Math.random().toString(16).slice(2, 6)}...${Math.random().toString(16).slice(2, 6)}</td>
-        <td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified</span></td>
-      `;
-      tbody.prepend(row);
-    }
-  }, 3400);
+  }, 3000);
 }
 
-// Dynamic Collateral Calculation
+// Collateral Calculation
 function updateCollateralCalc() {
   const borrowInput = document.getElementById("borrow-amount-input");
   const ctcReqEl = document.getElementById("calc-ctc-required");
@@ -274,15 +236,11 @@ function updateCollateralCalc() {
   if (!borrowInput || !ctcReqEl) return;
 
   const borrowUSD = parseFloat(borrowInput.value) || 0;
-  // 70% collateral ratio, CTC Price = $2.00
   const requiredUSD = borrowUSD * 0.70;
   const requiredCTC = requiredUSD / 2.0;
-
-  // Standard DeFi (150% collateral)
   const standardUSD = borrowUSD * 1.50;
   const standardCTC = standardUSD / 2.0;
 
-  // Savings
   const savedUSD = standardUSD - requiredUSD;
   const savedCTC = standardCTC - requiredCTC;
 
@@ -302,48 +260,139 @@ function executeBorrow() {
   const borrowUSD = parseFloat(borrowInput.value) || 10000;
   const requiredCTC = (borrowUSD * 0.7) / 2;
 
-  alert(`🚀 Loan Origination Successful on Creditcoin!\n\nDisbursed: $${borrowUSD.toLocaleString()} cUSD\nLocked Collateral: ${requiredCTC.toLocaleString()} CTC (70.0% Under-Collateralized Ratio)\nInterest APR: 2.50% (Super-Prime Institutional Rate)\n\nSavings vs Standard DeFi: 4,000 CTC ($8,000 USD preserved!)\n\nCreditcoin Tx: 0x5fc8d32690cc91d4c39d9d3abcbd16989f875707`);
+  alert(`🚀 Loan Origination Successful on Creditcoin!\n\nDisbursed: $${borrowUSD.toLocaleString()} cUSD\nLocked Collateral: ${requiredCTC.toLocaleString()} CTC (70.0% Under-Collateralized Ratio)\nInterest APR: 2.50% (Super-Prime Tier)\n\nCapital Savings: 4,000 CTC ($8,000 USD preserved)`);
 }
 
-// Repay Loan Demo
 function repayDemoLoan() {
-  alert("🎉 Loan #1 Fully Repaid!\n\nSettled $10,000 cUSD with accrued interest (2.5% APR = $1.37).\n3,500 CTC Collateral fully refunded to your wallet!");
-  const activeList = document.getElementById("active-loans-list");
-  if (activeList) {
-    activeList.innerHTML = `<div class="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 font-mono text-center">All loans settled. Zero outstanding debt. 3,500 CTC returned!</div>`;
+  alert("🎉 Loan #1 Fully Repaid!\n\nSettled $10,000 cUSD with accrued interest.\n3,500 CTC Collateral fully refunded to your wallet!");
+}
+
+function refreshSBT() {
+  alert(`🎖️ Soulbound Token (CX-SBT #1) Refreshed!\n\nCurrent Score: ${state.creditScore} CTS (Super-Prime Tier)\nPrivacy Commitment: ${state.sbtCommitment}\nAttestation synchronized with CredXHub on Creditcoin!`);
+}
+
+function verifySBTForExternalDApp() {
+  alert(`🔗 Composable Query Simulation:\n\nExternal Lending Protocol called: verifyAttestation(0x742d...f44e, CreditTier.PRIME)\n\nResult: TRUE ✅\nEligible for VIP zero-fee swaps and flash credit on Creditcoin!`);
+}
+
+// ══════════════ MULTI-TRACK INTERACTIVE DEMO HANDLERS ══════════════
+
+// Track 1: DeFi
+function executeFlashLoanDemo() {
+  alert("⚡ Reputation Flash Loan Executed!\n\nBorrowed: $100,000 cUSD (0 Collateral)\nFee Paid: 0.01% = $10.00 (Super-Prime Rate vs $90.00 standard)\nArbitrage Routed & Settled in Block #1,928,452!");
+}
+
+function executeStakeYieldDemo() {
+  alert("🏦 Reputation Yield Vault Stake Confirmed!\n\nStaked: 5,000 cUSD\nMultiplier: 2.0x Boost (Super-Prime Tier)\nEffective APY: 17.00% in CTC Rewards!");
+}
+
+function executeAMMSwapDemo() {
+  alert("🔄 Reputation AMM Swap Confirmed!\n\nSwapped: 1,000 cUSD ➔ 500 CTC\nFee Applied: 0.05% ($0.50) instead of 0.30% ($3.00)!\nSavings credited via CredXHub tier!");
+}
+
+// Track 2: DePIN
+function executeHardwareLeaseDemo() {
+  alert("🖥️ DePIN Hardware Lease Line Originated!\n\nAsset: 8x NVIDIA H100 GPU Cluster ($50,000 USD)\nCollateral: $0 Zero Upfront (Approved for CTS ≥ 750)\nDisbursed to hardware vendor on Creditcoin!");
+}
+
+function executeNodeDelegationDemo() {
+  alert("📡 DePIN Delegation Pool Stake Confirmed!\n\nDelegated: 2,500 CTC to 0xNode...79a1 (Score: 790 CTS)\nEstimated Yield: 14.2% APY in DePIN Revenue Share!");
+}
+
+// Track 3: Gaming
+function executeGatherDailyDemo() {
+  alert("🎮 Daily Pixels Gathering Harvested!\n\nBase Yield: 100 GAME Tokens\nSuper-Prime Multiplier: 3.0x Boost\nReceived: 300 GAME Tokens credited to your wallet!");
+}
+
+function executeOpenLootboxDemo() {
+  alert("🎁 Anti-Sybil Fair Lootbox Opened!\n\nVerification: CTS 794 ≥ 500 (Sybil Check Passed ✅)\nUnlocked: [Legendary Creditcoin Broadsword #07] NFT!");
+}
+
+function executeBorrowNFTDemo() {
+  alert("🛡️ Zero-Collateral Scholarship Vault Borrowed!\n\nCharacter: Dragon Slayer NFT #42\nCollateral Deposit: $0 (Reputation Gated for CTS ≥ 700)\nNFT transferred to player wallet for guild battle!");
+}
+
+// Track 4: Autonomous AI
+function executeAIRiskUpdateDemo() {
+  alert("🤖 AI Risk Oracle Ingestion Completed!\n\nAI Agent pushed cross-chain risk telemetry:\nVolatility Index: 10.0% · Default Rate: 2.0%\nAdjusted Base APR: 6.00% computed autonomously on-chain!");
+}
+
+function executeAgentFiDemo() {
+  alert("💳 AgentFi Credit Facility Disbursed!\n\nAI Agent (0xAgent...1011) performance verified.\nCredit Disbursed: $100,000 cUSD for autonomous MEV & arbitrage!");
+}
+
+function executeComputeEscrowDemo() {
+  alert("⚙️ Proof-of-Compute Settlement Complete!\n\nEscrow: $1,500 USDC released to GPU cluster operator upon cryptographic Merkle proof verification on Creditcoin!");
+}
+
+// Track 5: RWA
+function executeRWADepositDemo() {
+  alert("🏛️ Institutional Treasury Yield Fund (tbUSD) Minted!\n\nDeposited: 10,000 USDC\nMinted: 10,000 tbUSD (Treasury Backed USD)\nSuper-Prime Loyalty Reward: +2.0% bonus yield at redemption!");
+}
+
+function executeRWAInvoiceDemo() {
+  alert("📄 Tokenized Invoice Financing Succeeded!\n\nInvoice: $50,000 Corporate Accounts Receivable (60 Days)\nAdvance Rate: 95% ($47,500 USD upfront advance for high credit score)\nDisbursed instantly in cUSD!");
+}
+
+// Track 6: Virtual Node Chrome Extension Simulator
+function toggleVirtualNode() {
+  state.nodeRunning = !state.nodeRunning;
+  const badge = document.getElementById("node-status-badge");
+  const btnText = document.getElementById("toggle-node-text");
+  const syncBtn = document.getElementById("sync-node-btn");
+
+  if (state.nodeRunning) {
+    badge.className = "px-3 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+    badge.innerText = "Running · Sharing Idle Bandwidth";
+    btnText.innerText = "Stop Virtual Node";
+    syncBtn.disabled = false;
+    syncBtn.className = "px-5 py-3.5 rounded-xl bg-pink-500 hover:bg-pink-400 text-white font-bold text-xs transition-all flex items-center space-x-2 cursor-pointer";
+
+    state.nodeTimer = setInterval(() => {
+      state.nodeUptimeSeconds += 1;
+      state.nodePoints += 2;
+      state.nodeBandwidthMB += 5;
+
+      const hrs = Math.floor(state.nodeUptimeSeconds / 3600).toString().padStart(2, '0');
+      const mins = Math.floor((state.nodeUptimeSeconds % 3600) / 60).toString().padStart(2, '0');
+      const secs = (state.nodeUptimeSeconds % 60).toString().padStart(2, '0');
+
+      document.getElementById("ext-points-display").innerText = state.nodePoints.toLocaleString();
+      document.getElementById("ext-uptime-display").innerText = `${hrs}:${mins}:${secs}`;
+      document.getElementById("ext-bandwidth-display").innerText = `${state.nodeBandwidthMB.toLocaleString()} MB`;
+      document.getElementById("ext-score-display").innerText = `+${Math.floor(state.nodePoints / 10)} CTS`;
+    }, 1000);
+  } else {
+    badge.className = "px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400 border border-white/10";
+    badge.innerText = "Disconnected";
+    btnText.innerText = "Start Virtual Node";
+    clearInterval(state.nodeTimer);
   }
 }
 
-// Refresh Soulbound Attestation
-function refreshSBT() {
-  alert(`🎖️ Soulbound Token (CX-SBT #1) Refreshed!\n\nCurrent Score: ${state.creditScore} CTS (Super-Prime Tier)\nPrivacy Commitment: ${state.sbtCommitment}\nBlock Number: #1,928,450\n\nAttestation synchronized with CredXHub on Creditcoin!`);
+function syncNodePointsToChain() {
+  if (state.nodePoints === 0) {
+    alert("Please run the virtual node for a few seconds to accumulate points first!");
+    return;
+  }
+  const pts = state.nodePoints;
+  const ctsBoost = Math.floor(pts / 10) || 5;
+  alert(`⚡ Synchronized Virtual Node to Creditcoin!\n\nPoints Burned: ${pts}\nCTS Credit Score Boost: +${ctsBoost} CTS Points credited on Creditcoin Testnet!`);
+  state.nodePoints = 0;
+  document.getElementById("ext-points-display").innerText = "0";
+  state.creditScore = Math.min(state.creditScore + ctsBoost, 850);
+  updateScoreGauge(state.creditScore);
 }
 
-// Test External Composable Query
-function verifySBTForExternalDApp() {
-  alert(`🔗 Composable Query Simulation:\n\nExternal Lending Protocol called: verifyAttestation(0x742d...f44e, CreditTier.PRIME)\n\nResult: TRUE ✅\nBorrower eligible for VIP 0-fee swaps and instant flash credit on Creditcoin!`);
-}
-
-// Social Vouching / Delegation
-function executeVouch() {
-  const target = document.getElementById("vouch-target-address").value;
-  const boost = document.getElementById("vouch-boost-pts").value;
-  const duration = document.getElementById("vouch-duration-days").value;
-
-  alert(`🤝 Credit Delegation Successful!\n\nYou delegated +${boost} CTS points to wallet:\n${target}\nValidity: ${duration} Days\n\nThe beneficiary will receive an instant score boost on their next verified Attestcoin proof!`);
-}
-
-// Dynamically load deployed contract addresses from contracts.json
+// Load deployed contracts from contracts.json
 async function loadContractsConfig() {
   try {
     const res = await fetch("contracts.json");
     if (res.ok) {
       const data = await res.json();
       state.contracts = data.contracts;
-      console.log("CredX deployed contract addresses loaded from contracts.json:", data);
     }
   } catch (err) {
-    // Non-blocking in static environments
-    console.debug("Contracts JSON not loaded (running in standalone demo mode)");
+    console.debug("Standalone demo mode");
   }
 }

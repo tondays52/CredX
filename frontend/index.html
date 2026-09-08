@@ -57,7 +57,7 @@
     <header class="border-b border-white/10 bg-[#060913]/80 backdrop-blur-md sticky top-0 z-50">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         <div class="flex items-center space-x-4">
-          <div class="flex items-center space-x-3">
+          <div class="flex items-center space-x-3 cursor-pointer" onclick="switchTab('dashboard')">
             <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-cyan-500/20 border border-white/20">
               <i data-lucide="shield-check" class="w-6 h-6 text-white"></i>
             </div>
@@ -66,19 +66,23 @@
                 <span class="text-2xl font-extrabold tracking-tight bg-gradient-to-r from-white via-cyan-200 to-cyan-400 bg-clip-text text-transparent">CredX</span>
                 <span class="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">v2 OCCR Core</span>
               </div>
-              <p class="text-xs text-slate-400">Powered by Creditcoin Attestcoin Protocol &middot; Precompile 0x0FD2</p>
+              <p class="text-xs text-slate-400">Creditcoin Attestcoin Protocol &middot; Precompile 0x0FD2</p>
             </div>
           </div>
 
-          <!-- Navigation Tabs -->
-          <nav class="hidden md:flex items-center space-x-1 ml-8 bg-white/5 p-1 rounded-xl border border-white/5">
-            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="tab-btn active px-3.5 py-2 text-sm font-medium rounded-lg transition-all">Credit Terminal</button>
-            <button onclick="switchTab('sbt')" id="nav-sbt" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">Soulbound SBT</button>
-            <button onclick="switchTab('attest')" id="nav-attest" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">Proof Verifier</button>
-            <button onclick="switchTab('lending')" id="nav-lending" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">Lending Pool</button>
-            <button onclick="switchTab('vouch')" id="nav-vouch" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">Social Vouching</button>
-            <button onclick="switchTab('explorer')" id="nav-explorer" class="tab-btn px-3.5 py-2 text-sm font-medium rounded-lg text-slate-400 hover:text-white transition-all">Attestation Feed</button>
-            <a href="arena.html" class="px-3.5 py-2 text-sm font-semibold rounded-lg text-amber-300 hover:text-white hover:bg-amber-500/20 border border-amber-500/30 transition-all flex items-center space-x-1"><span>⚔️ Arena</span></a>
+          <!-- Navigation Tabs (All Tracks Included) -->
+          <nav class="hidden xl:flex items-center space-x-1 ml-6 bg-white/5 p-1 rounded-xl border border-white/5 text-xs font-medium">
+            <button onclick="switchTab('dashboard')" id="nav-dashboard" class="tab-btn active px-3 py-1.5 rounded-lg transition-all">Dashboard</button>
+            <button onclick="switchTab('defi')" id="nav-defi" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">DeFi Hub</button>
+            <button onclick="switchTab('depin')" id="nav-depin" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">DePIN</button>
+            <button onclick="switchTab('gaming')" id="nav-gaming" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">Gaming</button>
+            <button onclick="switchTab('ai')" id="nav-ai" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">AI Track</button>
+            <button onclick="switchTab('rwa')" id="nav-rwa" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">RWA Yield</button>
+            <button onclick="switchTab('extension')" id="nav-extension" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">Node Extension</button>
+            <button onclick="switchTab('sbt')" id="nav-sbt" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">SBT Passport</button>
+            <button onclick="switchTab('lending')" id="nav-lending" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">Lending</button>
+            <button onclick="switchTab('attest')" id="nav-attest" class="tab-btn px-3 py-1.5 rounded-lg text-slate-400 hover:text-white transition-all">0x0FD2 Proof</button>
+            <a href="arena.html" class="px-3 py-1.5 font-bold rounded-lg text-amber-300 hover:text-white hover:bg-amber-500/20 border border-amber-500/30 transition-all flex items-center space-x-1"><span>⚔️ Arena</span></a>
           </nav>
         </div>
 
@@ -90,7 +94,7 @@
           </div>
 
           <!-- Connect Wallet Button -->
-          <button id="connect-wallet-btn" onclick="toggleWalletConnect()" class="relative group overflow-hidden px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold text-sm shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all flex items-center space-x-2 border border-cyan-400/30">
+          <button id="connect-wallet-btn" onclick="toggleWalletConnect()" class="relative group overflow-hidden px-4 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 text-white font-semibold text-xs sm:text-sm shadow-lg shadow-cyan-500/25 hover:shadow-cyan-500/40 transition-all flex items-center space-x-2 border border-cyan-400/30">
             <i data-lucide="wallet" class="w-4 h-4"></i>
             <span id="wallet-address-text">Connect Wallet</span>
           </button>
@@ -100,26 +104,26 @@
 
     <!-- Global Key Metrics Strip -->
     <section class="border-b border-white/5 bg-white/[0.02]">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-center md:text-left">
-        <div class="p-3">
-          <p class="text-xs text-slate-400 font-medium">Total Verified Volume</p>
-          <p class="text-xl font-bold font-mono text-cyan-400 mt-1">$150,000,000</p>
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-center md:text-left">
+        <div class="p-2">
+          <p class="text-xs text-slate-400 font-medium">Verified Volume</p>
+          <p class="text-lg font-bold font-mono text-cyan-400 mt-0.5">$150,000,000</p>
           <span class="text-[10px] text-emerald-400">↑ 100% Attestcoin Merkle Verified</span>
         </div>
-        <div class="p-3">
+        <div class="p-2">
           <p class="text-xs text-slate-400 font-medium">Under-Collateralized Ratio</p>
-          <p class="text-xl font-bold font-mono text-emerald-400 mt-1">70.0% (Super-Prime)</p>
+          <p class="text-lg font-bold font-mono text-emerald-400 mt-0.5">70.0% (Super-Prime)</p>
           <span class="text-[10px] text-slate-400">vs 150% standard DeFi (30% savings)</span>
         </div>
-        <div class="p-3">
+        <div class="p-2">
           <p class="text-xs text-slate-400 font-medium">Dynamic APR Range</p>
-          <p class="text-xl font-bold font-mono text-purple-400 mt-1">2.5% &ndash; 12.0%</p>
+          <p class="text-lg font-bold font-mono text-purple-400 mt-0.5">2.5% &ndash; 12.0%</p>
           <span class="text-[10px] text-slate-400">FICO-Style Risk-Adjusted APR</span>
         </div>
-        <div class="p-3">
-          <p class="text-xs text-slate-400 font-medium">Precompile Proof Engine</p>
-          <p class="text-xl font-bold font-mono text-amber-400 mt-1 font-mono">0x0FD2</p>
-          <span class="text-[10px] text-emerald-400">Native Creditcoin L1 Consensus</span>
+        <div class="p-2">
+          <p class="text-xs text-slate-400 font-medium">Multi-Track Ecosystem</p>
+          <p class="text-lg font-bold font-mono text-amber-400 mt-0.5 font-mono">5 Live Tracks</p>
+          <span class="text-[10px] text-emerald-400">DeFi · DePIN · Gaming · AI · RWA</span>
         </div>
       </div>
     </section>
@@ -132,16 +136,67 @@
         <!-- Hero Banner -->
         <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 p-8 border border-cyan-500/20 shadow-2xl">
           <div class="relative z-10 max-w-3xl">
-            <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-semibold mb-4 border border-cyan-500/30">
+            <span class="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-semibold mb-3 border border-cyan-500/30">
               <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
               <span>OCCR Multi-Factor Credit Risk Scoring Model</span>
             </span>
-            <h1 class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight">
-              Cross-Chain Credit Reputation & Under-Collateralized Capital on Creditcoin.
+            <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Cross-Chain Credit Reputation & Multi-Track Capital on Creditcoin.
             </h1>
-            <p class="mt-3 text-slate-300 text-sm sm:text-base leading-relaxed">
-              CredX turns your verified DeFi activity across Ethereum, Compound, Uniswap, and trade finance into a portable on-chain credit score. Enjoy 70% under-collateralized borrowing and institutional-grade 2.5% APR.
+            <p class="mt-2 text-slate-300 text-sm leading-relaxed">
+              CredX turns verified multi-chain activity across Ethereum, Compound, and trade finance into a portable on-chain credit score. Enjoy 70% under-collateralized borrowing, 0.01% flash loans, DePIN hardware lines, and institution-grade RWA yields.
             </p>
+          </div>
+        </div>
+
+        <!-- Track Quick Jump Hubs Cards -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          <div onclick="switchTab('defi')" class="glass-card-interactive p-4 rounded-2xl border border-cyan-500/30 bg-cyan-950/10 cursor-pointer hover:border-cyan-400 transition-all text-center">
+            <div class="w-8 h-8 mx-auto rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center mb-2">
+              <i data-lucide="repeat" class="w-4 h-4"></i>
+            </div>
+            <h4 class="font-bold text-xs text-white">DeFi Hub</h4>
+            <p class="text-[10px] text-cyan-300 mt-1">0.01% Flash Loans</p>
+          </div>
+
+          <div onclick="switchTab('depin')" class="glass-card-interactive p-4 rounded-2xl border border-indigo-500/30 bg-indigo-950/10 cursor-pointer hover:border-indigo-400 transition-all text-center">
+            <div class="w-8 h-8 mx-auto rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center mb-2">
+              <i data-lucide="server" class="w-4 h-4"></i>
+            </div>
+            <h4 class="font-bold text-xs text-white">DePIN Hub</h4>
+            <p class="text-[10px] text-indigo-300 mt-1">Hardware Leases</p>
+          </div>
+
+          <div onclick="switchTab('gaming')" class="glass-card-interactive p-4 rounded-2xl border border-emerald-500/30 bg-emerald-950/10 cursor-pointer hover:border-emerald-400 transition-all text-center">
+            <div class="w-8 h-8 mx-auto rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center mb-2">
+              <i data-lucide="gamepad-2" class="w-4 h-4"></i>
+            </div>
+            <h4 class="font-bold text-xs text-white">Gaming Hub</h4>
+            <p class="text-[10px] text-emerald-300 mt-1">0-Deposit NFT Vault</p>
+          </div>
+
+          <div onclick="switchTab('ai')" class="glass-card-interactive p-4 rounded-2xl border border-purple-500/30 bg-purple-950/10 cursor-pointer hover:border-purple-400 transition-all text-center">
+            <div class="w-8 h-8 mx-auto rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center mb-2">
+              <i data-lucide="bot" class="w-4 h-4"></i>
+            </div>
+            <h4 class="font-bold text-xs text-white">AI Track</h4>
+            <p class="text-[10px] text-purple-300 mt-1">AgentFi Risk Oracle</p>
+          </div>
+
+          <div onclick="switchTab('rwa')" class="glass-card-interactive p-4 rounded-2xl border border-amber-500/30 bg-amber-950/10 cursor-pointer hover:border-amber-400 transition-all text-center">
+            <div class="w-8 h-8 mx-auto rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center mb-2">
+              <i data-lucide="landmark" class="w-4 h-4"></i>
+            </div>
+            <h4 class="font-bold text-xs text-white">RWA Yield</h4>
+            <p class="text-[10px] text-amber-300 mt-1">tbUSD Treasury</p>
+          </div>
+
+          <div onclick="switchTab('extension')" class="glass-card-interactive p-4 rounded-2xl border border-pink-500/30 bg-pink-950/10 cursor-pointer hover:border-pink-400 transition-all text-center">
+            <div class="w-8 h-8 mx-auto rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center mb-2">
+              <i data-lucide="puzzle" class="w-4 h-4"></i>
+            </div>
+            <h4 class="font-bold text-xs text-white">Virtual Node</h4>
+            <p class="text-[10px] text-pink-300 mt-1">Chrome Extension</p>
           </div>
         </div>
 
@@ -230,16 +285,10 @@
                 </div>
                 <div class="w-full bg-white/5 rounded-full h-1.5"><div class="bg-amber-400 h-1.5 rounded-full w-full"></div></div>
               </div>
-
-              <!-- Factor 6 & 7 -->
-              <div class="grid grid-cols-2 gap-2 pt-1 text-[10px] text-slate-400">
-                <span class="bg-white/5 p-1.5 rounded-lg">Ethereum Mainnet: <strong class="text-white">+20 pts</strong></span>
-                <span class="bg-white/5 p-1.5 rounded-lg">Weighted Actions: <strong class="text-white">+80 pts</strong></span>
-              </div>
             </div>
           </div>
 
-          <!-- Middle & Right: Unlocked Credit Privileges & Fast Actions -->
+          <!-- Middle & Right: Privileges & Charts -->
           <div class="lg:col-span-2 space-y-6">
             <!-- Unlocked Perks Cards -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -293,23 +342,6 @@
               </button>
             </div>
 
-            <!-- Quick Action: Multi-Proof Simulator -->
-            <div class="glass-card p-6 rounded-2xl border border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div class="space-y-1 text-center sm:text-left">
-                <h4 class="font-bold text-white flex items-center justify-center sm:justify-start space-x-2">
-                  <i data-lucide="layers" class="w-5 h-5 text-cyan-400"></i>
-                  <span>Import Multi-Protocol Reputation</span>
-                </h4>
-                <p class="text-xs text-slate-400">
-                  Batch import proofs from Aave, Compound, Uniswap LP, and RWA Invoices in one single transaction.
-                </p>
-              </div>
-              <button onclick="switchTab('attest')" class="px-5 py-2.5 rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/40 text-sm font-semibold whitespace-nowrap transition-all flex items-center space-x-2">
-                <span>Open Proof Verifier</span>
-                <i data-lucide="arrow-right" class="w-4 h-4"></i>
-              </button>
-            </div>
-
             <!-- Live Borrower Chart / Timeline -->
             <div class="glass-card p-6 rounded-2xl border border-white/10">
               <div class="flex items-center justify-between mb-4">
@@ -320,6 +352,508 @@
                 <canvas id="creditScoreChart"></canvas>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB: DEFI HUB ==================== -->
+      <section id="tab-defi" class="tab-content hidden space-y-8">
+        <div class="text-center space-y-2 max-w-3xl mx-auto">
+          <h2 class="text-3xl font-extrabold text-white">DeFi Track: Reputation-Gated Protocols</h2>
+          <p class="text-slate-400 text-sm">
+            Leverage your CredX reputation for discounted flash loans (0.01% fee), boosted staking yield vaults (2.0x multiplier), and ultra-low fee AMM liquidity pools.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- 1. Reputation Flash Loan -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+              <i data-lucide="zap" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Reputation Flash Loan</h3>
+            <p class="text-xs text-slate-400">
+              Zero-collateral flash loans with fee tiers discounted down to 0.01% for Super-Prime borrowers (vs 0.09% standard).
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Your Fee Tier:</span>
+                <span class="text-emerald-400 font-bold">0.01% (9x Discount)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Standard DeFi Fee:</span>
+                <span class="text-slate-500 line-through">0.09%</span>
+              </div>
+            </div>
+            <button onclick="executeFlashLoanDemo()" class="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="bolt" class="w-4 h-4"></i>
+              <span>Execute Flash Loan ($100,000)</span>
+            </button>
+          </div>
+
+          <!-- 2. Reputation Yield Vault -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+              <i data-lucide="vault" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Reputation Yield Vault</h3>
+            <p class="text-xs text-slate-400">
+              Stake cUSD or CTC to earn governance rewards. High-score users receive up to a 2.0x reward multiplier.
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Base APY:</span>
+                <span class="text-white">8.50%</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Your Multiplier:</span>
+                <span class="text-purple-400 font-bold">2.0x Multiplier (17.0% APY)</span>
+              </div>
+            </div>
+            <button onclick="executeStakeYieldDemo()" class="w-full py-3 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+              <span>Stake 5,000 cUSD (Boosted)</span>
+            </button>
+          </div>
+
+          <!-- 3. Reputation AMM -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <i data-lucide="git-compare" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Reputation AMM DEX</h3>
+            <p class="text-xs text-slate-400">
+              Automated market maker pool with dynamic swap fees scaled according to on-chain credit tier (0.05% for Super-Prime).
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Your Swap Fee:</span>
+                <span class="text-emerald-400 font-bold">0.05% (VIP Tier)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Standard Fee:</span>
+                <span class="text-slate-500 line-through">0.30%</span>
+              </div>
+            </div>
+            <button onclick="executeAMMSwapDemo()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Swap 1,000 cUSD ➔ CTC</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB: DEPIN TRACK ==================== -->
+      <section id="tab-depin" class="tab-content hidden space-y-8">
+        <div class="text-center space-y-2 max-w-3xl mx-auto">
+          <h2 class="text-3xl font-extrabold text-white">DePIN Track: Infrastructure & Hardware Financing</h2>
+          <p class="text-slate-400 text-sm">
+            Empower physical infrastructure operators to lease GPU clusters with zero upfront deposit and delegate staking power to verified high-reputation nodes.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Hardware Financing -->
+          <div class="glass-card p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                  <i data-lucide="cpu" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-white">DePIN Hardware Lease Line</h3>
+                  <p class="text-xs text-slate-400">Zero-collateral compute financing</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">
+                CTS &ge; 750 Approved
+              </span>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Target Hardware:</span>
+                <span class="text-white font-bold">8x NVIDIA H100 GPU Cluster</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Credit Facility:</span>
+                <span class="text-indigo-400 font-bold">$50,000 USD Lease</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Collateral Required:</span>
+                <span class="text-emerald-400 font-bold">$0 (100% Reputation Backed)</span>
+              </div>
+            </div>
+
+            <button onclick="executeHardwareLeaseDemo()" class="w-full py-4 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-sm shadow-xl transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="server" class="w-4 h-4"></i>
+              <span>Originate $50,000 Hardware Lease</span>
+            </button>
+          </div>
+
+          <!-- Node Delegation Pool -->
+          <div class="glass-card p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                  <i data-lucide="share-2" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-white">DePIN Delegation Pool</h3>
+                  <p class="text-xs text-slate-400">Stake to verified hardware nodes</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                Node Score: 790 CTS
+              </span>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Selected Node Operator:</span>
+                <span class="text-cyan-400">0xNode...79a1 (Verified Node)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Staking Amount:</span>
+                <span class="text-white font-bold">2,500 CTC</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Estimated Revenue Share:</span>
+                <span class="text-emerald-400 font-bold">14.2% APY</span>
+              </div>
+            </div>
+
+            <button onclick="executeNodeDelegationDemo()" class="w-full py-4 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-xl transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="check-circle" class="w-4 h-4"></i>
+              <span>Delegate 2,500 CTC to Verified Node</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB: GAMING TRACK ==================== -->
+      <section id="tab-gaming" class="tab-content hidden space-y-8">
+        <div class="text-center space-y-2 max-w-3xl mx-auto">
+          <h2 class="text-3xl font-extrabold text-white">Gaming Track: Reputation Economy & Scholarships</h2>
+          <p class="text-slate-400 text-sm">
+            Web3 gaming rewards, Pixels-style gathering multipliers, bot-resistant lootboxes, and zero-collateral NFT scholarship vaults.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- Daily Gathering -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <i data-lucide="sparkles" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Daily Pixels Gathering</h3>
+            <p class="text-xs text-slate-400">
+              Harvest daily resources with a 3.0x multiplier granted to Super-Prime players (vs 1.0x standard).
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Daily Multiplier:</span>
+                <span class="text-emerald-400 font-bold">3.0x (Super-Prime)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Yield:</span>
+                <span class="text-white font-bold">300 GAME Tokens</span>
+              </div>
+            </div>
+            <button onclick="executeGatherDailyDemo()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="gift" class="w-4 h-4"></i>
+              <span>Harvest Daily Tokens (300 GAME)</span>
+            </button>
+          </div>
+
+          <!-- Anti-Sybil Lootbox -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+              <i data-lucide="package" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Anti-Sybil Fair Lootbox</h3>
+            <p class="text-xs text-slate-400">
+              Gated by Creditcoin reputation (CTS &ge; 500) to ensure zero bot farming and fair player item drops.
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Requirement:</span>
+                <span class="text-amber-400 font-bold">CTS &ge; 500 (Passed: 794)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Rarity Pool:</span>
+                <span class="text-white font-bold">Epic / Legendary</span>
+              </div>
+            </div>
+            <button onclick="executeOpenLootboxDemo()" class="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="unlock" class="w-4 h-4"></i>
+              <span>Open Fair Mythic Lootbox</span>
+            </button>
+          </div>
+
+          <!-- Zero-Collateral Scholarship Vault -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+              <i data-lucide="shield" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">0-Deposit Scholarship Vault</h3>
+            <p class="text-xs text-slate-400">
+              Borrow rare gaming NFT characters without putting down capital collateral if your reputation &ge; 700.
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">NFT Asset:</span>
+                <span class="text-white font-bold">Dragon Slayer NFT #42</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Collateral:</span>
+                <span class="text-emerald-400 font-bold">$0 Zero Deposit</span>
+              </div>
+            </div>
+            <button onclick="executeBorrowNFTDemo()" class="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="user-plus" class="w-4 h-4"></i>
+              <span>Borrow NFT (0 Collateral)</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB: AUTONOMOUS AI TRACK ==================== -->
+      <section id="tab-ai" class="tab-content hidden space-y-8">
+        <div class="text-center space-y-2 max-w-3xl mx-auto">
+          <h2 class="text-3xl font-extrabold text-white">Autonomous AI Track: AgentFi & Risk Oracles</h2>
+          <p class="text-slate-400 text-sm">
+            Autonomous AI agents push verified multi-chain state proofs, dynamically re-pricing credit APRs and orchestrating verifiable proof-of-compute task escrows.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <!-- 1. AI Risk Oracle -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center">
+              <i data-lucide="activity" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">AI Dynamic Risk Oracle</h3>
+            <p class="text-xs text-slate-400">
+              Real-time volatility and default risk vectors autonomously pushed on-chain by AI agents to dynamically compute Base APR.
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Volatility Index:</span>
+                <span class="text-purple-400 font-bold">10.0%</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Adjusted Base APR:</span>
+                <span class="text-emerald-400 font-bold">6.00% APR</span>
+              </div>
+            </div>
+            <button onclick="executeAIRiskUpdateDemo()" class="w-full py-3 rounded-xl bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+              <span>Push AI Risk Vector Update</span>
+            </button>
+          </div>
+
+          <!-- 2. AgentFi Credit Lines -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+              <i data-lucide="bot" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">AgentFi Credit Facilities</h3>
+            <p class="text-xs text-slate-400">
+              Autonomous AI agents build their own on-chain performance reputation to access working capital for automated arbitrage.
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Agent Address:</span>
+                <span class="text-cyan-400">0xAgent...1011</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Credit Limit:</span>
+                <span class="text-white font-bold">$100,000 cUSD</span>
+              </div>
+            </div>
+            <button onclick="executeAgentFiDemo()" class="w-full py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="credit-card" class="w-4 h-4"></i>
+              <span>Disburse Agent Credit ($100k)</span>
+            </button>
+          </div>
+
+          <!-- 3. Proof-of-Compute Settlement -->
+          <div class="glass-card p-6 rounded-3xl border border-white/10 space-y-4">
+            <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <i data-lucide="layers" class="w-5 h-5"></i>
+            </div>
+            <h3 class="text-lg font-bold text-white">Proof-of-Compute Settlement</h3>
+            <p class="text-xs text-slate-400">
+              Deposit compute task escrows that autonomously release payment to GPU providers upon cryptographic verification.
+            </p>
+            <div class="p-3 rounded-xl bg-black/40 border border-white/5 space-y-2 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Task Escrow:</span>
+                <span class="text-emerald-400 font-bold">$1,500 USDC</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Status:</span>
+                <span class="text-emerald-400">Settled on Merkle Proof</span>
+              </div>
+            </div>
+            <button onclick="executeComputeEscrowDemo()" class="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="check" class="w-4 h-4"></i>
+              <span>Deposit & Settle Compute Task</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB: RWA TRACK ==================== -->
+      <section id="tab-rwa" class="tab-content hidden space-y-8">
+        <div class="text-center space-y-2 max-w-3xl mx-auto">
+          <h2 class="text-3xl font-extrabold text-white">RWA Track: Institutional Treasury & Invoice Financing</h2>
+          <p class="text-slate-400 text-sm">
+            Institutional Treasury Yield Fund (tbUSD) with loyalty bonus APY for high-score users and tokenized accounts receivable factoring.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <!-- Treasury Yield Fund -->
+          <div class="glass-card p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <i data-lucide="landmark" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-white">Treasury Yield Fund (tbUSD)</h3>
+                  <p class="text-xs text-slate-400">Ondo/Securitize-style institutional fund</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                +2.0% Bonus Yield
+              </span>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Deposit Stablecoin:</span>
+                <span class="text-white font-bold">10,000 USDC</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Minted Asset:</span>
+                <span class="text-amber-400 font-bold">10,000 tbUSD</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Super-Prime Loyalty Reward:</span>
+                <span class="text-emerald-400 font-bold">+2.0% Extra Return at Redemption</span>
+              </div>
+            </div>
+
+            <button onclick="executeRWADepositDemo()" class="w-full py-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-xl transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+              <span>Deposit 10,000 USDC ➔ Mint tbUSD</span>
+            </button>
+          </div>
+
+          <!-- Tokenized Invoice Financing -->
+          <div class="glass-card p-6 sm:p-8 rounded-3xl border border-white/10 space-y-6">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+                  <i data-lucide="receipt" class="w-5 h-5"></i>
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-white">Invoice Factoring & Financing</h3>
+                  <p class="text-xs text-slate-400">Tokenize corporate accounts receivable</p>
+                </div>
+              </div>
+              <span class="px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                95% Advance Rate
+              </span>
+            </div>
+
+            <div class="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-3 text-xs font-mono">
+              <div class="flex justify-between">
+                <span class="text-slate-400">Invoice Face Value:</span>
+                <span class="text-white font-bold">$50,000 USD (60 Days)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">High-Score Funding Amount:</span>
+                <span class="text-cyan-400 font-bold">$47,500 USD (95% Advance)</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-slate-400">Standard Score Advance:</span>
+                <span class="text-slate-500 line-through">$40,000 USD (80%)</span>
+              </div>
+            </div>
+
+            <button onclick="executeRWAInvoiceDemo()" class="w-full py-4 rounded-2xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-sm shadow-xl transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="dollar-sign" class="w-4 h-4"></i>
+              <span>Tokenize & Fund Invoice ($50,000)</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== TAB: CHROME EXTENSION (VIRTUAL NODE) ==================== -->
+      <section id="tab-extension" class="tab-content hidden space-y-8">
+        <div class="text-center space-y-2 max-w-3xl mx-auto">
+          <h2 class="text-3xl font-extrabold text-white">CredX Virtual Node (Chrome Extension)</h2>
+          <p class="text-slate-400 text-sm">
+            Turn any browser into an idle resource sharing DePIN node to continuously build your Creditcoin reputation score.
+          </p>
+        </div>
+
+        <div class="max-w-xl mx-auto glass-card p-8 rounded-3xl border border-pink-500/30 bg-slate-950/80 shadow-2xl space-y-6">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+              <div class="w-12 h-12 rounded-2xl bg-pink-500/20 text-pink-400 flex items-center justify-center border border-pink-500/30">
+                <i data-lucide="puzzle" class="w-6 h-6"></i>
+              </div>
+              <div>
+                <h3 class="text-lg font-extrabold text-white">CredX Virtual Node</h3>
+                <p class="text-xs text-slate-400">Manifest V3 DePIN Browser Node</p>
+              </div>
+            </div>
+            <span id="node-status-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-800 text-slate-400 border border-white/10">
+              Disconnected
+            </span>
+          </div>
+
+          <!-- Live Node Stats Grid -->
+          <div class="grid grid-cols-2 gap-4">
+            <div class="p-4 rounded-2xl bg-black/50 border border-white/10 text-center">
+              <span class="text-xs text-slate-400">CredX Points</span>
+              <p id="ext-points-display" class="text-2xl font-black text-cyan-400 font-mono mt-1">0</p>
+            </div>
+            <div class="p-4 rounded-2xl bg-black/50 border border-white/10 text-center">
+              <span class="text-xs text-slate-400">Node Uptime</span>
+              <p id="ext-uptime-display" class="text-2xl font-black text-white font-mono mt-1">00:00:00</p>
+            </div>
+            <div class="p-4 rounded-2xl bg-black/50 border border-white/10 text-center">
+              <span class="text-xs text-slate-400">Bandwidth Shared</span>
+              <p id="ext-bandwidth-display" class="text-2xl font-black text-emerald-400 font-mono mt-1">0 MB</p>
+            </div>
+            <div class="p-4 rounded-2xl bg-black/50 border border-white/10 text-center">
+              <span class="text-xs text-slate-400">Credit Score Boost</span>
+              <p id="ext-score-display" class="text-2xl font-black text-purple-400 font-mono mt-1">+0 CTS</p>
+            </div>
+          </div>
+
+          <!-- Controls -->
+          <div class="flex space-x-3">
+            <button id="toggle-node-btn" onclick="toggleVirtualNode()" class="flex-1 py-3.5 rounded-xl bg-pink-500 hover:bg-pink-400 text-white font-bold text-xs transition-all flex items-center justify-center space-x-2">
+              <i data-lucide="power" class="w-4 h-4"></i>
+              <span id="toggle-node-text">Start Virtual Node</span>
+            </button>
+            <button id="sync-node-btn" onclick="syncNodePointsToChain()" disabled class="px-5 py-3.5 rounded-xl bg-white/10 text-slate-500 font-bold text-xs transition-all flex items-center space-x-2">
+              <i data-lucide="upload-cloud" class="w-4 h-4"></i>
+              <span>Sync to Creditcoin</span>
+            </button>
+          </div>
+
+          <div class="p-4 rounded-2xl bg-white/[0.02] border border-white/5 text-xs text-slate-400 space-y-1">
+            <p class="font-bold text-white">📦 Load Extension in Google Chrome:</p>
+            <p>1. Open <span class="text-cyan-400 font-mono">chrome://extensions</span> and enable Developer Mode.</p>
+            <p>2. Click <strong class="text-white">"Load unpacked"</strong> and select the <span class="text-pink-400 font-mono">d:\money\extension</span> directory.</p>
           </div>
         </div>
       </section>
@@ -609,10 +1143,6 @@
                   <span class="text-emerald-400 font-semibold">Your Capital Savings:</span>
                   <span class="font-mono text-emerald-400 font-bold" id="calc-capital-saved">4,000.00 CTC ($8,000 USD)</span>
                 </div>
-                <div class="flex justify-between">
-                  <span class="text-slate-400">Annual Interest Rate (APR):</span>
-                  <span class="font-mono text-cyan-400 font-bold">2.50% (Super-Prime Tier)</span>
-                </div>
               </div>
 
               <button onclick="executeBorrow()" class="w-full py-4 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-base shadow-xl shadow-emerald-500/20 transition-all flex items-center justify-center space-x-2">
@@ -664,136 +1194,11 @@
                   <span>85% Collateral &middot; 5.0% APR</span>
                 </div>
                 <div class="p-2.5 rounded-xl bg-white/5 border border-white/5 flex justify-between items-center text-slate-400">
-                  <span>Near-Prime (650 - 699 CTS)</span>
-                  <span>95% Collateral &middot; 5.0% APR</span>
-                </div>
-                <div class="p-2.5 rounded-xl bg-white/5 border border-white/5 flex justify-between items-center text-slate-400">
                   <span>Standard (580 - 649 CTS)</span>
                   <span>120% Collateral &middot; 8.0% APR</span>
                 </div>
-                <div class="p-2.5 rounded-xl bg-white/5 border border-white/5 flex justify-between items-center text-rose-400">
-                  <span>Subprime (300 - 579 CTS)</span>
-                  <span>150% Collateral &middot; 12.0% APR</span>
-                </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==================== TAB 5: SOCIAL VOUCHING / DELEGATION ==================== -->
-      <section id="tab-vouch" class="tab-content hidden space-y-8">
-        <div class="max-w-4xl mx-auto space-y-6">
-          <div class="text-center space-y-2">
-            <h2 class="text-3xl font-extrabold text-white">Social Vouching & Credit Delegation</h2>
-            <p class="text-slate-400 text-sm">
-              Prime+ borrowers (CTS &ge; 700) can vouch for peer wallets, delegating up to 100 CTS points to unlock under-collateralized borrowing for their team or community.
-            </p>
-          </div>
-
-          <div class="glass-card p-8 rounded-3xl border border-white/10 space-y-6">
-            <div class="p-4 rounded-2xl bg-indigo-950/40 border border-indigo-500/30 flex items-center space-x-3">
-              <i data-lucide="shield-alert" class="w-6 h-6 text-indigo-400 shrink-0"></i>
-              <p class="text-xs text-slate-300 leading-relaxed">
-                As a <strong>Super-Prime borrower (794 CTS)</strong>, your reputation has high social underwriting power. Delegated score boosts automatically apply to the beneficiary's next verified Attestcoin proof!
-              </p>
-            </div>
-
-            <div class="space-y-4">
-              <div>
-                <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Beneficiary Wallet Address</label>
-                <input type="text" id="vouch-target-address" value="0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-white/10 text-white font-mono text-sm focus:outline-none focus:border-cyan-500" placeholder="0x...">
-              </div>
-
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Credit Boost Amount (CTS Points)</label>
-                  <input type="number" id="vouch-boost-pts" value="50" min="1" max="100" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-white/10 text-white font-mono text-sm focus:outline-none focus:border-cyan-500">
-                  <span class="text-[10px] text-slate-400">Maximum: 100 CTS points</span>
-                </div>
-
-                <div>
-                  <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">Delegation Duration (Days)</label>
-                  <input type="number" id="vouch-duration-days" value="30" min="1" max="90" class="w-full px-4 py-3 rounded-xl bg-slate-900/90 border border-white/10 text-white font-mono text-sm focus:outline-none focus:border-cyan-500">
-                  <span class="text-[10px] text-slate-400">Maximum: 90 days validity</span>
-                </div>
-              </div>
-
-              <button onclick="executeVouch()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-400 hover:to-indigo-500 text-white font-bold text-base shadow-xl transition-all flex items-center justify-center space-x-2">
-                <i data-lucide="user-check" class="w-5 h-5"></i>
-                <span>Delegate Reputation & Vouch for Wallet</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- ==================== TAB 6: ATTESTATION FEED / EXPLORER ==================== -->
-      <section id="tab-explorer" class="tab-content hidden space-y-6">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h2 class="text-2xl font-extrabold text-white">Attestcoin Cross-Chain Fact Stream</h2>
-            <p class="text-slate-400 text-xs">Real-time cryptographic proofs verified by Creditcoin consensus (Precompile 0x0FD2).</p>
-          </div>
-          <div class="flex items-center space-x-2 text-xs font-mono text-slate-400">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-            <span>Precompile 0x0FD2 Active</span>
-          </div>
-        </div>
-
-        <div class="glass-card rounded-3xl border border-white/10 overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs font-mono">
-              <thead class="bg-white/5 text-slate-400 uppercase tracking-wider text-[10px] border-b border-white/10">
-                <tr>
-                  <th class="p-4">Source Chain</th>
-                  <th class="p-4">Action Type</th>
-                  <th class="p-4">Source Tx Hash</th>
-                  <th class="p-4">Verified USD</th>
-                  <th class="p-4">CTS Impact</th>
-                  <th class="p-4">Privacy Commitment</th>
-                  <th class="p-4">Status</th>
-                </tr>
-              </thead>
-              <tbody id="attestation-table-body" class="divide-y divide-white/5 text-slate-300">
-                <tr class="hover:bg-white/[0.02]">
-                  <td class="p-4 flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-                    <span>Ethereum L1 (1)</span>
-                  </td>
-                  <td class="p-4 font-semibold text-white">Uniswap v3 LP Provision</td>
-                  <td class="p-4 text-cyan-400 hover:underline cursor-pointer">0xfa29...7710</td>
-                  <td class="p-4 font-bold text-emerald-400">$25,000</td>
-                  <td class="p-4 text-emerald-400">+33 pts (794)</td>
-                  <td class="p-4 text-slate-400 font-mono">0x7354...a84f</td>
-                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified</span></td>
-                </tr>
-                <tr class="hover:bg-white/[0.02]">
-                  <td class="p-4 flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
-                    <span>Ethereum L1 (1)</span>
-                  </td>
-                  <td class="p-4 font-semibold text-white">Compound v3 Supply</td>
-                  <td class="p-4 text-cyan-400 hover:underline cursor-pointer">0x1928...3746</td>
-                  <td class="p-4 font-bold text-emerald-400">$75,000</td>
-                  <td class="p-4 text-emerald-400">+121 pts (761)</td>
-                  <td class="p-4 text-slate-400 font-mono">0x9a44...bc10</td>
-                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified</span></td>
-                </tr>
-                <tr class="hover:bg-white/[0.02]">
-                  <td class="p-4 flex items-center space-x-2">
-                    <span class="w-2 h-2 rounded-full bg-purple-400"></span>
-                    <span>Sepolia (11155111)</span>
-                  </td>
-                  <td class="p-4 font-semibold text-white">Aave v3 Repayment</td>
-                  <td class="p-4 text-cyan-400 hover:underline cursor-pointer">0xa515...6200</td>
-                  <td class="p-4 font-bold text-emerald-400">$50,000</td>
-                  <td class="p-4 text-emerald-400">+340 pts (640)</td>
-                  <td class="p-4 text-slate-400 font-mono">0x4c18...ef92</td>
-                  <td class="p-4"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Verified</span></td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       </section>
@@ -803,10 +1208,10 @@
     <!-- Footer -->
     <footer class="border-t border-white/5 bg-[#060913]/90 py-8 text-center text-xs text-slate-500">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <p>Built for the <strong>Creditcoin BUIDL Hackathon 2026 Fall (DoraHacks)</strong> &middot; CEIP Fast-Track</p>
+        <p>Built for the <strong>Creditcoin BUIDL Hackathon 2026 Fall (DoraHacks)</strong> &middot; Multi-Track Ecosystem</p>
         <div class="flex items-center space-x-6 text-slate-400">
-          <a href="#" class="hover:text-cyan-400 transition-colors">Attestcoin Docs</a>
-          <a href="#" class="hover:text-cyan-400 transition-colors">Smart Contracts (GitHub)</a>
+          <a href="arena.html" class="text-amber-400 hover:text-amber-300 transition-colors font-bold">⚔️ Reputation Arena</a>
+          <a href="#" onclick="switchTab('extension')" class="text-pink-400 hover:text-pink-300 transition-colors">Virtual Node Extension</a>
           <a href="#" class="hover:text-cyan-400 transition-colors">Precompile 0x0FD2 Spec</a>
         </div>
       </div>
