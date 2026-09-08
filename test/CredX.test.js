@@ -413,13 +413,13 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
       // borrower has no credit history (score = 300)
       await expect(
         credXHub.connect(borrower).delegateCredit(borrower2.address, 50, 30)
-      ).to.be.revertedWith("Delegator must have score >= 700 (Prime+)");
+      ).to.be.revertedWithCustomError(credXHub, "InsufficientDelegatorScore");
     });
 
     it("should reject self-delegation", async function () {
       await expect(
         credXHub.connect(borrower).delegateCredit(borrower.address, 50, 30)
-      ).to.be.revertedWith("Cannot self-delegate");
+      ).to.be.revertedWithCustomError(credXHub, "CannotSelfDelegate");
     });
   });
 

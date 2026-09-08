@@ -47,7 +47,7 @@ contract CredXHub is ICredXHub {
     mapping(address borrower => BorrowerProfile profile) public borrowerProfiles;
 
     // History of verified events per borrower
-    mapping(address borrower => VerifiedAttestationRecord[] records) private borrowerHistory;
+    mapping(address borrower => VerifiedAttestationRecord[] records) private _borrowerHistory;
 
     // ═══════════════════════════════════════════════════════════════════════
     //  Credit Delegation (Social Lending / Co-signing)
@@ -104,6 +104,10 @@ contract CredXHub is ICredXHub {
     // ═══════════════════════════════════════════════════════════════════════
     error ZeroAddress();
     error OnlyOwner();
+    error CannotSelfDelegate();
+    error InvalidBoostAmount();
+    error InvalidDuration();
+    error InsufficientDelegatorScore();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
@@ -164,6 +168,8 @@ contract CredXHub is ICredXHub {
 
         // 3. Update borrower profile with multi-factor data
         newScore = _updateBorrowerProfile(msg.sender, proof, actionType, reportedValueUSD, result, replayKey);
+
+        emit ProofSubmittedAndVerified(replayKey, msg.sender, proof.sourceChainId, proof.txHash, actionType, reportedValueUSD, newScore);
 
         return (true, newScore);
     }
@@ -230,13 +236,13 @@ contract CredXHub is ICredXHub {
      * @param durationDays How long the delegation lasts.
      */
     function delegateCredit(address beneficiary, uint256 boostAmount, uint256 durationDays) external {
-        require(beneficiary != msg.sender, "Cannot self-delegate");
-        require(boostAmount > 0 && boostAmount <= 100, "Boost: 1-100 CTS");
-        require(durationDays > 0 && durationDays <= 90, "Duration: 1-90 days");
+        if (beneficiary == msg.sender) revert CannotSelfDelegate();
+        if (boostAmount == 0 || boostAmount > 100) revert InvalidBoostAmount();
+        if (durationDays == 0 || durationDays > 90) revert InvalidDuration();
 
         BorrowerProfile memory delegatorProfile = borrowerProfiles[msg.sender];
         uint256 delegatorScore = delegatorProfile.creditScore == 0 ? scoreEngine.MIN_SCORE() : delegatorProfile.creditScore;
-        require(delegatorScore >= 700, "Delegator must have score >= 700 (Prime+)");
+        if (delegatorScore < 700) revert InsufficientDelegatorScore();
 
         delegatedBoosts[beneficiary] = CreditDelegation({
             delegator: msg.sender,
@@ -314,10 +320,10 @@ contract CredXHub is ICredXHub {
         profile.creditScore = newScore;
 
         // Privacy-preserving commitment hash (stores commitment, not raw proof data)
-        bytes32 privacyCommitment = keccak256(abi.encodePacked(replayKey, borrower, block.timestamp));
+        bytes32 privacyCommitment = keccak256(abi.encodePacked(replayKey, borrower, block.number));
 
         // Store in history
-        borrowerHistory[borrower].push(VerifiedAttestationRecord({
+        _borrowerHistory[borrower].push(VerifiedAttestationRecord({
             proofHash: replayKey,
             sourceChainId: proof.sourceChainId,
             txHash: proof.txHash,
@@ -332,7 +338,6 @@ contract CredXHub is ICredXHub {
         uint256 maxCreditLineUSD = scoreEngine.getMaxCreditLine(newScore, profile.totalVerifiedVolumeUSD);
         uint256 requiredCollateralRatioBps = scoreEngine.getCollateralRatio(newScore);
 
-        emit ProofSubmittedAndVerified(replayKey, borrower, proof.sourceChainId, proof.txHash, actionType, reportedValueUSD, newScore);
         emit CreditScoreUpdated(borrower, oldScore, newScore, maxCreditLineUSD, requiredCollateralRatioBps);
 
         return newScore;
@@ -388,6 +393,6 @@ contract CredXHub is ICredXHub {
 
     function getBorrowerHistory(address borrower) external view returns (VerifiedAttestationRecord[] memory) {
         if (borrower == address(0)) revert ZeroAddress();
-        return borrowerHistory[borrower];
+        return _borrowerHistory[borrower];
     }
 }
