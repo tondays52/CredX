@@ -5,13 +5,14 @@ import {ICredXHub} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title UndercollateralizedLendingPool
  * @notice Capital pool enabling under-collateralized lending (down to 70% collateral ratio)
  *         and discounted interest rates based on Creditcoin Attestcoin verified reputation.
  */
-contract UndercollateralizedLendingPool is ILendingPool {
+contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public liquidityToken; // e.g. cUSD / USDC
@@ -21,6 +22,8 @@ contract UndercollateralizedLendingPool is ILendingPool {
 
     uint256 public constant BPS_DIVISOR = 10000;
     uint256 public constant CTC_PRICE_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
+    uint256 public constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
+    uint256 public constant BLOCKS_PER_YEAR = 2628000; // ~365 days at 12s/block
 
     uint256 public nextLoanId = 1;
     uint256 public totalLiquidityUSD;
@@ -42,7 +45,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
         uint256 collateralCTC,
         uint256 collateralRatioBps,
         uint256 interestRateBps,
-        uint256 dueTimestamp
+        uint256 dueBlock
     );
     event LoanRepaid(uint256 indexed loanId, address indexed borrower, uint256 totalRepaidUSD);
     event LoanDefaulted(uint256 indexed loanId, address indexed borrower, uint256 collateralLiquidatedCTC);
@@ -82,7 +85,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
     /**
      * @notice Lenders deposit liquidity (cUSD) to earn yield from undercollateralized loans.
      */
-    function depositLiquidity(uint256 amountUSD) external override {
+    function depositLiquidity(uint256 amountUSD) external override nonReentrant {
         if (amountUSD == 0) revert InvalidAmount();
 
         lenderBalances[msg.sender] += amountUSD;
@@ -95,7 +98,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
     /**
      * @notice Lenders withdraw their supplied liquidity.
      */
-    function withdrawLiquidity(uint256 amountUSD) external override {
+    function withdrawLiquidity(uint256 amountUSD) external override nonReentrant {
         if (lenderBalances[msg.sender] < amountUSD) revert InsufficientLenderBalance();
         if (totalLiquidityUSD - totalBorrowedUSD < amountUSD) revert InsufficientPoolLiquidity();
 
@@ -107,46 +110,57 @@ contract UndercollateralizedLendingPool is ILendingPool {
     }
 
     /**
-     * @notice Borrow cUSD against CTC collateral with dynamically discounted collateral ratios.
-     * @param requestedUSD Amount of cUSD to borrow (18 decimals).
+     * @dev Internal helper to validate borrow parameters against borrower profile and compute loan terms.
      */
-    function borrow(uint256 requestedUSD) external payable override returns (uint256 loanId) {
-        if (requestedUSD == 0) revert InvalidAmount();
-        if (totalLiquidityUSD - totalBorrowedUSD < requestedUSD) revert InsufficientPoolLiquidity();
-
-        // 1. Fetch Borrower Profile and Collateral Requirements from CredXHub
+    function _validateBorrowTerms(
+        address borrower,
+        uint256 requestedUSD,
+        uint256 collateralCTC
+    ) internal view returns (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps) {
         (
             uint256 creditScore,
             ,
             ,
             uint256 maxCreditLineUSD,
-            uint256 requiredCollateralRatioBps,
+            uint256 collateralRatioBps,
             
-        ) = credXHub.getBorrowerProfile(msg.sender);
+        ) = credXHub.getBorrowerProfile(borrower);
 
         if (requestedUSD > maxCreditLineUSD) revert ExceedsApprovedCreditLine();
 
-        // 2. Calculate Required Collateral in native CTC
-        // Required Collateral USD = requestedUSD * (requiredCollateralRatioBps / 10000)
-        // Collateral CTC = Required Collateral USD / CTC_PRICE_USD
-        uint256 requiredCollateralUSD = (requestedUSD * requiredCollateralRatioBps) / BPS_DIVISOR;
+        uint256 requiredCollateralUSD = (requestedUSD * collateralRatioBps) / BPS_DIVISOR;
         uint256 requiredCollateralCTC = (requiredCollateralUSD * 10**18) / CTC_PRICE_USD;
 
-        if (msg.value < requiredCollateralCTC) revert InsufficientCollateral();
+        if (collateralCTC < requiredCollateralCTC) revert InsufficientCollateral();
 
-        // 3. Compute Interest Rate — Direct FICO-style APR based on credit score
-        uint256 finalInterestRateBps = scoreEngine.getInterestRate(creditScore);
+        uint256 interestRateBps = scoreEngine.getInterestRate(creditScore);
+        return (collateralRatioBps, interestRateBps);
+    }
+
+    /**
+     * @notice Borrow cUSD against CTC collateral with dynamically discounted collateral ratios.
+     * @param requestedUSD Amount of cUSD to borrow (18 decimals).
+     */
+    function borrow(uint256 requestedUSD) external payable override nonReentrant returns (uint256 loanId) {
+        if (requestedUSD == 0) revert InvalidAmount();
+        if (totalLiquidityUSD - totalBorrowedUSD < requestedUSD) revert InsufficientPoolLiquidity();
+
+        (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps) = _validateBorrowTerms(
+            msg.sender,
+            requestedUSD,
+            msg.value
+        );
 
         loanId = nextLoanId++;
-        uint256 dueDate = block.timestamp + 30 days; // 30-day loan duration
+        uint256 dueBlock = block.number + LOAN_DURATION_BLOCKS; // ~30-day loan duration in blocks
 
         loans[loanId] = LoanPosition({
             loanId: loanId,
             borrower: msg.sender,
             principalUSD: requestedUSD,
             collateralCTC: msg.value,
-            borrowedAtTimestamp: block.timestamp,
-            dueTimestamp: dueDate,
+            borrowedAtBlock: block.number,
+            dueBlock: dueBlock,
             interestRateBps: finalInterestRateBps,
             isRepaid: false,
             isDefaulted: false
@@ -165,7 +179,7 @@ contract UndercollateralizedLendingPool is ILendingPool {
             msg.value,
             requiredCollateralRatioBps,
             finalInterestRateBps,
-            dueDate
+            dueBlock
         );
 
         return loanId;
@@ -174,15 +188,15 @@ contract UndercollateralizedLendingPool is ILendingPool {
     /**
      * @notice Repays an active loan and unlocks the locked native CTC collateral.
      */
-    function repayLoan(uint256 loanId, uint256 amountUSD) external override {
+    function repayLoan(uint256 loanId, uint256 amountUSD) external override nonReentrant {
         LoanPosition storage loan = loans[loanId];
         if (loan.isRepaid) revert LoanAlreadyRepaid();
         if (loan.isDefaulted) revert LoanIsDefaulted();
         if (msg.sender != loan.borrower) revert OnlyBorrower();
 
-        // Calculate interest: principal * (rate / 10000) * (duration / 365 days)
-        uint256 elapsed = block.timestamp - loan.borrowedAtTimestamp;
-        uint256 interestUSD = (loan.principalUSD * loan.interestRateBps * elapsed) / (BPS_DIVISOR * 365 days);
+        // Calculate interest: principal * (rate / 10000) * (blocksElapsed / BLOCKS_PER_YEAR)
+        uint256 blocksElapsed = block.number - loan.borrowedAtBlock;
+        uint256 interestUSD = (loan.principalUSD * loan.interestRateBps * blocksElapsed) / (BPS_DIVISOR * BLOCKS_PER_YEAR);
         uint256 totalDueUSD = loan.principalUSD + interestUSD;
 
         if (amountUSD < totalDueUSD) revert RepaymentAmountInsufficient();
@@ -193,24 +207,24 @@ contract UndercollateralizedLendingPool is ILendingPool {
         loan.isRepaid = true;
         totalBorrowedUSD -= loan.principalUSD;
 
-        // Return collateral to borrower
+        // Return collateral to borrower (Checks-Effects-Interactions: state cleared before transfer)
         uint256 refundCollateral = loan.collateralCTC;
         loan.collateralCTC = 0;
-        (bool sent, ) = payable(msg.sender).call{value: refundCollateral}("");
+        (bool sent, ) = payable(loan.borrower).call{value: refundCollateral}("");
         if (!sent) revert CollateralReturnFailed();
 
         emit LoanRepaid(loanId, msg.sender, totalDueUSD);
     }
 
     /**
-     * @notice Liquidates an overdue loan that was not repaid before dueTimestamp.
+     * @notice Liquidates an overdue loan that was not repaid before dueBlock.
      * @param loanId The ID of the loan to liquidate.
      */
-    function liquidateDefaultedLoan(uint256 loanId) external {
+    function liquidateDefaultedLoan(uint256 loanId) external nonReentrant {
         LoanPosition storage loan = loans[loanId];
         if (loan.isRepaid) revert LoanAlreadyRepaid();
         if (loan.isDefaulted) revert LoanIsDefaulted();
-        if (block.timestamp <= loan.dueTimestamp) revert LoanNotOverdue();
+        if (block.number <= loan.dueBlock) revert LoanNotOverdue();
 
         loan.isDefaulted = true;
         uint256 liquidatedCollateral = loan.collateralCTC;
@@ -221,8 +235,10 @@ contract UndercollateralizedLendingPool is ILendingPool {
 
     /**
      * @notice Returns all loan IDs for a specific user.
+     * @param user The address of the borrower to query.
      */
     function getUserLoans(address user) external view returns (uint256[] memory) {
+        if (user == address(0)) revert ZeroAddress();
         return userLoanIds[user];
     }
 }
