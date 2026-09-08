@@ -8,7 +8,7 @@
     "test": "hardhat test",
     "deploy:creditcoin-testnet": "hardhat run scripts/deploy.js --network creditcoinTestnet",
     "demo:e2e": "hardhat run scripts/test-e2e.js",
-    "start:frontend": "python -m http.server 3000 --directory frontend"
+    "start:frontend": "npx -y serve frontend -l 3000"
   },
   "keywords": [
     "creditcoin",
