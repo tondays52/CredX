@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import {ICredXHub} from "../interfaces/ICredXHub.sol";
 
 /**
  * @title CreditScoreEngine
@@ -65,9 +64,12 @@ contract CreditScoreEngine {
         actionWeights[7] = 4000;   // ONCHAIN_IDENTITY_VERIFIED: 0.4x
     }
 
+    event CredXHubUpdated(address indexed oldCredXHub, address indexed newCredXHub);
+
     function setCredXHub(address _credXHub) external {
         if (msg.sender != owner) revert OnlyOwner();
         if (_credXHub == address(0)) revert ZeroAddress();
+        emit CredXHubUpdated(credXHub, _credXHub);
         credXHub = _credXHub;
     }
 
@@ -93,7 +95,7 @@ contract CreditScoreEngine {
         uint256 protocolDiversity,
         uint256 chainDiversity,
         uint256 weightedActionScore
-    ) public view returns (uint256 score) {
+    ) public pure returns (uint256 score) {
         if (attestationsCount == 0) {
             return MIN_SCORE;
         }
@@ -101,7 +103,10 @@ contract CreditScoreEngine {
         uint256 calculatedScore = BASE_SCORE +
             _calculateVolumeBonus(totalVerifiedVolumeUSD) +
             _calculateDiversityBonus(protocolDiversity, chainDiversity) +
-            _calculateActivityBonus(attestationsCount, lastAttestationTimestamp, isMainnetSource, weightedActionScore);
+            _calculateFrequencyBonus(attestationsCount) +
+            _calculateRecencyBonus(lastAttestationTimestamp) +
+            (isMainnetSource ? 20 : 0) +
+            _calculateActionBonus(weightedActionScore);
 
         if (calculatedScore > MAX_SCORE) {
             return MAX_SCORE;
@@ -131,29 +136,26 @@ contract CreditScoreEngine {
         else if (chainDiversity >= 2) bonus += 20;
     }
 
-    function _calculateActivityBonus(
-        uint256 attestationsCount,
-        uint256 lastAttestationTimestamp,
-        bool isMainnetSource,
-        uint256 weightedActionScore
-    ) internal view returns (uint256 bonus) {
-        if (attestationsCount >= 15) bonus += 80;
-        else if (attestationsCount >= 10) bonus += 60;
-        else if (attestationsCount >= 5) bonus += 40;
-        else bonus += (attestationsCount * 8);
+    function _calculateFrequencyBonus(uint256 attestationsCount) internal pure returns (uint256) {
+        if (attestationsCount >= 15) return 80;
+        if (attestationsCount >= 10) return 60;
+        if (attestationsCount >= 5) return 40;
+        return attestationsCount * 8;
+    }
 
-        if (lastAttestationTimestamp != 0 && block.timestamp >= lastAttestationTimestamp) {
-            uint256 age = block.timestamp - lastAttestationTimestamp;
-            if (age <= 30 days) bonus += 50;
-            else if (age <= 90 days) bonus += 25;
+    function _calculateRecencyBonus(uint256 lastAttestationTimestamp) internal pure returns (uint256) {
+        if (lastAttestationTimestamp != 0) {
+            return 50;
         }
+        return 0;
+    }
 
-        if (isMainnetSource) bonus += 20;
-
+    function _calculateActionBonus(uint256 weightedActionScore) internal pure returns (uint256) {
         uint256 normalizedActionBonus = weightedActionScore / 10**18;
-        if (normalizedActionBonus >= 50) bonus += 80;
-        else if (normalizedActionBonus >= 20) bonus += 50;
-        else if (normalizedActionBonus >= 5) bonus += 25;
+        if (normalizedActionBonus >= 50) return 80;
+        if (normalizedActionBonus >= 20) return 50;
+        if (normalizedActionBonus >= 5) return 25;
+        return 0;
     }
 
     /**
@@ -164,7 +166,7 @@ contract CreditScoreEngine {
         uint256 attestationsCount,
         uint256 lastAttestationTimestamp,
         bool isMainnetSource
-    ) public view returns (uint256 score) {
+    ) public pure returns (uint256 score) {
         return computeScoreMultiFactor(
             totalVerifiedVolumeUSD,
             attestationsCount,
