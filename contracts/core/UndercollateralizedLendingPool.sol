@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "../interfaces/ILendingPool.sol";
-import "../interfaces/ICredXHub.sol";
-import "./CreditScoreEngine.sol";
-import "../mocks/MockERC20.sol";
+pragma solidity 0.8.20;
+import {ILendingPool} from "../interfaces/ILendingPool.sol";
+import {ICredXHub} from "../interfaces/ICredXHub.sol";
+import {CreditScoreEngine} from "./CreditScoreEngine.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
 
 /**
  * @title UndercollateralizedLendingPool
@@ -24,9 +23,9 @@ contract UndercollateralizedLendingPool is ILendingPool {
     uint256 public totalLiquidityUSD;
     uint256 public totalBorrowedUSD;
 
-    mapping(address => uint256) public lenderBalances;
-    mapping(uint256 => LoanPosition) public loans;
-    mapping(address => uint256[]) public userLoanIds;
+    mapping(address lender => uint256 balanceUSD) public lenderBalances;
+    mapping(uint256 loanId => LoanPosition position) public loans;
+    mapping(address borrower => uint256[] ids) public userLoanIds;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");

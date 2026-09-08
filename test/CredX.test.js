@@ -332,6 +332,20 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
 
       expect(attAfter.minimumScore).to.be.gte(attBefore.minimumScore);
     });
+
+    it("should allow owner to revoke an attestation and emit AttestationRevoked", async function () {
+      const proof = buildMockEventProof(11155111, ethers.id("sbt-revoke"), 10500, null, null, "2000");
+      await credXHub.connect(borrower).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("2000"));
+      await sbt.connect(borrower).mintAttestation();
+
+      const tokenId = await sbt.holderTokenId(borrower.address);
+      await expect(sbt.connect(deployer).revokeAttestation(borrower.address))
+        .to.emit(sbt, "AttestationRevoked")
+        .withArgs(tokenId, borrower.address);
+
+      const isVerified = await sbt.verifyAttestation(borrower.address, 0);
+      expect(isVerified).to.be.false;
+    });
   });
 
   // ═══════════════════════════════════════════════════════════════════════

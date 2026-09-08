@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "../interfaces/ICredXHub.sol";
+pragma solidity 0.8.20;
+import {ICredXHub} from "../interfaces/ICredXHub.sol";
 
 /**
  * @title CreditAttestationSBT
@@ -46,8 +45,8 @@ contract CreditAttestationSBT {
         bool isValid;             // Can be revoked if score drops
     }
 
-    mapping(uint256 => Attestation) public attestations;
-    mapping(address => uint256) public holderTokenId;  // One SBT per address
+    mapping(uint256 tokenId => Attestation attestation) public attestations;
+    mapping(address holder => uint256 tokenId) public holderTokenId;  // One SBT per address
 
     event AttestationMinted(
         uint256 indexed tokenId,
@@ -128,6 +127,19 @@ contract CreditAttestationSBT {
         att.isValid = true;
 
         emit AttestationRefreshed(tokenId, tier, minimumScore);
+    }
+
+    /**
+     * @notice Revoke an attestation if a borrower defaults or credentials are invalidated.
+     * @param holder The address whose attestation is being revoked.
+     */
+    function revokeAttestation(address holder) external onlyOwner {
+        uint256 tokenId = holderTokenId[holder];
+        require(tokenId != 0, "No attestation found");
+        require(attestations[tokenId].isValid, "Already revoked");
+
+        attestations[tokenId].isValid = false;
+        emit AttestationRevoked(tokenId, holder);
     }
 
     /**

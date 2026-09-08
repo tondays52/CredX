@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "./IAttestationVerifier.sol";
+pragma solidity 0.8.20;
+import {IAttestationVerifier} from "./IAttestationVerifier.sol";
 
 /**
  * @title ICredXHub

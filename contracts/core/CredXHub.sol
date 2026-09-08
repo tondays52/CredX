@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
-
-import "../interfaces/IAttestationVerifier.sol";
-import "../interfaces/ICredXHub.sol";
-import "./CreditScoreEngine.sol";
+pragma solidity 0.8.20;
+import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
+import {ICredXHub} from "../interfaces/ICredXHub.sol";
+import {CreditScoreEngine} from "./CreditScoreEngine.sol";
 
 /**
  * @title CredXHub
@@ -36,19 +35,19 @@ contract CredXHub is ICredXHub {
     }
 
     // Track which ActionTypes a borrower has used (bitmap for gas efficiency)
-    mapping(address => uint8) public borrowerActionBitmap;
+    mapping(address borrower => uint8 actionBitmap) public borrowerActionBitmap;
 
     // Track which chains a borrower has been attested from (bitmap)
-    mapping(address => uint256) public borrowerChainBitmap;
+    mapping(address borrower => uint256 chainBitmap) public borrowerChainBitmap;
 
     // Cryptographic Replay Protection: keccak256(sourceChainId, txHash, logIndex) => bool
-    mapping(bytes32 => bool) public processedAttestations;
+    mapping(bytes32 proofHash => bool isProcessed) public processedAttestations;
 
     // Mapping from borrower address => profile data
-    mapping(address => BorrowerProfile) public borrowerProfiles;
+    mapping(address borrower => BorrowerProfile profile) public borrowerProfiles;
 
     // History of verified events per borrower
-    mapping(address => VerifiedAttestationRecord[]) private borrowerHistory;
+    mapping(address borrower => VerifiedAttestationRecord[] records) private borrowerHistory;
 
     // ═══════════════════════════════════════════════════════════════════════
     //  Credit Delegation (Social Lending / Co-signing)
@@ -59,7 +58,7 @@ contract CredXHub is ICredXHub {
         uint256 expiry;
         bool isActive;
     }
-    mapping(address => CreditDelegation) public delegatedBoosts;
+    mapping(address beneficiary => CreditDelegation delegation) public delegatedBoosts;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");

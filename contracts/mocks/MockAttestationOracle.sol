@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
-import "../interfaces/IAttestationVerifier.sol";
+import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 
 /**
  * @title MockAttestationOracle
@@ -12,7 +12,7 @@ contract MockAttestationOracle is IAttestationVerifier {
     address public owner;
     
     // Mapping to simulate registered/attested transactions
-    mapping(uint256 => mapping(bytes32 => bool)) public attestedTransactions;
+    mapping(uint256 sourceChainId => mapping(bytes32 txHash => bool isAttested)) public attestedTransactions;
     
     // Configurable simulated results
     bool public alwaysPass = true;
