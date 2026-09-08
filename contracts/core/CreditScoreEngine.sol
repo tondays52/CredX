@@ -77,7 +77,7 @@ contract CreditScoreEngine {
 
         // 3. Recency Bonus (Up to +50 points)
         // If attested in the last 30 days
-        if (block.timestamp > lastAttestationTimestamp && (block.timestamp - lastAttestationTimestamp) <= 30 days) {
+        if (lastAttestationTimestamp != 0 && (block.timestamp >= lastAttestationTimestamp) && (block.timestamp - lastAttestationTimestamp) <= 30 days) {
             calculatedScore += 50;
         }
 
@@ -106,11 +106,11 @@ contract CreditScoreEngine {
         if (score >= 780) {
             return 7000;  // 70% collateral required (Prime Tier - 30% undercollateralized!)
         } else if (score >= 700) {
-            return 8500;  // 85% collateral required
-        } else if (score >= 620) {
-            return 11000; // 110% collateral required
-        } else if (score >= 550) {
-            return 13000; // 130% collateral required
+            return 8500;  // 85% collateral required (Gold Tier)
+        } else if (score >= 650) {
+            return 9500;  // 95% collateral required (Silver Tier - Undercollateralized!)
+        } else if (score >= 580) {
+            return 12000; // 120% collateral required (Bronze Tier)
         } else {
             return 15000; // 150% collateral required (Standard Overcollateralized)
         }

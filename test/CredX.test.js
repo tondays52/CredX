@@ -122,9 +122,12 @@ describe("CredX Protocol - Comprehensive Test Suite", function () {
     const collateralCTC = ethers.parseEther("1750");
     await lendingPool.connect(borrower).borrow(borrowAmountUSD, { value: collateralCTC });
 
-    // Approve and repay
-    const repayAmount = ethers.parseEther("5000");
-    await cUSD.connect(borrower).approve(await lendingPool.getAddress(), repayAmount * 2n);
+    // Give borrower a buffer of cUSD to pay accrued interest
+    await cUSD.mint(borrower.address, ethers.parseEther("100"));
+
+    // Approve and repay with buffer for accrued interest
+    const repayAmount = ethers.parseEther("5100");
+    await cUSD.connect(borrower).approve(await lendingPool.getAddress(), repayAmount);
     
     await expect(
       lendingPool.connect(borrower).repayLoan(1, repayAmount)

@@ -105,8 +105,10 @@ async function main() {
 
   // 8. Repay loan & reclaim collateral
   console.log("🔄 8. Repaying Loan and Reclaiming CTC Collateral...");
-  await cUSD.connect(borrower).approve(await lendingPool.getAddress(), borrowAmount * 2n);
-  const repayTx = await lendingPool.connect(borrower).repayLoan(1, borrowAmount);
+  await cUSD.mint(borrower.address, ethers.parseEther("100"));
+  const repayAmount = ethers.parseEther("10100");
+  await cUSD.connect(borrower).approve(await lendingPool.getAddress(), repayAmount);
+  const repayTx = await lendingPool.connect(borrower).repayLoan(1, repayAmount);
   await repayTx.wait();
   console.log("   ✅ Loan #1 fully settled. 3,500 CTC collateral refunded to borrower!\n");
 
