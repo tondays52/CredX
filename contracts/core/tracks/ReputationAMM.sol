@@ -14,9 +14,9 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract ReputationAMM is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IERC20 public immutable token0;
-    IERC20 public immutable token1;
+    ICredXHub public immutable CREDX_HUB;
+    IERC20 public immutable TOKEN0;
+    IERC20 public immutable TOKEN1;
 
     uint256 public reserve0;
     uint256 public reserve1;
@@ -43,9 +43,9 @@ contract ReputationAMM is ReentrancyGuard {
         require(_credXHub != address(0), "Zero address: credXHub");
         require(_token0 != address(0), "Zero address: token0");
         require(_token1 != address(0), "Zero address: token1");
-        credXHub = ICredXHub(_credXHub);
-        token0 = IERC20(_token0);
-        token1 = IERC20(_token1);
+        CREDX_HUB = ICredXHub(_credXHub);
+        TOKEN0 = IERC20(_token0);
+        TOKEN1 = IERC20(_token1);
     }
 
     function _mint(address to, uint256 amount) internal {
@@ -80,8 +80,8 @@ contract ReputationAMM is ReentrancyGuard {
     }
 
     function addLiquidity(uint256 amount0, uint256 amount1) external nonReentrant returns (uint256 liquidity) {
-        token0.safeTransferFrom(msg.sender, address(this), amount0);
-        token1.safeTransferFrom(msg.sender, address(this), amount1);
+        TOKEN0.safeTransferFrom(msg.sender, address(this), amount0);
+        TOKEN1.safeTransferFrom(msg.sender, address(this), amount1);
 
         if (totalSupply == 0) {
             liquidity = _sqrt(amount0 * amount1);
@@ -93,7 +93,7 @@ contract ReputationAMM is ReentrancyGuard {
 
         require(liquidity > 0, "Insufficient liquidity minted");
         _mint(msg.sender, liquidity);
-        _update(token0.balanceOf(address(this)), token1.balanceOf(address(this)));
+        _update(TOKEN0.balanceOf(address(this)), TOKEN1.balanceOf(address(this)));
 
         emit Mint(msg.sender, amount0, amount1);
     }
@@ -107,10 +107,10 @@ contract ReputationAMM is ReentrancyGuard {
 
         _burn(msg.sender, liquidity);
         
-        token0.safeTransfer(msg.sender, amount0);
-        token1.safeTransfer(msg.sender, amount1);
+        TOKEN0.safeTransfer(msg.sender, amount0);
+        TOKEN1.safeTransfer(msg.sender, amount1);
         
-        _update(token0.balanceOf(address(this)), token1.balanceOf(address(this)));
+        _update(TOKEN0.balanceOf(address(this)), TOKEN1.balanceOf(address(this)));
 
         emit Burn(msg.sender, amount0, amount1);
     }
@@ -123,18 +123,18 @@ contract ReputationAMM is ReentrancyGuard {
         uint256 balance1;
 
         // Optimistically transfer out
-        if (amount0Out > 0) token0.safeTransfer(msg.sender, amount0Out);
-        if (amount1Out > 0) token1.safeTransfer(msg.sender, amount1Out);
+        if (amount0Out > 0) TOKEN0.safeTransfer(msg.sender, amount0Out);
+        if (amount1Out > 0) TOKEN1.safeTransfer(msg.sender, amount1Out);
 
-        balance0 = token0.balanceOf(address(this));
-        balance1 = token1.balanceOf(address(this));
+        balance0 = TOKEN0.balanceOf(address(this));
+        balance1 = TOKEN1.balanceOf(address(this));
 
         uint256 amount0In = balance0 > reserve0 - amount0Out ? balance0 - (reserve0 - amount0Out) : 0;
         uint256 amount1In = balance1 > reserve1 - amount1Out ? balance1 - (reserve1 - amount1Out) : 0;
         require(amount0In > 0 || amount1In > 0, "Insufficient input amount");
 
         // Determine fee based on trader's score
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         uint256 feeBps = STANDARD_FEE_BPS;
 
         if (creditScore >= 780) {
@@ -163,14 +163,14 @@ contract ReputationAMM is ReentrancyGuard {
         require(amountIn > 0, "Insufficient input amount");
         require(tokenIn != address(0), "Zero address: tokenIn");
         require(user != address(0), "Zero address: user");
-        require(tokenIn == address(token0) || tokenIn == address(token1), "Invalid token");
+        require(tokenIn == address(TOKEN0) || tokenIn == address(TOKEN1), "Invalid token");
 
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(user);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(user);
         uint256 feeBps = STANDARD_FEE_BPS;
         if (creditScore >= 780) feeBps = SUPER_PRIME_FEE_BPS;
         else if (creditScore >= 650) feeBps = PRIME_FEE_BPS;
 
-        bool isToken0 = tokenIn == address(token0);
+        bool isToken0 = tokenIn == address(TOKEN0);
         uint256 reserveIn = isToken0 ? reserve0 : reserve1;
         uint256 reserveOut = isToken0 ? reserve1 : reserve0;
 

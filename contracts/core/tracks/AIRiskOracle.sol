@@ -26,6 +26,7 @@ contract AIRiskOracle {
     }
 
     constructor(address _aiAgent) {
+        require(_aiAgent != address(0), "Invalid AI agent");
         aiAgent = _aiAgent;
         marketVolatilityIndex = 1000; // 10% default
         globalDefaultRateBps = 200;   // 2% default

@@ -16,7 +16,7 @@ interface IMockGameItem is IERC721 {
 }
 
 contract GamingEcosystemHub is IERC721Receiver, Ownable {
-    ICredXHub public immutable credXHub;
+    ICredXHub public immutable CREDX_HUB;
     IMockGameToken public gameToken;
     IMockGameItem public gameItem;
 
@@ -54,7 +54,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         require(_credXHub != address(0), "Zero address: credXHub");
         require(_gameToken != address(0), "Zero address: gameToken");
         require(_gameItem != address(0), "Zero address: gameItem");
-        credXHub = ICredXHub(_credXHub);
+        CREDX_HUB = ICredXHub(_credXHub);
         gameToken = IMockGameToken(_gameToken);
         gameItem = IMockGameItem(_gameItem);
     }
@@ -66,7 +66,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         uint256 amount = BASE_GATHER_AMOUNT;
         
         uint256 creditScore = 0;
-        try credXHub.getBorrowerProfile(msg.sender) returns (
+        try CREDX_HUB.getBorrowerProfile(msg.sender) returns (
             uint256 score, uint256, uint256, uint256, uint256, uint256
         ) {
             creditScore = score;
@@ -84,7 +84,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
 
     // 2. Anti-Sybil Fair Lootbox
     function openLootbox() external {
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         require(creditScore >= MIN_SCORE_LOOTBOX, "Score too low for lootbox");
 
         // Pseudorandom rarity
@@ -146,7 +146,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         listing.active = false;
 
         uint256 creditScore = 0;
-        try credXHub.getBorrowerProfile(msg.sender) returns (
+        try CREDX_HUB.getBorrowerProfile(msg.sender) returns (
             uint256 score, uint256, uint256, uint256, uint256, uint256
         ) {
             creditScore = score;

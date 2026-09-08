@@ -18,9 +18,9 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IMockPriceOracle public immutable priceOracle;
-    IERC20 public immutable stablecoin;
+    ICredXHub public immutable CREDX_HUB;
+    IMockPriceOracle public immutable PRICE_ORACLE;
+    IERC20 public immutable STABLECOIN;
 
     uint256 public constant MIN_SCORE_REQUIRED = 600;
     uint256 public constant PREMIUM_SCORE_THRESHOLD = 750;
@@ -37,9 +37,12 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
         address _priceOracle,
         address _stablecoin
     ) ERC20("Treasury Backed USD", "tbUSD") {
-        credXHub = ICredXHub(_credXHub);
-        priceOracle = IMockPriceOracle(_priceOracle);
-        stablecoin = IERC20(_stablecoin);
+        require(_credXHub != address(0), "Invalid CredXHub");
+        require(_priceOracle != address(0), "Invalid PriceOracle");
+        require(_stablecoin != address(0), "Invalid Stablecoin");
+        CREDX_HUB = ICredXHub(_credXHub);
+        PRICE_ORACLE = IMockPriceOracle(_priceOracle);
+        STABLECOIN = IERC20(_stablecoin);
     }
 
     /**
@@ -49,10 +52,10 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
     function deposit(uint256 stablecoinAmount) external nonReentrant {
         require(stablecoinAmount > 0, "Amount must be > 0");
         
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         require(creditScore >= MIN_SCORE_REQUIRED, "Credit score too low for institutional fund");
 
-        (uint256 navPrice, uint8 decimals) = priceOracle.getLatestPrice();
+        (uint256 navPrice, uint8 decimals) = PRICE_ORACLE.getLatestPrice();
         require(navPrice > 0, "Invalid Oracle Price");
 
         // Calculate shares to mint based on the NAV price of the treasury fund
@@ -60,7 +63,7 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
         uint256 sharesToMint = (stablecoinAmount * (10 ** decimals)) / navPrice;
         require(sharesToMint > 0, "Zero shares minted");
 
-        stablecoin.safeTransferFrom(msg.sender, address(this), stablecoinAmount);
+        STABLECOIN.safeTransferFrom(msg.sender, address(this), stablecoinAmount);
         _mint(msg.sender, sharesToMint);
 
         emit Deposit(msg.sender, stablecoinAmount, sharesToMint);
@@ -74,9 +77,9 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
         require(sharesAmount > 0, "Amount must be > 0");
         require(balanceOf(msg.sender) >= sharesAmount, "Insufficient shares");
 
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
 
-        (uint256 navPrice, uint8 decimals) = priceOracle.getLatestPrice();
+        (uint256 navPrice, uint8 decimals) = PRICE_ORACLE.getLatestPrice();
         require(navPrice > 0, "Invalid Oracle Price");
 
         // Base stablecoin output based on current NAV
@@ -89,10 +92,10 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
         }
 
         uint256 totalStablecoinOut = baseStablecoinOut + bonusAmount;
-        require(stablecoin.balanceOf(address(this)) >= totalStablecoinOut, "Insufficient vault liquidity");
+        require(STABLECOIN.balanceOf(address(this)) >= totalStablecoinOut, "Insufficient vault liquidity");
 
         _burn(msg.sender, sharesAmount);
-        stablecoin.safeTransfer(msg.sender, totalStablecoinOut);
+        STABLECOIN.safeTransfer(msg.sender, totalStablecoinOut);
 
         emit Withdraw(msg.sender, sharesAmount, baseStablecoinOut, bonusAmount);
     }

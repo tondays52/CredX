@@ -16,8 +16,8 @@ interface IFlashBorrower {
 contract ReputationFlashLoan {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IERC20 public immutable token;
+    ICredXHub public immutable CREDX_HUB;
+    IERC20 public immutable TOKEN;
 
     // Fees are in basis points (10000 = 100%)
     uint256 public constant STANDARD_FEE_BPS = 9; // 0.09% (like Aave)
@@ -29,8 +29,10 @@ contract ReputationFlashLoan {
     event FlashLoan(address indexed receiver, address indexed token, uint256 amount, uint256 fee, uint256 score);
 
     constructor(address _credXHub, address _token) {
-        credXHub = ICredXHub(_credXHub);
-        token = IERC20(_token);
+        require(_credXHub != address(0), "Zero address: credXHub");
+        require(_token != address(0), "Zero address: token");
+        CREDX_HUB = ICredXHub(_credXHub);
+        TOKEN = IERC20(_token);
     }
 
     /**
@@ -40,11 +42,12 @@ contract ReputationFlashLoan {
      * @param data Arbitrary data passed to the receiver.
      */
     function flashLoan(address receiver, uint256 amount, bytes calldata data) external {
+        require(receiver != address(0), "Zero address: receiver");
         require(amount > 0, "Amount must be > 0");
-        require(token.balanceOf(address(this)) >= amount, "Not enough liquidity");
+        require(TOKEN.balanceOf(address(this)) >= amount, "Not enough liquidity");
 
         // Determine fee based on caller's credit score (not the receiver contract, but the initiator)
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         uint256 feeBps = STANDARD_FEE_BPS;
 
         if (creditScore >= 780) {
@@ -56,7 +59,7 @@ contract ReputationFlashLoan {
         uint256 fee = (amount * feeBps) / 10000;
 
         // Transfer funds to receiver
-        token.safeTransfer(receiver, amount);
+        TOKEN.safeTransfer(receiver, amount);
 
         // Execute callback
         require(
@@ -65,8 +68,8 @@ contract ReputationFlashLoan {
         );
 
         // Pull funds back (principal + fee)
-        token.safeTransferFrom(receiver, address(this), amount + fee);
+        TOKEN.safeTransferFrom(receiver, address(this), amount + fee);
 
-        emit FlashLoan(receiver, address(token), amount, fee, creditScore);
+        emit FlashLoan(receiver, address(TOKEN), amount, fee, creditScore);
     }
 }

@@ -12,9 +12,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract ReputationYieldVault {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IERC20 public immutable stakingToken;
-    IERC20 public immutable rewardToken;
+    ICredXHub public immutable CREDX_HUB;
+    IERC20 public immutable STAKING_TOKEN;
+    IERC20 public immutable REWARD_TOKEN;
 
     // A simplified reward rate for demonstration (e.g., 100 reward tokens per block per staker share)
     uint256 public constant BASE_REWARD_RATE = 100;
@@ -25,16 +25,19 @@ contract ReputationYieldVault {
         uint256 accumulatedRewards;
     }
 
-    mapping(address => StakerInfo) public stakers;
+    mapping(address user => StakerInfo info) public stakers;
 
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
     event RewardsClaimed(address indexed user, uint256 reward, uint256 appliedMultiplier);
 
     constructor(address _credXHub, address _stakingToken, address _rewardToken) {
-        credXHub = ICredXHub(_credXHub);
-        stakingToken = IERC20(_stakingToken);
-        rewardToken = IERC20(_rewardToken);
+        require(_credXHub != address(0), "Zero address: credXHub");
+        require(_stakingToken != address(0), "Zero address: stakingToken");
+        require(_rewardToken != address(0), "Zero address: rewardToken");
+        CREDX_HUB = ICredXHub(_credXHub);
+        STAKING_TOKEN = IERC20(_stakingToken);
+        REWARD_TOKEN = IERC20(_rewardToken);
     }
 
     function _updateRewards(address user) internal {
@@ -43,7 +46,7 @@ contract ReputationYieldVault {
             uint256 blocks = block.number - info.lastUpdateBlock;
             
             // Get user's current score to calculate multiplier dynamically
-            (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(user);
+            (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(user);
             uint256 multiplier = 10; // 1.0x
 
             if (creditScore >= 780) {
@@ -62,7 +65,7 @@ contract ReputationYieldVault {
         require(amount > 0, "Cannot stake 0");
         _updateRewards(msg.sender);
         
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
         stakers[msg.sender].balance += amount;
         
         emit Staked(msg.sender, amount);
@@ -75,7 +78,7 @@ contract ReputationYieldVault {
         _updateRewards(msg.sender);
         
         stakers[msg.sender].balance -= amount;
-        stakingToken.safeTransfer(msg.sender, amount);
+        STAKING_TOKEN.safeTransfer(msg.sender, amount);
         
         emit Unstaked(msg.sender, amount);
     }
@@ -90,10 +93,10 @@ contract ReputationYieldVault {
         
         // In a real scenario, this would mint or transfer from a reserve
         // We simulate by just transferring (requires vault to be funded with rewardTokens)
-        rewardToken.safeTransfer(msg.sender, reward);
+        REWARD_TOKEN.safeTransfer(msg.sender, reward);
         
         // Log the multiplier for transparency based on current score
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         uint256 multiplier = creditScore >= 780 ? 20 : (creditScore >= 650 ? 15 : 10);
         
         emit RewardsClaimed(msg.sender, reward, multiplier);

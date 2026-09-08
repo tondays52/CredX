@@ -21,9 +21,9 @@ contract AutonomousAIHub is ReentrancyGuard {
     //  State & Interfaces
     // ═══════════════════════════════════════════════════════════════════════
 
-    ICredXHub public immutable credXHub;
-    IAttestationVerifier public immutable attestationVerifier;
-    IERC20 public immutable settlementToken;
+    ICredXHub public immutable CREDX_HUB;
+    IAttestationVerifier public immutable ATTESTATION_VERIFIER;
+    IERC20 public immutable SETTLEMENT_TOKEN;
 
     // Volatility Index: 0 to 10000 (bps)
     uint256 public marketVolatilityIndex;
@@ -87,9 +87,9 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(_attestationVerifier != address(0), "Zero address: attestationVerifier");
         require(_settlementToken != address(0), "Zero address: settlementToken");
 
-        credXHub = ICredXHub(_credXHub);
-        attestationVerifier = IAttestationVerifier(_attestationVerifier);
-        settlementToken = IERC20(_settlementToken);
+        CREDX_HUB = ICredXHub(_credXHub);
+        ATTESTATION_VERIFIER = IAttestationVerifier(_attestationVerifier);
+        SETTLEMENT_TOKEN = IERC20(_settlementToken);
 
         marketVolatilityIndex = 1000; // 10% base volatility
         globalDefaultRateBps = 200;   // 2% base default rate
@@ -112,7 +112,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(!processedProofs[proof.sourceChainId][proof.txHash], "Proof already processed");
 
         // Verify cryptographic Merkle Patricia Trie receipt proof via Creditcoin Attestcoin consensus
-        IAttestationVerifier.AttestationResult memory result = attestationVerifier.verifyEventProof(proof);
+        IAttestationVerifier.AttestationResult memory result = ATTESTATION_VERIFIER.verifyEventProof(proof);
         require(result.isValid, "Cryptographic proof invalid");
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
@@ -183,7 +183,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(!processedProofs[proof.sourceChainId][proof.txHash], "Proof already processed");
 
         // Verify cryptographic proof
-        IAttestationVerifier.AttestationResult memory result = attestationVerifier.verifyEventProof(proof);
+        IAttestationVerifier.AttestationResult memory result = ATTESTATION_VERIFIER.verifyEventProof(proof);
         require(result.isValid, "Cryptographic proof invalid");
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
@@ -214,10 +214,10 @@ contract AutonomousAIHub is ReentrancyGuard {
 
         // Cross-check: Agent must have Autonomous Reputation Score >= 700 (Prime)
         require(profile.reputationScore >= 700, "Agent credit score below Prime threshold (700)");
-        require(settlementToken.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
+        require(SETTLEMENT_TOKEN.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
 
         profile.activeLoanAmount = amount;
-        settlementToken.safeTransfer(msg.sender, amount);
+        SETTLEMENT_TOKEN.safeTransfer(msg.sender, amount);
 
         emit AgentLoanDispatched(msg.sender, amount);
     }
@@ -231,7 +231,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(profile.activeLoanAmount > 0, "No active loan");
         require(amount >= profile.activeLoanAmount, "Must repay full loan balance");
 
-        settlementToken.safeTransferFrom(msg.sender, address(this), amount);
+        SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
         profile.activeLoanAmount = 0;
         profile.totalLoansRepaid += amount;
@@ -262,7 +262,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(amount > 0, "Amount must be > 0");
         require(computeTasks[taskId].requester == address(0), "Task ID already exists");
 
-        settlementToken.safeTransferFrom(msg.sender, address(this), amount);
+        SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
         computeTasks[taskId] = ComputeTask({
             taskId: taskId,
@@ -288,13 +288,13 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(!processedProofs[proof.sourceChainId][proof.txHash], "Proof already processed");
 
         // Verify cryptographic compute delivery receipt proof
-        IAttestationVerifier.AttestationResult memory result = attestationVerifier.verifyEventProof(proof);
+        IAttestationVerifier.AttestationResult memory result = ATTESTATION_VERIFIER.verifyEventProof(proof);
         require(result.isValid, "Invalid cryptographic compute proof");
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
         task.isSettled = true;
 
-        settlementToken.safeTransfer(task.gpuProvider, task.escrowAmount);
+        SETTLEMENT_TOKEN.safeTransfer(task.gpuProvider, task.escrowAmount);
 
         emit ComputeTaskSettled(taskId, task.gpuProvider, task.escrowAmount, proof.txHash);
     }

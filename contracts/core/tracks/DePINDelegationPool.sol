@@ -13,8 +13,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract DePINDelegationPool {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IERC20 public immutable delegationToken;
+    ICredXHub public immutable CREDX_HUB;
+    IERC20 public immutable DELEGATION_TOKEN;
 
     uint256 public constant MIN_SCORE_FOR_DELEGATION = 600;
 
@@ -28,13 +28,13 @@ contract DePINDelegationPool {
     constructor(address _credXHub, address _delegationToken) {
         require(_credXHub != address(0), "Zero address: credXHub");
         require(_delegationToken != address(0), "Zero address: delegationToken");
-        credXHub = ICredXHub(_credXHub);
-        delegationToken = IERC20(_delegationToken);
+        CREDX_HUB = ICredXHub(_credXHub);
+        DELEGATION_TOKEN = IERC20(_delegationToken);
     }
 
     function depositCapital(uint256 amount) external {
         require(amount > 0, "Must deposit > 0");
-        delegationToken.safeTransferFrom(msg.sender, address(this), amount);
+        DELEGATION_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
         userDeposits[msg.sender] += amount;
         emit Deposited(msg.sender, amount);
     }
@@ -44,14 +44,14 @@ contract DePINDelegationPool {
         require(userDeposits[msg.sender] >= amount, "Insufficient deposit");
         require(amount > 0, "Must delegate > 0");
 
-        (uint256 nodeScore, , , , , ) = credXHub.getBorrowerProfile(node);
+        (uint256 nodeScore, , , , , ) = CREDX_HUB.getBorrowerProfile(node);
         require(nodeScore >= MIN_SCORE_FOR_DELEGATION, "Node score too low");
 
         userDeposits[msg.sender] -= amount;
         nodeDelegations[node] += amount;
         
         // In a real implementation, we would transfer/lock tokens into the node's staking contract
-        // delegationToken.safeTransfer(nodeStakingAddress, amount);
+        // DELEGATION_TOKEN.safeTransfer(nodeStakingAddress, amount);
 
         emit Delegated(msg.sender, node, amount);
     }
@@ -59,7 +59,7 @@ contract DePINDelegationPool {
     function withdrawCapital(uint256 amount) external {
         require(userDeposits[msg.sender] >= amount, "Insufficient deposit");
         userDeposits[msg.sender] -= amount;
-        delegationToken.safeTransfer(msg.sender, amount);
+        DELEGATION_TOKEN.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount);
     }
 }

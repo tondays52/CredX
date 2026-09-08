@@ -9,23 +9,24 @@ contract MockFlashBorrower {
 
     bytes32 public constant CALLBACK_SUCCESS = keccak256("ERC3156FlashBorrower.onFlashLoan");
 
-    IERC20 public immutable token;
+    IERC20 public immutable TOKEN;
     uint256 public lastFeePaid;
 
     constructor(address _token) {
-        token = IERC20(_token);
+        require(_token != address(0), "Invalid token");
+        TOKEN = IERC20(_token);
     }
 
     function onFlashLoan(
-        address initiator,
+        address /* initiator */,
         uint256 amount,
         uint256 fee,
-        bytes calldata data
+        bytes calldata /* data */
     ) external returns (bytes32) {
         lastFeePaid = fee;
 
         // Approve the lender to pull the principal + fee
-        token.approve(msg.sender, amount + fee);
+        TOKEN.approve(msg.sender, amount + fee);
 
         return CALLBACK_SUCCESS;
     }

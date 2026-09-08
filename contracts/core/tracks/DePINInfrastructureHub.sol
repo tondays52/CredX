@@ -14,8 +14,8 @@ import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 contract DePINInfrastructureHub is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IERC20 public immutable depinToken;
+    ICredXHub public immutable CREDX_HUB;
+    IERC20 public immutable DEPIN_TOKEN;
     
     // Delegation state: user => operator => amount
     mapping(address user => mapping(address operator => uint256 amount)) public delegations;
@@ -29,8 +29,8 @@ contract DePINInfrastructureHub is ReentrancyGuard {
     constructor(address _credXHub, address _depinToken) {
         require(_credXHub != address(0), "Zero address: credXHub");
         require(_depinToken != address(0), "Zero address: depinToken");
-        credXHub = ICredXHub(_credXHub);
-        depinToken = IERC20(_depinToken);
+        CREDX_HUB = ICredXHub(_credXHub);
+        DEPIN_TOKEN = IERC20(_depinToken);
     }
     
     // =========================================================================
@@ -46,13 +46,13 @@ contract DePINInfrastructureHub is ReentrancyGuard {
         require(operator != msg.sender, "Cannot delegate to self");
 
         // Fetch operator's profile
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(operator);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(operator);
         
         // Strict reputation check: Prime operators (Score >= 700) only
         require(creditScore >= 700, "Operator reliability too low");
 
         // Transfer funds from user to this contract
-        depinToken.safeTransferFrom(msg.sender, address(this), amount);
+        DEPIN_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
         // Update state
         delegations[msg.sender][operator] += amount;
@@ -71,19 +71,19 @@ contract DePINInfrastructureHub is ReentrancyGuard {
         require(amount > 0, "Amount must be > 0");
         
         // Fetch operator's profile
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         
         // Strict reputation check: Super-Prime operators (Score >= 750) only
         require(creditScore >= 750, "Insufficient score for uncollateralized hardware loan");
         
         // Ensure pool has enough liquidity
-        require(depinToken.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
+        require(DEPIN_TOKEN.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
 
         // Update state
         hardwareLoans[msg.sender] += amount;
 
         // Transfer the loan
-        depinToken.safeTransfer(msg.sender, amount);
+        DEPIN_TOKEN.safeTransfer(msg.sender, amount);
 
         emit HardwareLoanIssued(msg.sender, amount);
     }

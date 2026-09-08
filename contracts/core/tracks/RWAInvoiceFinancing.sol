@@ -13,8 +13,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract RWAInvoiceFinancing {
     using SafeERC20 for IERC20;
 
-    ICredXHub public immutable credXHub;
-    IERC20 public immutable paymentToken;
+    ICredXHub public immutable CREDX_HUB;
+    IERC20 public immutable PAYMENT_TOKEN;
 
     struct Invoice {
         address business;
@@ -28,15 +28,17 @@ contract RWAInvoiceFinancing {
     }
 
     uint256 public nextInvoiceId;
-    mapping(uint256 => Invoice) public invoices;
+    mapping(uint256 invoiceId => Invoice invoice) public invoices;
 
     event InvoiceCreated(uint256 indexed invoiceId, address indexed business, uint256 faceValue);
     event InvoiceFunded(uint256 indexed invoiceId, address indexed funder, uint256 fundedAmount);
     event InvoiceRepaid(uint256 indexed invoiceId, address indexed business);
 
     constructor(address _credXHub, address _paymentToken) {
-        credXHub = ICredXHub(_credXHub);
-        paymentToken = IERC20(_paymentToken);
+        require(_credXHub != address(0), "Invalid CredXHub");
+        require(_paymentToken != address(0), "Invalid PaymentToken");
+        CREDX_HUB = ICredXHub(_credXHub);
+        PAYMENT_TOKEN = IERC20(_paymentToken);
     }
 
     function tokenizeInvoice(uint256 faceValue, uint256 duration) external returns (uint256) {
@@ -65,7 +67,7 @@ contract RWAInvoiceFinancing {
         require(invoice.business != msg.sender, "Cannot fund own invoice");
 
         // Discount based on credit score
-        (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(invoice.business);
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(invoice.business);
         
         // Base funding amount is 80% of face value (20% discount/interest)
         uint256 baseFundRatio = 8000; // 80%
@@ -83,7 +85,7 @@ contract RWAInvoiceFinancing {
         invoice.fundedAmount = fundedAmount;
         invoice.isFunded = true;
 
-        paymentToken.safeTransferFrom(msg.sender, invoice.business, fundedAmount);
+        PAYMENT_TOKEN.safeTransferFrom(msg.sender, invoice.business, fundedAmount);
 
         emit InvoiceFunded(invoiceId, msg.sender, fundedAmount);
     }
@@ -96,7 +98,7 @@ contract RWAInvoiceFinancing {
         invoice.isRepaid = true;
         
         // Business repays the full face value to the funder
-        paymentToken.safeTransferFrom(msg.sender, invoice.funder, invoice.faceValue);
+        PAYMENT_TOKEN.safeTransferFrom(msg.sender, invoice.funder, invoice.faceValue);
 
         emit InvoiceRepaid(invoiceId, msg.sender);
     }

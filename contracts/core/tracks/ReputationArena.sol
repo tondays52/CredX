@@ -49,7 +49,7 @@ contract ReputationArena is ReentrancyGuard {
     //  State & Mappings
     // ═══════════════════════════════════════════════════════════════════════
 
-    ICredXHub public immutable credXHub;
+    ICredXHub public immutable CREDX_HUB;
     address public owner;
 
     uint256 public currentRoundId;
@@ -78,7 +78,7 @@ contract ReputationArena is ReentrancyGuard {
 
     constructor(address _credXHub) {
         require(_credXHub != address(0), "Zero address: credXHub");
-        credXHub = ICredXHub(_credXHub);
+        CREDX_HUB = ICredXHub(_credXHub);
         owner = msg.sender;
     }
 
