@@ -26,6 +26,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     uint256 public constant CTC_PRICE_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
     uint256 public constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
     uint256 public constant BLOCKS_PER_YEAR = 2628000; // ~365 days at 12s/block
+    uint256 public constant INTEREST_DENOMINATOR = BPS_DIVISOR * BLOCKS_PER_YEAR; // 26,280,000,000
 
     uint256 public nextLoanId = 1;
     uint256 public totalLiquidityUSD;
@@ -131,8 +132,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
 
         if (requestedUSD > maxCreditLineUSD) revert ExceedsApprovedCreditLine();
 
-        uint256 requiredCollateralUSD = (requestedUSD * collateralRatioBps) / BPS_DIVISOR;
-        uint256 requiredCollateralCTC = (requiredCollateralUSD * 10**18) / CTC_PRICE_USD;
+        uint256 requiredCollateralCTC = (requestedUSD * collateralRatioBps * 10**18) / (BPS_DIVISOR * CTC_PRICE_USD);
 
         if (collateralCTC < requiredCollateralCTC) revert InsufficientCollateral();
 
@@ -197,9 +197,9 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         if (loan.isDefaulted) revert LoanIsDefaulted();
         if (msg.sender != loan.borrower) revert OnlyBorrower();
 
-        // Calculate interest: principal * (rate / 10000) * (blocksElapsed / BLOCKS_PER_YEAR)
+        // Calculate interest: (principal * rate * blocksElapsed) / INTEREST_DENOMINATOR
         uint256 blocksElapsed = block.number - loan.borrowedAtBlock;
-        uint256 interestUSD = (loan.principalUSD * loan.interestRateBps * blocksElapsed) / (BPS_DIVISOR * BLOCKS_PER_YEAR);
+        uint256 interestUSD = (loan.principalUSD * loan.interestRateBps * blocksElapsed) / INTEREST_DENOMINATOR;
         uint256 totalDueUSD = loan.principalUSD + interestUSD;
 
         if (amountUSD < totalDueUSD) revert RepaymentAmountInsufficient();
