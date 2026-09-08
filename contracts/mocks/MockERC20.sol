@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 /**
  * @title MockERC20
@@ -17,6 +17,10 @@ contract MockERC20 {
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
+    error ZeroAddress();
+    error InsufficientBalance();
+    error InsufficientAllowance();
+
     constructor(string memory _name, string memory _symbol) {
         name = _name;
         symbol = _symbol;
@@ -24,7 +28,8 @@ contract MockERC20 {
     }
 
     function transfer(address to, uint256 amount) external returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "ERC20: insufficient balance");
+        if (to == address(0)) revert ZeroAddress();
+        if (balanceOf[msg.sender] < amount) revert InsufficientBalance();
         balanceOf[msg.sender] -= amount;
         balanceOf[to] += amount;
         emit Transfer(msg.sender, to, amount);
@@ -32,15 +37,17 @@ contract MockERC20 {
     }
 
     function approve(address spender, uint256 amount) external returns (bool) {
+        if (spender == address(0)) revert ZeroAddress();
         allowance[msg.sender][spender] = amount;
         emit Approval(msg.sender, spender, amount);
         return true;
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
-        require(balanceOf[from] >= amount, "ERC20: insufficient balance");
+        if (from == address(0) || to == address(0)) revert ZeroAddress();
+        if (balanceOf[from] < amount) revert InsufficientBalance();
         if (allowance[from][msg.sender] != type(uint256).max) {
-            require(allowance[from][msg.sender] >= amount, "ERC20: insufficient allowance");
+            if (allowance[from][msg.sender] < amount) revert InsufficientAllowance();
             allowance[from][msg.sender] -= amount;
         }
         balanceOf[from] -= amount;
@@ -54,6 +61,7 @@ contract MockERC20 {
     }
 
     function _mint(address to, uint256 amount) internal {
+        if (to == address(0)) revert ZeroAddress();
         totalSupply += amount;
         balanceOf[to] += amount;
         emit Transfer(address(0), to, amount);
