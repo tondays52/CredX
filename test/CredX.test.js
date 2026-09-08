@@ -283,6 +283,11 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
       expect(attestation.minimumScore).to.be.gte(300);
     });
 
+    it("should reject zero address in constructor", async function () {
+      const SBT = await ethers.getContractFactory("CreditAttestationSBT");
+      await expect(SBT.deploy(ethers.ZeroAddress)).to.be.revertedWithCustomError(SBT, "ZeroAddress");
+    });
+
     it("should prevent transfer of SBT (soulbound)", async function () {
       const proof = buildMockEventProof(11155111, ethers.id("sbt-notransfer"), 8888, null, null, "1000");
       await credXHub.connect(borrower).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("1000"));
@@ -290,7 +295,7 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
 
       await expect(
         sbt.connect(borrower).transferFrom(borrower.address, borrower2.address, 1)
-      ).to.be.revertedWith("SBT: Non-transferable");
+      ).to.be.revertedWithCustomError(sbt, "NonTransferable");
     });
 
     it("should verify attestation tier for external protocols", async function () {

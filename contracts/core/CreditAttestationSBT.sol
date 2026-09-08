@@ -59,15 +59,27 @@ contract CreditAttestationSBT {
     event AttestationRevoked(uint256 indexed tokenId, address indexed holder);
     event AttestationRefreshed(uint256 indexed tokenId, CreditTier newTier, uint256 newMinimumScore);
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Custom Errors (Gas Optimization & Strong Typing)
+    // ═══════════════════════════════════════════════════════════════════════
+    error ZeroAddress();
+    error OnlyOwner();
+    error AlreadyHoldsAttestation();
+    error InsufficientCreditHistory();
+    error NoAttestationFound();
+    error AlreadyRevoked();
+    error NonTransferable();
+
     // Minimal ERC-721 events for wallet compatibility
     event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+        if (msg.sender != owner) revert OnlyOwner();
         _;
     }
 
     constructor(address _credXHub) {
+        if (_credXHub == address(0)) revert ZeroAddress();
         owner = msg.sender;
         credXHub = ICredXHub(_credXHub);
     }
@@ -77,10 +89,10 @@ contract CreditAttestationSBT {
      * @dev Proves "I have CTS >= [tier threshold]" without revealing exact score.
      */
     function mintAttestation() external returns (uint256 tokenId) {
-        require(holderTokenId[msg.sender] == 0, "Already holds an attestation (refresh instead)");
+        if (holderTokenId[msg.sender] != 0) revert AlreadyHoldsAttestation();
 
         (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
-        require(creditScore >= 300, "No credit history to attest");
+        if (creditScore < 300) revert InsufficientCreditHistory();
 
         CreditTier tier = _scoreToCreditTier(creditScore);
         uint256 minimumScore = _tierToMinimumScore(tier);
@@ -112,7 +124,7 @@ contract CreditAttestationSBT {
      */
     function refreshAttestation() external {
         uint256 tokenId = holderTokenId[msg.sender];
-        require(tokenId != 0, "No attestation to refresh");
+        if (tokenId == 0) revert NoAttestationFound();
 
         (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(msg.sender);
         CreditTier tier = _scoreToCreditTier(creditScore);
@@ -135,8 +147,8 @@ contract CreditAttestationSBT {
      */
     function revokeAttestation(address holder) external onlyOwner {
         uint256 tokenId = holderTokenId[holder];
-        require(tokenId != 0, "No attestation found");
-        require(attestations[tokenId].isValid, "Already revoked");
+        if (tokenId == 0) revert NoAttestationFound();
+        if (!attestations[tokenId].isValid) revert AlreadyRevoked();
 
         attestations[tokenId].isValid = false;
         emit AttestationRevoked(tokenId, holder);
@@ -162,7 +174,7 @@ contract CreditAttestationSBT {
      */
     function getAttestation(address holder) external view returns (Attestation memory) {
         uint256 tokenId = holderTokenId[holder];
-        require(tokenId != 0, "No attestation found");
+        if (tokenId == 0) revert NoAttestationFound();
         return attestations[tokenId];
     }
 
@@ -171,15 +183,15 @@ contract CreditAttestationSBT {
     // ═══════════════════════════════════════════════════════════════════════
 
     function transferFrom(address, address, uint256) external pure {
-        revert("SBT: Non-transferable");
+        revert NonTransferable();
     }
 
     function safeTransferFrom(address, address, uint256) external pure {
-        revert("SBT: Non-transferable");
+        revert NonTransferable();
     }
 
     function approve(address, uint256) external pure {
-        revert("SBT: Non-transferable");
+        revert NonTransferable();
     }
 
     // ═══════════════════════════════════════════════════════════════════════
