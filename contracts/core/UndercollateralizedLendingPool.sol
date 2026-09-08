@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
-import {ILendingPool} from "../interfaces/ILendingPool.sol";
+import {ILendingPool, LoanPosition} from "../interfaces/ILendingPool.sol";
 import {ICredXHub} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";
 import {MockERC20} from "../mocks/MockERC20.sol";

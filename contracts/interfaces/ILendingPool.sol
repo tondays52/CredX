@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
+struct LoanPosition {
+    uint256 loanId;
+    address borrower;
+    uint256 principalUSD;
+    uint256 collateralCTC;
+    uint256 borrowedAtTimestamp;
+    uint256 dueTimestamp;
+    uint256 interestRateBps; // Annual percentage rate in basis points (e.g. 500 = 5%)
+    bool isRepaid;
+    bool isDefaulted;
+}
+
 interface ILendingPool {
-    struct LoanPosition {
-        uint256 loanId;
-        address borrower;
-        uint256 principalUSD;
-        uint256 collateralCTC;
-        uint256 borrowedAtTimestamp;
-        uint256 dueTimestamp;
-        uint256 interestRateBps; // Annual percentage rate in basis points (e.g. 500 = 5%)
-        bool isRepaid;
-        bool isDefaulted;
-    }
 
     function depositLiquidity(uint256 amountUSD) external;
     function withdrawLiquidity(uint256 amountUSD) external;
