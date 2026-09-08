@@ -5,7 +5,7 @@ const path = require("path");
 
 async function main() {
   console.log("==================================================");
-  console.log(`   🚀 Deploying CredX Protocol to [${network.name}]`);
+  console.log(`   🚀 Deploying CredX Full Multi-Track Protocol to [${network.name}]`);
   console.log("==================================================");
 
   const [deployer] = await ethers.getSigners();
@@ -17,17 +17,11 @@ async function main() {
   console.log("Deployer account:", deployer.address);
   console.log("Account balance:", ethers.formatEther(balanceWei), "native tokens");
 
-  if (balanceWei === 0n && network.name !== "hardhat" && network.name !== "localhost") {
-    console.warn("\n⚠️  WARNING: Deployer account has 0 balance! Transactions will fail without gas funds.");
-    console.warn("   Please fund your account with testnet CTC tokens before deploying.\n");
-  }
-
   // 1. Resolve Attestation Verifier (Mock vs Native Creditcoin Precompile 0x0FD2)
   const isCreditcoinNetwork = network.name.toLowerCase().includes("creditcoin");
   let oracleAddress;
 
   if (isCreditcoinNetwork && !process.env.FORCE_MOCK_ORACLE) {
-    // Creditcoin L1 native consensus precompile
     const rawAddress = process.env.ATTESTCOIN_PRECOMPILE || "0x0000000000000000000000000000000000000FD2";
     oracleAddress = ethers.getAddress(rawAddress);
     console.log(`\n1. Using Native Creditcoin Attestcoin Precompile at: ${oracleAddress}`);
@@ -56,18 +50,38 @@ async function main() {
   const credXHubAddress = await credXHub.getAddress();
   console.log("   ✅ CredXHub deployed at:", credXHubAddress);
 
-  // Link CredXHub in scoreEngine
   const setHubTx = await scoreEngine.setCredXHub(credXHubAddress);
   await setHubTx.wait();
   console.log("   🔗 Linked CredXHub to CreditScoreEngine");
 
-  // 4. Deploy Mock cUSD (Liquidity Stablecoin)
-  console.log("\n4. Deploying MockERC20 (cUSD)...");
+  // 4. Deploy Mock Tokens & Oracles
+  console.log("\n4. Deploying Protocol Liquidity, Governance Tokens & Price Oracles...");
   const MockERC20 = await ethers.getContractFactory("MockERC20");
   const cUSD = await MockERC20.deploy("Creditcoin USD", "cUSD");
   await cUSD.waitForDeployment();
   const cUSDAddress = await cUSD.getAddress();
-  console.log("   ✅ MockERC20 (cUSD) deployed at:", cUSDAddress);
+
+  const MockDePINToken = await ethers.getContractFactory("MockDePINToken");
+  const depinToken = await MockDePINToken.deploy();
+  await depinToken.waitForDeployment();
+  const depinTokenAddress = await depinToken.getAddress();
+
+  const MockGameToken = await ethers.getContractFactory("MockGameToken");
+  const gameToken = await MockGameToken.deploy();
+  await gameToken.waitForDeployment();
+  const gameTokenAddress = await gameToken.getAddress();
+
+  const MockGameItem = await ethers.getContractFactory("MockGameItem");
+  const gameNFT = await MockGameItem.deploy();
+  await gameNFT.waitForDeployment();
+  const gameNFTAddress = await gameNFT.getAddress();
+
+  const MockPriceOracle = await ethers.getContractFactory("MockPriceOracle");
+  const priceOracle = await MockPriceOracle.deploy(ethers.parseUnits("1.05", 8), 8);
+  await priceOracle.waitForDeployment();
+  const priceOracleAddress = await priceOracle.getAddress();
+
+  console.log("   ✅ Liquidity Tokens (cUSD, DePIN, GameToken, GameNFT) & PriceOracle deployed.");
 
   // 5. Deploy UndercollateralizedLendingPool
   console.log("\n5. Deploying UndercollateralizedLendingPool...");
@@ -77,10 +91,8 @@ async function main() {
   const lendingPoolAddress = await lendingPool.getAddress();
   console.log("   ✅ UndercollateralizedLendingPool deployed at:", lendingPoolAddress);
 
-  // Link lending pool in CredXHub
   const setPoolTx = await credXHub.setLendingPool(lendingPoolAddress);
   await setPoolTx.wait();
-  console.log("   🔗 Linked LendingPool to CredXHub");
 
   // 6. Deploy CreditAttestationSBT (Soulbound Token)
   console.log("\n6. Deploying CreditAttestationSBT (Soulbound Credit Credentials)...");
@@ -90,18 +102,61 @@ async function main() {
   const sbtAddress = await sbt.getAddress();
   console.log("   ✅ CreditAttestationSBT deployed at:", sbtAddress);
 
-  // 7. Seed Lending Pool with Initial Liquidity ($1,000,000 cUSD)
-  console.log("\n7. Seeding initial lending pool liquidity ($1,000,000 cUSD)...");
-  try {
-    const seedAmount = ethers.parseEther("1000000");
-    const approveTx = await cUSD.approve(lendingPoolAddress, seedAmount);
-    await approveTx.wait();
-    const depositTx = await lendingPool.depositLiquidity(seedAmount);
-    await depositTx.wait();
-    console.log("   💧 Seeded $1,000,000 cUSD into UndercollateralizedLendingPool!");
-  } catch (err) {
-    console.warn("   ⚠️ Notice: Auto-seed skipped or completed with existing funds.");
-  }
+  // 7. Deploy Track Ecosystem Hubs
+  console.log("\n7. Deploying Multi-Track Ecosystem Hubs...");
+
+  // Track 1: DeFi
+  const ReputationAMM = await ethers.getContractFactory("ReputationAMM");
+  const amm = await ReputationAMM.deploy(credXHubAddress, cUSDAddress, depinTokenAddress);
+  await amm.waitForDeployment();
+  const ammAddress = await amm.getAddress();
+
+  const ReputationFlashLoan = await ethers.getContractFactory("ReputationFlashLoan");
+  const flashLoan = await ReputationFlashLoan.deploy(credXHubAddress, cUSDAddress);
+  await flashLoan.waitForDeployment();
+  const flashLoanAddress = await flashLoan.getAddress();
+
+  const ReputationYieldVault = await ethers.getContractFactory("ReputationYieldVault");
+  const yieldVault = await ReputationYieldVault.deploy(credXHubAddress, cUSDAddress, depinTokenAddress);
+  await yieldVault.waitForDeployment();
+  const yieldVaultAddress = await yieldVault.getAddress();
+
+  // Track 2: RWA
+  const RWATreasuryYieldFund = await ethers.getContractFactory("RWATreasuryYieldFund");
+  const rwaFund = await RWATreasuryYieldFund.deploy(credXHubAddress, priceOracleAddress, cUSDAddress);
+  await rwaFund.waitForDeployment();
+  const rwaFundAddress = await rwaFund.getAddress();
+
+  // Track 3: Gaming
+  const GamingEcosystemHub = await ethers.getContractFactory("GamingEcosystemHub");
+  const gamingHub = await GamingEcosystemHub.deploy(credXHubAddress, gameTokenAddress, gameNFTAddress);
+  await gamingHub.waitForDeployment();
+  const gamingHubAddress = await gamingHub.getAddress();
+
+  // Track 4: DePIN
+  const DePINInfrastructureHub = await ethers.getContractFactory("DePINInfrastructureHub");
+  const depinHub = await DePINInfrastructureHub.deploy(credXHubAddress, depinTokenAddress);
+  await depinHub.waitForDeployment();
+  const depinHubAddress = await depinHub.getAddress();
+
+  // Track 5: AI
+  const AutonomousAIHub = await ethers.getContractFactory("AutonomousAIHub");
+  const aiHub = await AutonomousAIHub.deploy(credXHubAddress, oracleAddress, cUSDAddress);
+  await aiHub.waitForDeployment();
+  const aiHubAddress = await aiHub.getAddress();
+
+  // Reputation Arena (PredictBay-Style)
+  const ReputationArena = await ethers.getContractFactory("ReputationArena");
+  const arena = await ReputationArena.deploy(credXHubAddress);
+  await arena.waitForDeployment();
+  const arenaAddress = await arena.getAddress();
+
+  console.log("   ✅ Track 1: DeFi Hubs (AMM, FlashLoan, YieldVault) deployed.");
+  console.log("   ✅ Track 2: RWA Treasury Yield Fund (tbUSD) deployed.");
+  console.log("   ✅ Track 3: Gaming Ecosystem Hub deployed.");
+  console.log("   ✅ Track 4: DePIN Infrastructure Hub deployed.");
+  console.log("   ✅ Track 5: Autonomous AI Hub deployed.");
+  console.log("   ✅ PredictBay-Style Reputation Arena deployed.");
 
   // Save deployment artifact
   const netInfo = await ethers.provider.getNetwork();
@@ -116,6 +171,14 @@ async function main() {
       cUSD: cUSDAddress,
       UndercollateralizedLendingPool: lendingPoolAddress,
       CreditAttestationSBT: sbtAddress,
+      ReputationAMM: ammAddress,
+      ReputationFlashLoan: flashLoanAddress,
+      ReputationYieldVault: yieldVaultAddress,
+      RWATreasuryYieldFund: rwaFundAddress,
+      GamingEcosystemHub: gamingHubAddress,
+      DePINInfrastructureHub: depinHubAddress,
+      AutonomousAIHub: aiHubAddress,
+      ReputationArena: arenaAddress
     }
   };
 
@@ -125,15 +188,14 @@ async function main() {
     if (fs.existsSync(frontendDir)) {
       fs.writeFileSync(path.join(frontendDir, "contracts.json"), JSON.stringify(deploymentData, null, 2));
     }
-    console.log("   💾 Saved deployment addresses to deployments.json and frontend/contracts.json");
+    console.log("\n   💾 Saved complete deployment addresses to deployments.json and frontend/contracts.json");
   } catch (fsErr) {
     console.warn("   ⚠️ Could not write deployments.json:", fsErr.message);
   }
 
   console.log("\n==================================================");
-  console.log("   🎉 CredX Protocol Successfully Deployed!");
+  console.log("   🎉 CredX Multi-Track Protocol Ready & Live!");
   console.log("==================================================");
-  console.log(JSON.stringify(deploymentData.contracts, null, 2));
 }
 
 main().catch((error) => {
