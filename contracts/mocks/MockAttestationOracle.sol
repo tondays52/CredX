@@ -18,12 +18,14 @@ contract MockAttestationOracle is IAttestationVerifier {
     bool public alwaysPass = true;
 
     event ProofAttested(uint256 indexed chainId, bytes32 indexed txHash, address emitter);
+    event AlwaysPassUpdated(bool previousStatus, bool newStatus);
 
     constructor() {
         owner = msg.sender;
     }
 
     function setAlwaysPass(bool _pass) external {
+        emit AlwaysPassUpdated(alwaysPass, _pass);
         alwaysPass = _pass;
     }
 
@@ -32,18 +34,18 @@ contract MockAttestationOracle is IAttestationVerifier {
         emit ProofAttested(sourceChainId, txHash, msg.sender);
     }
 
-    function verifyEventProof(EventProof calldata proof) external view override returns (AttestationResult memory result) {
+    function verifyEventProof(IAttestationVerifier.EventProof calldata proof) external view override returns (IAttestationVerifier.AttestationResult memory result) {
         if (alwaysPass || attestedTransactions[proof.sourceChainId][proof.txHash]) {
-            return AttestationResult({
+            return IAttestationVerifier.AttestationResult({
                 isValid: true,
                 emitterAddress: address(0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48), // e.g. USDC / Aave Pool
                 eventSignature: keccak256("Repay(address,address,address,uint256,bool)"),
                 eventData: proof.rlpEncodedReceipt,
-                sourceBlockTime: block.timestamp > 100 ? block.timestamp - 60 : block.timestamp
+                sourceBlockTime: proof.blockNumber > 0 ? 1_700_000_000 + proof.blockNumber : 1_700_000_000
             });
         }
 
-        return AttestationResult({
+        return IAttestationVerifier.AttestationResult({
             isValid: false,
             emitterAddress: address(0),
             eventSignature: bytes32(0),
