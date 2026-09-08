@@ -117,6 +117,8 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         uint256 requestedUSD,
         uint256 collateralCTC
     ) internal view returns (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps) {
+        if (borrower == address(0)) revert ZeroAddress();
+
         (
             uint256 creditScore,
             ,
