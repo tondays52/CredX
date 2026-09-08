@@ -14,20 +14,6 @@ interface ILendingPool {
         bool isDefaulted;
     }
 
-    event LiquidityDeposited(address indexed lender, uint256 amountUSD);
-    event LiquidityWithdrawn(address indexed lender, uint256 amountUSD);
-    event LoanOriginated(
-        uint256 indexed loanId,
-        address indexed borrower,
-        uint256 principalUSD,
-        uint256 collateralCTC,
-        uint256 collateralRatioBps,
-        uint256 interestRateBps,
-        uint256 dueTimestamp
-    );
-    event LoanRepaid(uint256 indexed loanId, address indexed borrower, uint256 totalRepaidUSD);
-    event LoanDefaulted(uint256 indexed loanId, address indexed borrower, uint256 collateralLiquidatedCTC);
-
     function depositLiquidity(uint256 amountUSD) external;
     function withdrawLiquidity(uint256 amountUSD) external;
     function borrow(uint256 requestedUSD) external payable returns (uint256 loanId);

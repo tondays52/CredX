@@ -27,6 +27,23 @@ contract UndercollateralizedLendingPool is ILendingPool {
     mapping(uint256 loanId => LoanPosition position) public loans;
     mapping(address borrower => uint256[] ids) public userLoanIds;
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Events
+    // ═══════════════════════════════════════════════════════════════════════
+    event LiquidityDeposited(address indexed lender, uint256 amountUSD);
+    event LiquidityWithdrawn(address indexed lender, uint256 amountUSD);
+    event LoanOriginated(
+        uint256 indexed loanId,
+        address indexed borrower,
+        uint256 principalUSD,
+        uint256 collateralCTC,
+        uint256 collateralRatioBps,
+        uint256 interestRateBps,
+        uint256 dueTimestamp
+    );
+    event LoanRepaid(uint256 indexed loanId, address indexed borrower, uint256 totalRepaidUSD);
+    event LoanDefaulted(uint256 indexed loanId, address indexed borrower, uint256 collateralLiquidatedCTC);
+
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
         _;
@@ -160,6 +177,23 @@ contract UndercollateralizedLendingPool is ILendingPool {
         require(sent, "Collateral return failed");
 
         emit LoanRepaid(loanId, msg.sender, totalDueUSD);
+    }
+
+    /**
+     * @notice Liquidates an overdue loan that was not repaid before dueTimestamp.
+     * @param loanId The ID of the loan to liquidate.
+     */
+    function liquidateDefaultedLoan(uint256 loanId) external {
+        LoanPosition storage loan = loans[loanId];
+        require(!loan.isRepaid, "Loan already repaid");
+        require(!loan.isDefaulted, "Loan is defaulted");
+        require(block.timestamp > loan.dueTimestamp, "Loan not overdue");
+
+        loan.isDefaulted = true;
+        uint256 liquidatedCollateral = loan.collateralCTC;
+        loan.collateralCTC = 0;
+
+        emit LoanDefaulted(loanId, loan.borrower, liquidatedCollateral);
     }
 
     /**
