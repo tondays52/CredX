@@ -27,6 +27,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     uint256 public constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
     uint256 public constant BLOCKS_PER_YEAR = 2628000; // ~365 days at 12s/block
     uint256 public constant INTEREST_DENOMINATOR = BPS_DIVISOR * BLOCKS_PER_YEAR; // 26,280,000,000
+    uint256 public constant COLLATERAL_DIVISOR = BPS_DIVISOR * CTC_PRICE_USD; // 20,000 * 10**18
 
     uint256 public nextLoanId = 1;
     uint256 public totalLiquidityUSD;
@@ -132,7 +133,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
 
         if (requestedUSD > maxCreditLineUSD) revert ExceedsApprovedCreditLine();
 
-        uint256 requiredCollateralCTC = (requestedUSD * collateralRatioBps * 10**18) / (BPS_DIVISOR * CTC_PRICE_USD);
+        uint256 requiredCollateralCTC = (requestedUSD * collateralRatioBps * 10**18) / COLLATERAL_DIVISOR;
 
         if (collateralCTC < requiredCollateralCTC) revert InsufficientCollateral();
 
