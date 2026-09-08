@@ -8,7 +8,7 @@ contract MockGameItem is ERC721, Ownable {
     uint256 private _nextTokenId;
 
     // tokenId => rarity (0=Common, 1=Rare, 2=Legendary)
-    mapping(uint256 => uint256) public itemRarity;
+    mapping(uint256 tokenId => uint256 rarity) public itemRarity;
 
     constructor() ERC721("Gaming Loot", "LOOT") Ownable(msg.sender) {}
 
@@ -16,6 +16,7 @@ contract MockGameItem is ERC721, Ownable {
         address to,
         uint256 rarity
     ) external onlyOwner returns (uint256) {
+        require(to != address(0), "Zero address: to");
         uint256 tokenId = _nextTokenId++;
         itemRarity[tokenId] = rarity;
         _mint(to, tokenId);

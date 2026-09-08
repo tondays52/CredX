@@ -21,7 +21,7 @@ contract ReputationAMM is ReentrancyGuard {
     uint256 public reserve0;
     uint256 public reserve1;
     uint256 public totalSupply;
-    mapping(address => uint256) public balanceOf;
+    mapping(address user => uint256 balance) public balanceOf;
 
     // Fees in basis points (10000 = 100%)
     uint256 public constant STANDARD_FEE_BPS = 30; // 0.30%
@@ -40,17 +40,22 @@ contract ReputationAMM is ReentrancyGuard {
     );
 
     constructor(address _credXHub, address _token0, address _token1) {
+        require(_credXHub != address(0), "Zero address: credXHub");
+        require(_token0 != address(0), "Zero address: token0");
+        require(_token1 != address(0), "Zero address: token1");
         credXHub = ICredXHub(_credXHub);
         token0 = IERC20(_token0);
         token1 = IERC20(_token1);
     }
 
     function _mint(address to, uint256 amount) internal {
+        require(to != address(0), "Zero address: to");
         balanceOf[to] += amount;
         totalSupply += amount;
     }
 
     function _burn(address from, uint256 amount) internal {
+        require(from != address(0), "Zero address: from");
         balanceOf[from] -= amount;
         totalSupply -= amount;
     }
@@ -156,6 +161,8 @@ contract ReputationAMM is ReentrancyGuard {
     // Helper for frontend to calculate expected output
     function getAmountOut(uint256 amountIn, address tokenIn, address user) external view returns (uint256 amountOut) {
         require(amountIn > 0, "Insufficient input amount");
+        require(tokenIn != address(0), "Zero address: tokenIn");
+        require(user != address(0), "Zero address: user");
         require(tokenIn == address(token0) || tokenIn == address(token1), "Invalid token");
 
         (uint256 creditScore, , , , , ) = credXHub.getBorrowerProfile(user);

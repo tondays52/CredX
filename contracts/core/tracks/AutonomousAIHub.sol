@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IAttestationVerifier} from "../../interfaces/IAttestationVerifier.sol";
@@ -14,6 +15,7 @@ import {IAttestationVerifier} from "../../interfaces/IAttestationVerifier.sol";
  *         WITHOUT centralized oracle operators.
  */
 contract AutonomousAIHub is ReentrancyGuard {
+    using SafeERC20 for IERC20;
 
     // ═══════════════════════════════════════════════════════════════════════
     //  State & Interfaces
@@ -215,7 +217,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(settlementToken.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
 
         profile.activeLoanAmount = amount;
-        require(settlementToken.transfer(msg.sender, amount), "Transfer failed");
+        settlementToken.safeTransfer(msg.sender, amount);
 
         emit AgentLoanDispatched(msg.sender, amount);
     }
@@ -229,7 +231,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(profile.activeLoanAmount > 0, "No active loan");
         require(amount >= profile.activeLoanAmount, "Must repay full loan balance");
 
-        require(settlementToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        settlementToken.safeTransferFrom(msg.sender, address(this), amount);
 
         profile.activeLoanAmount = 0;
         profile.totalLoansRepaid += amount;
@@ -260,7 +262,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         require(amount > 0, "Amount must be > 0");
         require(computeTasks[taskId].requester == address(0), "Task ID already exists");
 
-        require(settlementToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        settlementToken.safeTransferFrom(msg.sender, address(this), amount);
 
         computeTasks[taskId] = ComputeTask({
             taskId: taskId,
@@ -292,7 +294,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         processedProofs[proof.sourceChainId][proof.txHash] = true;
         task.isSettled = true;
 
-        require(settlementToken.transfer(task.gpuProvider, task.escrowAmount), "Transfer failed");
+        settlementToken.safeTransfer(task.gpuProvider, task.escrowAmount);
 
         emit ComputeTaskSettled(taskId, task.gpuProvider, task.escrowAmount, proof.txHash);
     }

@@ -18,14 +18,16 @@ contract DePINDelegationPool {
 
     uint256 public constant MIN_SCORE_FOR_DELEGATION = 600;
 
-    mapping(address => uint256) public userDeposits;
-    mapping(address => uint256) public nodeDelegations;
+    mapping(address user => uint256 amount) public userDeposits;
+    mapping(address node => uint256 amount) public nodeDelegations;
 
     event Deposited(address indexed user, uint256 amount);
     event Delegated(address indexed user, address indexed node, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
 
     constructor(address _credXHub, address _delegationToken) {
+        require(_credXHub != address(0), "Zero address: credXHub");
+        require(_delegationToken != address(0), "Zero address: delegationToken");
         credXHub = ICredXHub(_credXHub);
         delegationToken = IERC20(_delegationToken);
     }
@@ -38,6 +40,7 @@ contract DePINDelegationPool {
     }
 
     function delegateToNode(address node, uint256 amount) external {
+        require(node != address(0), "Zero address: node");
         require(userDeposits[msg.sender] >= amount, "Insufficient deposit");
         require(amount > 0, "Must delegate > 0");
 

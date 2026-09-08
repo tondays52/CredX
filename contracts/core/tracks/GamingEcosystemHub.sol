@@ -28,7 +28,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
     uint256 public constant MARKETPLACE_FEE_PERCENT = 2; // 2%
 
     // State
-    mapping(address => uint256) public lastGatherTime;
+    mapping(address player => uint256 timestamp) public lastGatherTime;
     
     // Marketplace state
     struct Listing {
@@ -37,7 +37,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         bool active;
     }
     // tokenId => Listing
-    mapping(uint256 => Listing) public listings;
+    mapping(uint256 tokenId => Listing listing) public listings;
 
     // Events
     event ResourcesGathered(address indexed player, uint256 amount);
@@ -51,6 +51,9 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         address _gameToken,
         address _gameItem
     ) Ownable(msg.sender) {
+        require(_credXHub != address(0), "Zero address: credXHub");
+        require(_gameToken != address(0), "Zero address: gameToken");
+        require(_gameItem != address(0), "Zero address: gameItem");
         credXHub = ICredXHub(_credXHub);
         gameToken = IMockGameToken(_gameToken);
         gameItem = IMockGameItem(_gameItem);

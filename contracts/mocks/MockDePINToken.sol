@@ -10,6 +10,7 @@ contract MockDePINToken is ERC20, Ownable {
     }
 
     function mint(address to, uint256 amount) external onlyOwner {
+        require(to != address(0), "Zero address: to");
         _mint(to, amount);
     }
 }

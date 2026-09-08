@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 
@@ -11,19 +12,23 @@ import {ICredXHub} from "../../interfaces/ICredXHub.sol";
  *         and Undercollateralized Hardware Financing (settlement) based on cross-chain reputation.
  */
 contract DePINInfrastructureHub is ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
     ICredXHub public immutable credXHub;
     IERC20 public immutable depinToken;
     
     // Delegation state: user => operator => amount
-    mapping(address => mapping(address => uint256)) public delegations;
+    mapping(address user => mapping(address operator => uint256 amount)) public delegations;
     
     // Financing state: operator => amount borrowed
-    mapping(address => uint256) public hardwareLoans;
+    mapping(address operator => uint256 amount) public hardwareLoans;
     
     event StakeDelegated(address indexed user, address indexed operator, uint256 amount);
     event HardwareLoanIssued(address indexed operator, uint256 amount);
 
     constructor(address _credXHub, address _depinToken) {
+        require(_credXHub != address(0), "Zero address: credXHub");
+        require(_depinToken != address(0), "Zero address: depinToken");
         credXHub = ICredXHub(_credXHub);
         depinToken = IERC20(_depinToken);
     }
@@ -36,6 +41,7 @@ contract DePINInfrastructureHub is ReentrancyGuard {
      * @notice Delegates capital to a DePIN node operator, strictly enforcing their reliability.
      */
     function delegateStake(address operator, uint256 amount) external nonReentrant {
+        require(operator != address(0), "Zero address: operator");
         require(amount > 0, "Amount must be > 0");
         require(operator != msg.sender, "Cannot delegate to self");
 
@@ -46,7 +52,7 @@ contract DePINInfrastructureHub is ReentrancyGuard {
         require(creditScore >= 700, "Operator reliability too low");
 
         // Transfer funds from user to this contract
-        require(depinToken.transferFrom(msg.sender, address(this), amount), "Transfer failed");
+        depinToken.safeTransferFrom(msg.sender, address(this), amount);
 
         // Update state
         delegations[msg.sender][operator] += amount;
@@ -77,7 +83,7 @@ contract DePINInfrastructureHub is ReentrancyGuard {
         hardwareLoans[msg.sender] += amount;
 
         // Transfer the loan
-        require(depinToken.transfer(msg.sender, amount), "Transfer failed");
+        depinToken.safeTransfer(msg.sender, amount);
 
         emit HardwareLoanIssued(msg.sender, amount);
     }
