@@ -39,8 +39,7 @@ contract CreditAttestationSBT {
         address holder;
         CreditTier tier;
         uint256 minimumScore;     // The minimum score threshold proved
-        uint256 attestedAt;       // Block timestamp when minted
-        uint256 attestedBlock;    // Block number when minted
+        uint256 attestedBlock;    // Block number when minted (canonical, immune to miner manipulation)
         bytes32 commitmentHash;   // Hash commitment of the exact score (privacy-preserving)
         bool isValid;             // Can be revoked if score drops
     }
@@ -107,7 +106,6 @@ contract CreditAttestationSBT {
             holder: msg.sender,
             tier: tier,
             minimumScore: minimumScore,
-            attestedAt: block.timestamp,
             attestedBlock: block.number,
             commitmentHash: commitmentHash,
             isValid: true
@@ -134,7 +132,6 @@ contract CreditAttestationSBT {
         Attestation storage att = attestations[tokenId];
         att.tier = tier;
         att.minimumScore = minimumScore;
-        att.attestedAt = block.timestamp;
         att.attestedBlock = block.number;
         // Deterministic commitment hash bound to block.number and tokenId (immune to miner timestamp drift)
         att.commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.number, tokenId));
