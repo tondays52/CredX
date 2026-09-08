@@ -17,7 +17,6 @@ contract UndercollateralizedLendingPool is ILendingPool {
     CreditScoreEngine public scoreEngine;
     address public owner;
 
-    uint256 public constant BASE_INTEREST_RATE_BPS = 800; // 8.00% base annual interest rate
     uint256 public constant BPS_DIVISOR = 10000;
     uint256 public constant CTC_PRICE_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
 
@@ -96,9 +95,8 @@ contract UndercollateralizedLendingPool is ILendingPool {
 
         require(msg.value >= requiredCollateralCTC, "Insufficient CTC collateral sent");
 
-        // 3. Compute Interest Rate with Attestcoin Reputation Discount
-        uint256 discountBps = scoreEngine.getInterestRateDiscountBps(creditScore);
-        uint256 finalInterestRateBps = BASE_INTEREST_RATE_BPS > discountBps ? BASE_INTEREST_RATE_BPS - discountBps : 200;
+        // 3. Compute Interest Rate — Direct FICO-style APR based on credit score
+        uint256 finalInterestRateBps = scoreEngine.getInterestRate(creditScore);
 
         loanId = nextLoanId++;
         uint256 dueDate = block.timestamp + 30 days; // 30-day loan duration

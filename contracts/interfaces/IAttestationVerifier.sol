@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+library AttestcoinConstants {
+    /// @dev Canonical Creditcoin Attestcoin / BlockProver precompile address on Creditcoin L1 EVM
+    address public constant PRECOMPILE_ADDRESS = address(0x0FD2);
+}
+
 /**
  * @title IAttestationVerifier
  * @notice Interface for Creditcoin's Attestcoin Protocol / Universal Smart Contracts (USC) Proof Verifier.
@@ -8,6 +13,7 @@ pragma solidity ^0.8.20;
  *      validate Merkle and continuity proofs of source-chain transactions (e.g. Ethereum Mainnet, Sepolia).
  */
 interface IAttestationVerifier {
+
     struct EventProof {
         uint256 sourceChainId;    // e.g. 1 for Ethereum Mainnet, 11155111 for Sepolia
         bytes32 blockHash;        // Source chain block hash containing the transaction

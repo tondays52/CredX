@@ -57,8 +57,16 @@ async function main() {
   await credXHub.setLendingPool(lendingPoolAddress);
   console.log("   🔗 Linked LendingPool to CredXHub");
 
-  // Seed Lending Pool with Initial Liquidity ($1,000,000 cUSD)
-  console.log("\n6. Seeding initial lending pool liquidity ($1,000,000 cUSD)...");
+  // 6. Deploy CreditAttestationSBT (Soulbound Token)
+  console.log("\n6. Deploying CreditAttestationSBT (Soulbound Credit Credentials)...");
+  const CreditAttestationSBT = await ethers.getContractFactory("CreditAttestationSBT");
+  const sbt = await CreditAttestationSBT.deploy(credXHubAddress);
+  await sbt.waitForDeployment();
+  const sbtAddress = await sbt.getAddress();
+  console.log("   ✅ CreditAttestationSBT deployed at:", sbtAddress);
+
+  // 7. Seed Lending Pool with Initial Liquidity ($1,000,000 cUSD)
+  console.log("\n7. Seeding initial lending pool liquidity ($1,000,000 cUSD)...");
   const seedAmount = ethers.parseEther("1000000");
   await cUSD.approve(lendingPoolAddress, seedAmount);
   await lendingPool.depositLiquidity(seedAmount);
@@ -73,6 +81,7 @@ async function main() {
     CredXHub: credXHubAddress,
     cUSD: cUSDAddress,
     UndercollateralizedLendingPool: lendingPoolAddress,
+    CreditAttestationSBT: sbtAddress,
   }, null, 2));
 }
 

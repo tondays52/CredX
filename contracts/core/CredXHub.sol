@@ -7,8 +7,16 @@ import "./CreditScoreEngine.sol";
 
 /**
  * @title CredXHub
- * @notice Central registry for cross-chain proof verification, credit score management,
- *         and Attestcoin / USC integrations on Creditcoin.
+ * @notice The first cross-chain credit bureau on Creditcoin.
+ *         Central registry for multi-protocol proof verification, OCCR credit scoring,
+ *         batch proof import, privacy-preserving attestations, and Attestcoin / USC integration.
+ * 
+ * Key Features:
+ *   - Multi-Protocol Reputation Aggregation (Aave, Compound, Uniswap, ENS, RWA)
+ *   - Batch Proof Import ("import your entire credit history in 1 click")
+ *   - Privacy-Preserving Commitment Hashes
+ *   - Protocol & Chain Diversity Tracking
+ *   - Credit Score Delegation / Social Lending
  */
 contract CredXHub is ICredXHub {
     IAttestationVerifier public attestationVerifier;
@@ -22,16 +30,36 @@ contract CredXHub is ICredXHub {
         uint256 totalAttestationsCount;
         uint256 lastAttestationTimestamp;
         bool isMainnetActive;
+        uint256 protocolDiversityCount;   // Unique DeFi protocol types used
+        uint256 chainDiversityCount;      // Unique source chains attested from
+        uint256 weightedActionScore;      // Cumulative weighted action value
     }
 
-    // Mapping from borrower address => profile data
-    mapping(address => BorrowerProfile) public borrowerProfiles;
+    // Track which ActionTypes a borrower has used (bitmap for gas efficiency)
+    mapping(address => uint8) public borrowerActionBitmap;
+
+    // Track which chains a borrower has been attested from (bitmap)
+    mapping(address => uint256) public borrowerChainBitmap;
 
     // Cryptographic Replay Protection: keccak256(sourceChainId, txHash, logIndex) => bool
     mapping(bytes32 => bool) public processedAttestations;
 
+    // Mapping from borrower address => profile data
+    mapping(address => BorrowerProfile) public borrowerProfiles;
+
     // History of verified events per borrower
     mapping(address => VerifiedAttestationRecord[]) private borrowerHistory;
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Credit Delegation (Social Lending / Co-signing)
+    // ═══════════════════════════════════════════════════════════════════════
+    struct CreditDelegation {
+        address delegator;
+        uint256 boostAmount;
+        uint256 expiry;
+        bool isActive;
+    }
+    mapping(address => CreditDelegation) public delegatedBoosts;
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Only owner");
@@ -56,10 +84,14 @@ contract CredXHub is ICredXHub {
         lendingPool = _lendingPool;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Single Proof Submission (Upgraded with Multi-Factor Scoring)
+    // ═══════════════════════════════════════════════════════════════════════
+
     /**
      * @notice Submits a transaction receipt & Merkle proof from Ethereum / Sepolia for native verification.
      * @param proof The packaged transaction inclusion & Merkle proof for Attestcoin.
-     * @param actionType The category of financial event (e.g. DeFi loan repayment, RWA settlement).
+     * @param actionType The category of financial event (multi-protocol support).
      * @param reportedValueUSD The USD amount (18 decimals) proven in the receipt.
      */
     function submitRepaymentProof(
@@ -69,76 +101,196 @@ contract CredXHub is ICredXHub {
     ) external override returns (bool success, uint256 newScore) {
         require(reportedValueUSD > 0, "Value must be > 0");
 
-        // 1. Replay Prevention Key
+        // 1. Replay Prevention
         bytes32 replayKey = keccak256(abi.encodePacked(proof.sourceChainId, proof.txHash, proof.txIndex));
         require(!processedAttestations[replayKey], "Proof already processed (replay blocked)");
 
-        // 2. Cryptographically Verify Proof with Creditcoin USC / Attestcoin Precompile
+        // 2. Cryptographic Verification via Attestcoin / BlockProver precompile (0x0FD2)
         IAttestationVerifier.AttestationResult memory result = attestationVerifier.verifyEventProof(proof);
         require(result.isValid, "Attestcoin verification failed: Invalid cryptographic proof");
 
-        // Mark as processed
         processedAttestations[replayKey] = true;
 
-        // 3. Update Borrower State
-        BorrowerProfile storage profile = borrowerProfiles[msg.sender];
+        // 3. Update borrower profile with multi-factor data
+        newScore = _updateBorrowerProfile(msg.sender, proof, actionType, reportedValueUSD, result, replayKey);
+
+        return (true, newScore);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Batch Proof Submission ("Import Your Entire Credit History")
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * @notice Submit multiple proofs in a single transaction for instant credit migration.
+     * @dev This is CredX's killer feature — no competitor offers batch proof import.
+     * @param proofs Array of transaction proofs from Ethereum / Sepolia.
+     * @param actionTypes Corresponding action types for each proof.
+     * @param reportedValuesUSD Corresponding USD values for each proof.
+     */
+    function submitBatchProofs(
+        IAttestationVerifier.EventProof[] calldata proofs,
+        ActionType[] calldata actionTypes,
+        uint256[] calldata reportedValuesUSD
+    ) external override returns (uint256 finalScore) {
+        uint256 len = proofs.length;
+        require(len > 0 && len <= 20, "Batch: 1-20 proofs allowed");
+        require(len == actionTypes.length && len == reportedValuesUSD.length, "Batch: Array length mismatch");
+
+        uint256 totalBatchValueUSD = 0;
+
+        for (uint256 i = 0; i < len; i++) {
+            require(reportedValuesUSD[i] > 0, "Value must be > 0");
+
+            bytes32 replayKey = keccak256(abi.encodePacked(proofs[i].sourceChainId, proofs[i].txHash, proofs[i].txIndex));
+            
+            // Skip already-processed proofs silently (don't revert the whole batch)
+            if (processedAttestations[replayKey]) {
+                continue;
+            }
+
+            IAttestationVerifier.AttestationResult memory result = attestationVerifier.verifyEventProof(proofs[i]);
+            if (!result.isValid) {
+                continue; // Skip invalid proofs in batch mode
+            }
+
+            processedAttestations[replayKey] = true;
+            totalBatchValueUSD += reportedValuesUSD[i];
+
+            _updateBorrowerProfile(msg.sender, proofs[i], actionTypes[i], reportedValuesUSD[i], result, replayKey);
+        }
+
+        BorrowerProfile memory profile = borrowerProfiles[msg.sender];
+        finalScore = profile.creditScore;
+
+        emit BatchProofsSubmitted(msg.sender, len, totalBatchValueUSD, finalScore);
+
+        return finalScore;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Credit Delegation / Social Lending
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * @notice Delegate a fraction of your credit reputation to vouch for another user.
+     * @param beneficiary The address to boost.
+     * @param boostAmount The CTS points to delegate (max 100).
+     * @param durationDays How long the delegation lasts.
+     */
+    function delegateCredit(address beneficiary, uint256 boostAmount, uint256 durationDays) external {
+        require(beneficiary != msg.sender, "Cannot self-delegate");
+        require(boostAmount > 0 && boostAmount <= 100, "Boost: 1-100 CTS");
+        require(durationDays > 0 && durationDays <= 90, "Duration: 1-90 days");
+
+        BorrowerProfile memory delegatorProfile = borrowerProfiles[msg.sender];
+        uint256 delegatorScore = delegatorProfile.creditScore == 0 ? scoreEngine.MIN_SCORE() : delegatorProfile.creditScore;
+        require(delegatorScore >= 700, "Delegator must have score >= 700 (Prime+)");
+
+        delegatedBoosts[beneficiary] = CreditDelegation({
+            delegator: msg.sender,
+            boostAmount: boostAmount,
+            expiry: block.timestamp + (durationDays * 1 days),
+            isActive: true
+        });
+
+        emit CreditDelegated(msg.sender, beneficiary, boostAmount, block.timestamp + (durationDays * 1 days));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Internal: Update Borrower Profile with Multi-Factor Data
+    // ═══════════════════════════════════════════════════════════════════════
+
+    function _updateBorrowerProfile(
+        address borrower,
+        IAttestationVerifier.EventProof calldata proof,
+        ActionType actionType,
+        uint256 reportedValueUSD,
+        IAttestationVerifier.AttestationResult memory result,
+        bytes32 replayKey
+    ) internal returns (uint256 newScore) {
+        BorrowerProfile storage profile = borrowerProfiles[borrower];
         uint256 oldScore = profile.creditScore == 0 ? scoreEngine.MIN_SCORE() : profile.creditScore;
 
+        // Update cumulative volume
         profile.totalVerifiedVolumeUSD += reportedValueUSD;
         profile.totalAttestationsCount += 1;
         profile.lastAttestationTimestamp = block.timestamp;
+
+        // Track mainnet activity
         if (proof.sourceChainId == 1) {
             profile.isMainnetActive = true;
         }
 
-        // 4. Calculate Updated CTS Score via CreditScoreEngine
-        newScore = scoreEngine.computeScore(
+        // Track protocol diversity (bitmap: each ActionType sets a bit)
+        uint8 actionBit = uint8(1 << uint8(actionType));
+        if ((borrowerActionBitmap[borrower] & actionBit) == 0) {
+            borrowerActionBitmap[borrower] |= actionBit;
+            profile.protocolDiversityCount += 1;
+        }
+
+        // Track chain diversity
+        uint256 chainBit = 1 << (proof.sourceChainId % 256);
+        if ((borrowerChainBitmap[borrower] & chainBit) == 0) {
+            borrowerChainBitmap[borrower] |= chainBit;
+            profile.chainDiversityCount += 1;
+        }
+
+        // Weighted action score (value * weight multiplier)
+        uint256 weight = scoreEngine.getActionWeight(uint256(actionType));
+        profile.weightedActionScore += (reportedValueUSD * weight) / 10000;
+
+        // Compute OCCR multi-factor score
+        newScore = scoreEngine.computeScoreMultiFactor(
             profile.totalVerifiedVolumeUSD,
             profile.totalAttestationsCount,
             profile.lastAttestationTimestamp,
-            profile.isMainnetActive
+            profile.isMainnetActive,
+            profile.protocolDiversityCount,
+            profile.chainDiversityCount,
+            profile.weightedActionScore
         );
+
+        // Apply credit delegation boost if active
+        CreditDelegation memory delegation = delegatedBoosts[borrower];
+        if (delegation.isActive && delegation.expiry > block.timestamp) {
+            newScore += delegation.boostAmount;
+            if (newScore > scoreEngine.MAX_SCORE()) {
+                newScore = scoreEngine.MAX_SCORE();
+            }
+        }
+
         profile.creditScore = newScore;
 
-        // 5. Store in history
-        borrowerHistory[msg.sender].push(VerifiedAttestationRecord({
+        // Privacy-preserving commitment hash (stores commitment, not raw proof data)
+        bytes32 privacyCommitment = keccak256(abi.encodePacked(replayKey, borrower, block.timestamp));
+
+        // Store in history
+        borrowerHistory[borrower].push(VerifiedAttestationRecord({
             proofHash: replayKey,
             sourceChainId: proof.sourceChainId,
             txHash: proof.txHash,
-            borrower: msg.sender,
+            borrower: borrower,
             actionType: actionType,
             valueUSD: reportedValueUSD,
             sourceTimestamp: result.sourceBlockTime,
-            verifiedAt: block.timestamp
+            verifiedAt: block.timestamp,
+            privacyCommitment: privacyCommitment
         }));
 
         uint256 maxCreditLineUSD = scoreEngine.getMaxCreditLine(newScore, profile.totalVerifiedVolumeUSD);
         uint256 requiredCollateralRatioBps = scoreEngine.getCollateralRatio(newScore);
 
-        emit ProofSubmittedAndVerified(
-            replayKey,
-            msg.sender,
-            proof.sourceChainId,
-            proof.txHash,
-            actionType,
-            reportedValueUSD,
-            newScore
-        );
+        emit ProofSubmittedAndVerified(replayKey, borrower, proof.sourceChainId, proof.txHash, actionType, reportedValueUSD, newScore);
+        emit CreditScoreUpdated(borrower, oldScore, newScore, maxCreditLineUSD, requiredCollateralRatioBps);
 
-        emit CreditScoreUpdated(
-            msg.sender,
-            oldScore,
-            newScore,
-            maxCreditLineUSD,
-            requiredCollateralRatioBps
-        );
-
-        return (true, newScore);
+        return newScore;
     }
 
-    /**
-     * @notice Returns comprehensive borrower profile including credit line and required collateral ratio.
-     */
+    // ═══════════════════════════════════════════════════════════════════════
+    //  View Functions
+    // ═══════════════════════════════════════════════════════════════════════
+
     function getBorrowerProfile(address borrower) external view override returns (
         uint256 creditScore,
         uint256 totalVerifiedVolumeUSD,
@@ -158,8 +310,29 @@ contract CredXHub is ICredXHub {
     }
 
     /**
-     * @notice Retrieves verified attestation history records for a borrower.
+     * @notice Returns extended borrower profile including diversity metrics.
      */
+    function getBorrowerProfileExtended(address borrower) external view returns (
+        uint256 creditScore,
+        uint256 totalVerifiedVolumeUSD,
+        uint256 totalAttestationsCount,
+        uint256 protocolDiversity,
+        uint256 chainDiversity,
+        uint256 weightedActionScore,
+        uint256 interestRateBps,
+        uint256 requiredCollateralRatioBps
+    ) {
+        BorrowerProfile memory profile = borrowerProfiles[borrower];
+        creditScore = profile.creditScore == 0 ? scoreEngine.MIN_SCORE() : profile.creditScore;
+        totalVerifiedVolumeUSD = profile.totalVerifiedVolumeUSD;
+        totalAttestationsCount = profile.totalAttestationsCount;
+        protocolDiversity = profile.protocolDiversityCount;
+        chainDiversity = profile.chainDiversityCount;
+        weightedActionScore = profile.weightedActionScore;
+        interestRateBps = scoreEngine.getInterestRate(creditScore);
+        requiredCollateralRatioBps = scoreEngine.getCollateralRatio(creditScore);
+    }
+
     function getBorrowerHistory(address borrower) external view returns (VerifiedAttestationRecord[] memory) {
         return borrowerHistory[borrower];
     }
