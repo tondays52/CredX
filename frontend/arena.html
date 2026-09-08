@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Predict Bay | CredX Reputation Arena</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="arena.css">
+</head>
+<body>
+
+  <!-- Top Navigation Bar -->
+  <header class="navbar">
+    <div class="nav-left">
+      <a href="#" class="brand-logo">
+        <div class="logo-icon">P</div>
+        <span class="logo-text">Predict Bay <span class="badge-credx">CredX</span></span>
+      </a>
+      <nav class="nav-links">
+        <a href="#" class="nav-link active">MARKETS</a>
+        <a href="#" class="nav-link">TRY GAME <span class="flame">🔥</span></a>
+        <a href="#" class="nav-link">TOKEN</a>
+        <a href="#" class="nav-link">HOW TO BUY</a>
+        <a href="#" class="nav-link">EARN REWARDS</a>
+        <a href="#" class="nav-link">MORE <span class="arrow">⌄</span></a>
+      </nav>
+    </div>
+
+    <div class="nav-right">
+      <div class="install-pill">
+        <span class="icon">⤓</span> Install
+      </div>
+      <div class="lang-selector">
+        <span class="globe">🌐</span> GB
+      </div>
+      <button id="connectWalletBtn" class="btn-signin">Sign in / Connect</button>
+    </div>
+  </header>
+
+  <!-- Subheader / Market Toolbar -->
+  <div class="market-toolbar">
+    <div class="toolbar-left">
+      <div class="asset-selector">
+        <div class="crypto-icon-btc">₿</div>
+        <div class="asset-info">
+          <span class="asset-pair">BTC/USD</span>
+          <span class="feed-tag">Pyth · Crypto.BTC/USD</span>
+        </div>
+      </div>
+      <div class="asset-pills">
+        <button class="asset-pill active">BTC</button>
+        <button class="asset-pill">ETH</button>
+        <button class="asset-pill">GOLD</button>
+        <button class="asset-pill">OIL</button>
+      </div>
+    </div>
+
+    <div class="toolbar-right">
+      <div class="timeframe-group">
+        <button class="timeframe-btn active">3 MIN</button>
+        <button class="timeframe-btn">10 MIN</button>
+      </div>
+
+      <div class="paper-badge-group">
+        <div class="paper-points-tag">Paper Points</div>
+        <div class="network-badge">
+          <span class="diamond-icon">❖</span> Creditcoin Testnet
+        </div>
+        <div class="paper-balance-tag" id="paperBalanceDisplay">
+          PAPER <span class="balance-amt">$10,000</span>
+        </div>
+      </div>
+
+      <div class="mode-switch">
+        <span class="mode-indicator active">● PAPER MODE</span>
+        <span class="mode-divider">·</span>
+        <span class="mode-indicator live-label">LIVE</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Trading / Prediction Arena Container -->
+  <main class="arena-layout">
+    
+    <!-- Left Section: Chart & Live Hero Stats -->
+    <section class="chart-section">
+      
+      <div class="hero-round-header">
+        <h2 class="round-title" id="roundTitleText">$BTC above $78,444.52 <span class="round-date" id="roundDateText">on Sep 9, 01:36 UTC</span></h2>
+      </div>
+
+      <div class="price-countdown-bar">
+        <div class="price-stat-box">
+          <span class="stat-meta-label">LAST PRICE</span>
+          <div class="current-price-display" id="livePriceDisplay">$78,418.95</div>
+          <div class="vs-strike-diff negative" id="strikeDiffDisplay">-$25.57 vs strike</div>
+        </div>
+
+        <div class="countdown-stat-box">
+          <span class="stat-meta-label">ROUND CLOSES IN</span>
+          <div class="countdown-clock" id="countdownClock">01:23</div>
+        </div>
+      </div>
+
+      <!-- Interactive Canvas Chart Area -->
+      <div class="chart-wrapper">
+        <div class="strike-line-label" id="strikeLineLabel">STRIKE 78,444.52</div>
+        <canvas id="predictionChart" width="800" height="340"></canvas>
+      </div>
+
+      <!-- History of Recent Rounds -->
+      <div class="last-rounds-bar">
+        <span class="history-label">LAST ROUNDS</span>
+        <div class="history-chips" id="historyChips">
+          <span class="chip down">▼</span>
+          <span class="chip down">▼</span>
+          <span class="chip up">▲</span>
+          <span class="chip up">▲</span>
+          <span class="chip down">▼</span>
+          <span class="chip down">▼</span>
+          <span class="chip down">▼</span>
+          <span class="chip down">▼</span>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Right Section: Order Ticket Panel -->
+    <aside class="ticket-section">
+      <div class="order-ticket-card">
+        
+        <div class="ticket-header">
+          <span class="ticket-title">ORDER TICKET <span class="bullet">·</span> PAPER</span>
+          <span class="ticket-strike-hint" id="ticketStrikeHint">strike $78,444.52</span>
+        </div>
+
+        <!-- Dynamic Ratio Bar -->
+        <div class="ratio-bar-wrapper">
+          <div class="ratio-labels">
+            <span class="ratio-text above-color">ABOVE — <span id="abovePct">54%</span></span>
+            <span class="ratio-text below-color"><span id="belowPct">46%</span> BELOW —</span>
+          </div>
+          <div class="ratio-progress-track">
+            <div class="ratio-fill-above" id="ratioFillAbove" style="width: 54%;"></div>
+            <div class="ratio-fill-below" id="ratioFillBelow" style="width: 46%;"></div>
+          </div>
+        </div>
+
+        <!-- Stake Selection -->
+        <div class="stake-control-group">
+          <div class="stake-label-row">
+            <span>STAKE</span>
+            <span class="streak-counter" id="streakBadge">🔥 Win Streak: 0</span>
+          </div>
+          <div class="stake-buttons">
+            <button class="stake-btn" data-stake="10">$10</button>
+            <button class="stake-btn" data-stake="50">$50</button>
+            <button class="stake-btn active" data-stake="100">$100</button>
+            <button class="stake-btn" data-stake="500">$500</button>
+            <button class="stake-btn custom" id="customStakeBtn">Custom</button>
+          </div>
+        </div>
+
+        <!-- Big Prediction Decision Buttons -->
+        <div class="decision-buttons">
+          <button class="decision-btn btn-above" id="btnPredictAbove">
+            <span class="btn-icon">▲</span>
+            <span class="btn-main-text">ABOVE —</span>
+            <span class="btn-hotkey">-- key A</span>
+          </button>
+
+          <button class="decision-btn btn-below" id="btnPredictBelow">
+            <span class="btn-icon">▼</span>
+            <span class="btn-main-text">BELOW —</span>
+            <span class="btn-hotkey">-- key B</span>
+          </button>
+        </div>
+
+        <p class="settlement-info-text">
+          Settles on the Pyth feed. Wins pay Points, net of fee.
+        </p>
+
+        <!-- Creditcoin Reputation Sync Banner -->
+        <div class="reputation-callout-banner" id="reputationBanner">
+          <div class="callout-icon">✦</div>
+          <div class="callout-content">
+            <div class="callout-title">CredX Reputation Gateway</div>
+            <p class="callout-desc">Every 3 consecutive wins unlocks an on-chain CTS Credit Score boost on Creditcoin.</p>
+            <button class="btn-sync-score" id="syncScoreBtn" disabled>
+              Sync Streak to Creditcoin Score →
+            </button>
+          </div>
+        </div>
+
+        <div id="toastMessage" class="toast-message hidden"></div>
+
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- Bottom Floating Footer Bar -->
+  <footer class="bottom-bar">
+    <div class="follow-desk">
+      <span class="desk-indicator">●</span> FOLLOW THE DESK
+    </div>
+    <div class="desk-meta">
+      <span>three channels · one tap each</span>
+      <span class="keyboard-icon">⌨</span>
+    </div>
+  </footer>
+
+  <script src="arena.js"></script>
+</body>
+</html>

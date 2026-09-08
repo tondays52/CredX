@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "CredX Virtual Node",
+  "version": "1.0.0",
+  "description": "Simulate a DePIN node to share idle resources and build your CredX reputation.",
+  "permissions": [
+    "storage",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "CredX Node Dashboard"
+  }
+}

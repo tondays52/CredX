@@ -6,22 +6,19 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 contract MockGameItem is ERC721, Ownable {
     uint256 private _nextTokenId;
-    
+
     // tokenId => rarity (0=Common, 1=Rare, 2=Legendary)
-    mapping(uint256 tokenId => uint256 rarity) public itemRarity;
+    mapping(uint256 => uint256) public itemRarity;
 
-    event ItemMinted(uint256 indexed tokenId, address indexed to, uint256 rarity);
+    constructor() ERC721("Gaming Loot", "LOOT") Ownable(msg.sender) {}
 
-    constructor() ERC721("Gaming Loot", "LOOT") Ownable(msg.sender) {
-        // empty block
-    }
-
-    function mint(address to, uint256 rarity) external onlyOwner returns (uint256) {
-        require(to != address(0), "Zero address");
+    function mint(
+        address to,
+        uint256 rarity
+    ) external onlyOwner returns (uint256) {
         uint256 tokenId = _nextTokenId++;
         itemRarity[tokenId] = rarity;
         _mint(to, tokenId);
-        emit ItemMinted(tokenId, to, rarity);
         return tokenId;
     }
 }
