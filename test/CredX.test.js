@@ -144,7 +144,7 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
       
       await expect(
         credXHub.connect(borrower).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("1000"))
-      ).to.be.revertedWith("Proof already processed (replay blocked)");
+      ).to.be.revertedWithCustomError(credXHub, "ProofAlreadyProcessed");
     });
 
     it("should reject when attestation oracle returns invalid", async function () {
@@ -153,7 +153,7 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
       
       await expect(
         credXHub.connect(borrower).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("500"))
-      ).to.be.revertedWith("Attestcoin verification failed: Invalid cryptographic proof");
+      ).to.be.revertedWithCustomError(credXHub, "InvalidCryptographicProof");
     });
   });
 
@@ -214,7 +214,7 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
 
       await expect(
         credXHub.connect(borrower).submitBatchProofs(proofs, actions, values)
-      ).to.be.revertedWith("Batch: 1-20 proofs allowed");
+      ).to.be.revertedWithCustomError(credXHub, "InvalidBatchSize");
     });
   });
 

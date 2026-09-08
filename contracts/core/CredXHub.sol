@@ -100,10 +100,17 @@ contract CredXHub is ICredXHub {
     event LendingPoolUpdated(address indexed oldPool, address indexed newPool);
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  Custom Errors
+    //  Constants & Custom Errors
     // ═══════════════════════════════════════════════════════════════════════
+    uint256 public constant BLOCKS_PER_DAY = 7200; // ~12s per block on Creditcoin / EVM
+
     error ZeroAddress();
     error OnlyOwner();
+    error InvalidAmount();
+    error ProofAlreadyProcessed();
+    error InvalidCryptographicProof();
+    error InvalidBatchSize();
+    error ArrayLengthMismatch();
     error CannotSelfDelegate();
     error InvalidBoostAmount();
     error InvalidDuration();
@@ -154,15 +161,15 @@ contract CredXHub is ICredXHub {
         ActionType actionType,
         uint256 reportedValueUSD
     ) external override returns (bool success, uint256 newScore) {
-        require(reportedValueUSD > 0, "Value must be > 0");
+        if (reportedValueUSD == 0) revert InvalidAmount();
 
         // 1. Replay Prevention
         bytes32 replayKey = keccak256(abi.encodePacked(proof.sourceChainId, proof.txHash, proof.txIndex));
-        require(!processedAttestations[replayKey], "Proof already processed (replay blocked)");
+        if (processedAttestations[replayKey]) revert ProofAlreadyProcessed();
 
         // 2. Cryptographic Verification via Attestcoin / BlockProver precompile (0x0FD2)
         IAttestationVerifier.AttestationResult memory result = attestationVerifier.verifyEventProof(proof);
-        require(result.isValid, "Attestcoin verification failed: Invalid cryptographic proof");
+        if (!result.isValid) revert InvalidCryptographicProof();
 
         processedAttestations[replayKey] = true;
 
@@ -191,13 +198,13 @@ contract CredXHub is ICredXHub {
         uint256[] calldata reportedValuesUSD
     ) external override returns (uint256 finalScore) {
         uint256 len = proofs.length;
-        require(len > 0 && len <= 20, "Batch: 1-20 proofs allowed");
-        require(len == actionTypes.length && len == reportedValuesUSD.length, "Batch: Array length mismatch");
+        if (len == 0 || len > 20) revert InvalidBatchSize();
+        if (len != actionTypes.length || len != reportedValuesUSD.length) revert ArrayLengthMismatch();
 
         uint256 totalBatchValueUSD = 0;
 
         for (uint256 i = 0; i < len; i++) {
-            require(reportedValuesUSD[i] > 0, "Value must be > 0");
+            if (reportedValuesUSD[i] == 0) revert InvalidAmount();
 
             bytes32 replayKey = keccak256(abi.encodePacked(proofs[i].sourceChainId, proofs[i].txHash, proofs[i].txIndex));
             
@@ -244,14 +251,15 @@ contract CredXHub is ICredXHub {
         uint256 delegatorScore = delegatorProfile.creditScore == 0 ? scoreEngine.MIN_SCORE() : delegatorProfile.creditScore;
         if (delegatorScore < 700) revert InsufficientDelegatorScore();
 
+        uint256 expiryBlock = block.number + (durationDays * BLOCKS_PER_DAY);
         delegatedBoosts[beneficiary] = CreditDelegation({
             delegator: msg.sender,
             boostAmount: boostAmount,
-            expiry: block.timestamp + (durationDays * 1 days),
+            expiry: expiryBlock,
             isActive: true
         });
 
-        emit CreditDelegated(msg.sender, beneficiary, boostAmount, block.timestamp + (durationDays * 1 days));
+        emit CreditDelegated(msg.sender, beneficiary, boostAmount, expiryBlock);
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -272,7 +280,7 @@ contract CredXHub is ICredXHub {
         // Update cumulative volume
         profile.totalVerifiedVolumeUSD += reportedValueUSD;
         profile.totalAttestationsCount += 1;
-        profile.lastAttestationTimestamp = block.timestamp;
+        profile.lastAttestationTimestamp = block.number;
 
         // Track mainnet activity
         if (proof.sourceChainId == 1) {
@@ -310,7 +318,7 @@ contract CredXHub is ICredXHub {
 
         // Apply credit delegation boost if active
         CreditDelegation memory delegation = delegatedBoosts[borrower];
-        if (delegation.isActive && delegation.expiry > block.timestamp) {
+        if (delegation.isActive && delegation.expiry > block.number) {
             newScore += delegation.boostAmount;
             if (newScore > scoreEngine.MAX_SCORE()) {
                 newScore = scoreEngine.MAX_SCORE();
