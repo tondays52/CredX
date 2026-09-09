@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -18,6 +18,27 @@ contract AutonomousAIHub is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ═══════════════════════════════════════════════════════════════════════
+    //  Custom Errors
+    // ═══════════════════════════════════════════════════════════════════════
+
+    error ZeroAddress();
+    error ZeroAmount();
+    error ProofAlreadyProcessed();
+    error CryptographicProofInvalid();
+    error AgentAlreadyRegistered();
+    error AgentNotRegistered();
+    error ActiveLoanOutstanding();
+    error ScoreBelowThreshold();
+    error InsufficientLiquidity();
+    error NoActiveLoan();
+    error InsufficientRepayment();
+    error InvalidTaskId();
+    error CannotEscrowToSelf();
+    error TaskAlreadyExists();
+    error TaskDoesNotExist();
+    error TaskAlreadySettled();
+
+    // ═══════════════════════════════════════════════════════════════════════
     //  State & Interfaces
     // ═══════════════════════════════════════════════════════════════════════
 
@@ -29,7 +50,7 @@ contract AutonomousAIHub is ReentrancyGuard {
     uint256 public marketVolatilityIndex;
     // Global Default Rate: 0 to 10000 (bps)
     uint256 public globalDefaultRateBps;
-    uint256 public lastRiskUpdateTimestamp;
+    uint256 public lastRiskUpdateBlock;
 
     // Cross-chain Proof Replay Protection: sourceChainId => txHash => processed
     mapping(uint256 sourceChainId => mapping(bytes32 txHash => bool processed)) public processedProofs;
@@ -83,9 +104,9 @@ contract AutonomousAIHub is ReentrancyGuard {
         address _attestationVerifier,
         address _settlementToken
     ) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_attestationVerifier != address(0), "Zero address: attestationVerifier");
-        require(_settlementToken != address(0), "Zero address: settlementToken");
+        if (_credXHub == address(0) || _attestationVerifier == address(0) || _settlementToken == address(0)) {
+            revert ZeroAddress();
+        }
 
         CREDX_HUB = ICredXHub(_credXHub);
         ATTESTATION_VERIFIER = IAttestationVerifier(_attestationVerifier);
@@ -93,7 +114,7 @@ contract AutonomousAIHub is ReentrancyGuard {
 
         marketVolatilityIndex = 1000; // 10% base volatility
         globalDefaultRateBps = 200;   // 2% base default rate
-        lastRiskUpdateTimestamp = block.timestamp;
+        lastRiskUpdateBlock = block.number;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -109,11 +130,15 @@ contract AutonomousAIHub is ReentrancyGuard {
         uint256 volatilityIndexDelta,
         uint256 defaultRateDeltaBps
     ) external nonReentrant returns (uint256 newBaseApr) {
-        require(!processedProofs[proof.sourceChainId][proof.txHash], "Proof already processed");
+        if (processedProofs[proof.sourceChainId][proof.txHash]) {
+            revert ProofAlreadyProcessed();
+        }
 
         // Verify cryptographic Merkle Patricia Trie receipt proof via Creditcoin Attestcoin consensus
         IAttestationVerifier.AttestationResult memory result = ATTESTATION_VERIFIER.verifyEventProof(proof);
-        require(result.isValid, "Cryptographic proof invalid");
+        if (!result.isValid) {
+            revert CryptographicProofInvalid();
+        }
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
 
@@ -124,7 +149,7 @@ contract AutonomousAIHub is ReentrancyGuard {
         if (defaultRateDeltaBps > 0) {
             globalDefaultRateBps = defaultRateDeltaBps > 10000 ? 10000 : defaultRateDeltaBps;
         }
-        lastRiskUpdateTimestamp = block.timestamp;
+        lastRiskUpdateBlock = block.number;
 
         newBaseApr = getAutonomousRiskAdjustedAPR();
 
@@ -158,7 +183,9 @@ contract AutonomousAIHub is ReentrancyGuard {
      * @notice Registers an autonomous AI Agent to build an on-chain credit history.
      */
     function registerAIAgent() external {
-        require(!aiAgents[msg.sender].isRegistered, "Agent already registered");
+        if (aiAgents[msg.sender].isRegistered) {
+            revert AgentAlreadyRegistered();
+        }
         aiAgents[msg.sender] = AIAgentProfile({
             reputationScore: 300, // Initial base score
             totalVerifiedProfitUSD: 0,
@@ -178,13 +205,21 @@ contract AutonomousAIHub is ReentrancyGuard {
         IAttestationVerifier.EventProof calldata proof,
         uint256 profitAmountUSD
     ) external nonReentrant returns (uint256 newScore) {
-        require(agent != address(0), "Zero address: agent");
-        require(aiAgents[agent].isRegistered, "Agent not registered");
-        require(!processedProofs[proof.sourceChainId][proof.txHash], "Proof already processed");
+        if (agent == address(0)) {
+            revert ZeroAddress();
+        }
+        if (!aiAgents[agent].isRegistered) {
+            revert AgentNotRegistered();
+        }
+        if (processedProofs[proof.sourceChainId][proof.txHash]) {
+            revert ProofAlreadyProcessed();
+        }
 
         // Verify cryptographic proof
         IAttestationVerifier.AttestationResult memory result = ATTESTATION_VERIFIER.verifyEventProof(proof);
-        require(result.isValid, "Cryptographic proof invalid");
+        if (!result.isValid) {
+            revert CryptographicProofInvalid();
+        }
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
 
@@ -207,14 +242,24 @@ contract AutonomousAIHub is ReentrancyGuard {
      * @notice Autonomously dispatches an undercollateralized micro-loan to an AI agent if its score >= 700.
      */
     function triggerAutonomousAgentLoan(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be > 0");
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
         AIAgentProfile storage profile = aiAgents[msg.sender];
-        require(profile.isRegistered, "Agent not registered");
-        require(profile.activeLoanAmount == 0, "Active loan outstanding");
+        if (!profile.isRegistered) {
+            revert AgentNotRegistered();
+        }
+        if (profile.activeLoanAmount != 0) {
+            revert ActiveLoanOutstanding();
+        }
 
         // Cross-check: Agent must have Autonomous Reputation Score >= 700 (Prime)
-        require(profile.reputationScore >= 700, "Agent credit score below Prime threshold (700)");
-        require(SETTLEMENT_TOKEN.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
+        if (profile.reputationScore < 700) {
+            revert ScoreBelowThreshold();
+        }
+        if (SETTLEMENT_TOKEN.balanceOf(address(this)) < amount) {
+            revert InsufficientLiquidity();
+        }
 
         profile.activeLoanAmount = amount;
         SETTLEMENT_TOKEN.safeTransfer(msg.sender, amount);
@@ -227,9 +272,15 @@ contract AutonomousAIHub is ReentrancyGuard {
      */
     function repayAgentLoan(uint256 amount) external nonReentrant {
         AIAgentProfile storage profile = aiAgents[msg.sender];
-        require(profile.isRegistered, "Agent not registered");
-        require(profile.activeLoanAmount > 0, "No active loan");
-        require(amount >= profile.activeLoanAmount, "Must repay full loan balance");
+        if (!profile.isRegistered) {
+            revert AgentNotRegistered();
+        }
+        if (profile.activeLoanAmount == 0) {
+            revert NoActiveLoan();
+        }
+        if (amount < profile.activeLoanAmount) {
+            revert InsufficientRepayment();
+        }
 
         SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -256,11 +307,21 @@ contract AutonomousAIHub is ReentrancyGuard {
         address gpuProvider,
         uint256 amount
     ) external nonReentrant {
-        require(taskId != bytes32(0), "Invalid taskId");
-        require(gpuProvider != address(0), "Zero address: gpuProvider");
-        require(gpuProvider != msg.sender, "Cannot escrow to self");
-        require(amount > 0, "Amount must be > 0");
-        require(computeTasks[taskId].requester == address(0), "Task ID already exists");
+        if (taskId == bytes32(0)) {
+            revert InvalidTaskId();
+        }
+        if (gpuProvider == address(0)) {
+            revert ZeroAddress();
+        }
+        if (gpuProvider == msg.sender) {
+            revert CannotEscrowToSelf();
+        }
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+        if (computeTasks[taskId].requester != address(0)) {
+            revert TaskAlreadyExists();
+        }
 
         SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
 
@@ -283,13 +344,21 @@ contract AutonomousAIHub is ReentrancyGuard {
         IAttestationVerifier.EventProof calldata proof
     ) external nonReentrant {
         ComputeTask storage task = computeTasks[taskId];
-        require(task.requester != address(0), "Task does not exist");
-        require(!task.isSettled, "Task already settled");
-        require(!processedProofs[proof.sourceChainId][proof.txHash], "Proof already processed");
+        if (task.requester == address(0)) {
+            revert TaskDoesNotExist();
+        }
+        if (task.isSettled) {
+            revert TaskAlreadySettled();
+        }
+        if (processedProofs[proof.sourceChainId][proof.txHash]) {
+            revert ProofAlreadyProcessed();
+        }
 
         // Verify cryptographic compute delivery receipt proof
         IAttestationVerifier.AttestationResult memory result = ATTESTATION_VERIFIER.verifyEventProof(proof);
-        require(result.isValid, "Invalid cryptographic compute proof");
+        if (!result.isValid) {
+            revert CryptographicProofInvalid();
+        }
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
         task.isSettled = true;

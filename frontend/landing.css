@@ -1,0 +1,310 @@
+/* ==========================================================================
+   CredX Protocol — QClay / Levi Wilson Dribbble Signature Design System (v3)
+   Pixel-Perfect Obsidian Glassmorphism, 3D HUD Centerpiece, Bento Grid & Ambient Glows
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-deep: #05070d;
+  --bg-card: rgba(12, 17, 30, 0.72);
+  --bg-card-hover: rgba(18, 25, 45, 0.88);
+  --border-subtle: rgba(255, 255, 255, 0.07);
+  --border-glow-cyan: rgba(6, 182, 212, 0.4);
+  --border-glow-purple: rgba(168, 85, 247, 0.4);
+  --border-glow-emerald: rgba(16, 185, 129, 0.4);
+
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+  --purple-400: #c084fc;
+  --purple-500: #a855f7;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --rose-400: #fb7185;
+  --blue-500: #3b82f6;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-inter: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   1. Ambient Lighting & Cyber-Grid
+   ═════════════════════════════════════════════════════════════════════════ */
+.ambient-glow-wrapper {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.glow-orb-hero {
+  position: absolute;
+  top: -120px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 900px;
+  height: 520px;
+  background: radial-gradient(ellipse at center, rgba(6, 182, 212, 0.16) 0%, rgba(99, 102, 241, 0.08) 40%, transparent 70%);
+  filter: blur(80px);
+}
+
+.glow-orb-purple {
+  position: absolute;
+  top: 40%;
+  right: -150px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle at center, rgba(168, 85, 247, 0.1) 0%, rgba(139, 92, 246, 0.03) 50%, transparent 70%);
+  filter: blur(90px);
+}
+
+.glow-orb-emerald {
+  position: absolute;
+  bottom: 10%;
+  left: -150px;
+  width: 550px;
+  height: 550px;
+  background: radial-gradient(circle at center, rgba(16, 185, 129, 0.08) 0%, transparent 65%);
+  filter: blur(80px);
+}
+
+.subtle-cyber-grid {
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   2. QClay Floating Glass Pill Navbar
+   ═════════════════════════════════════════════════════════════════════════ */
+.qclay-navbar {
+  background: rgba(8, 12, 22, 0.82);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02);
+}
+
+.nav-link-pill {
+  color: #94a3b8;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+
+.nav-link-pill:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   3. Hero HUD Glass Container & 3D Lighting
+   ═════════════════════════════════════════════════════════════════════════ */
+.hero-hud-card {
+  background: rgba(11, 16, 30, 0.82);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 32px;
+  box-shadow: 
+    0 30px 80px -15px rgba(0, 0, 0, 0.85),
+    0 0 45px rgba(6, 182, 212, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.hud-pill-badge {
+  background: rgba(15, 23, 42, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.5);
+  transition: all 0.3s ease;
+}
+
+.hud-pill-badge:hover {
+  transform: translateY(-3px);
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 20px 40px rgba(6, 182, 212, 0.15);
+}
+
+@keyframes float-subtle-1 {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes float-subtle-2 {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-6px); }
+}
+
+.float-chip-1 { animation: float-subtle-1 5s ease-in-out infinite; }
+.float-chip-2 { animation: float-subtle-2 6s ease-in-out infinite 1.5s; }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   4. Bento Grid (QClay Signature Cards)
+   ═════════════════════════════════════════════════════════════════════════ */
+.qclay-bento-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 28px;
+  padding: 28px;
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.5);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.qclay-bento-card:hover {
+  transform: translateY(-4px);
+  background: var(--bg-card-hover);
+  border-color: rgba(6, 182, 212, 0.35);
+  box-shadow: 0 25px 50px -10px rgba(6, 182, 212, 0.15), 0 0 25px rgba(6, 182, 212, 0.08);
+}
+
+.qclay-bento-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+}
+
+/* Holographic SBT Bento Card */
+.bento-holo-sbt {
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.22) 0%, rgba(6, 182, 212, 0.12) 50%, rgba(12, 17, 30, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  position: relative;
+  overflow: hidden;
+}
+
+.bento-holo-sbt::after {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
+  transform: rotate(35deg);
+  animation: sbt-shimmer-spin 9s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes sbt-shimmer-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   5. Buttons & Typography
+   ═════════════════════════════════════════════════════════════════════════ */
+.btn-qclay-primary {
+  background: linear-gradient(135deg, #06b6d4 0%, #4f46e5 100%);
+  color: #fff;
+  border-radius: 9999px;
+  font-weight: 700;
+  box-shadow: 0 10px 25px rgba(6, 182, 212, 0.35);
+  transition: all 0.25s ease;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.btn-qclay-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 15px 35px rgba(6, 182, 212, 0.5);
+  filter: brightness(1.1);
+}
+
+.btn-qclay-ghost {
+  background: rgba(255, 255, 255, 0.05);
+  color: #f1f5f9;
+  border-radius: 9999px;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: all 0.25s ease;
+}
+
+.btn-qclay-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+/* Range Sliders */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cyan-400);
+  cursor: pointer;
+  box-shadow: 0 0 12px var(--cyan-400);
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+/* Marquee */
+.qclay-marquee {
+  display: flex;
+  overflow: hidden;
+  user-select: none;
+  gap: 36px;
+  mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, transparent 0%, black 15%, black 85%, transparent 100%);
+}
+
+.qclay-marquee-inner {
+  display: flex;
+  gap: 36px;
+  flex-shrink: 0;
+  align-items: center;
+  animation: qclay-marquee-scroll 22s linear infinite;
+}
+
+@keyframes qclay-marquee-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}

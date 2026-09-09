@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 import {ICredXHub, ActionType, VerifiedAttestationRecord} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";

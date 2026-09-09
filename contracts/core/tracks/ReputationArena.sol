@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
@@ -12,6 +12,23 @@ import {ICredXHub} from "../../interfaces/ICredXHub.sol";
  *         into an on-chain CredX Creditcoin Trust Score (CTS) boost.
  */
 contract ReputationArena is ReentrancyGuard {
+
+    error NotOwner();
+    error ZeroAddress();
+    error UserAlreadyInitialized();
+    error InvalidStrikePrice();
+    error InvalidDuration();
+    error RoundNotOpen();
+    error RoundLocked();
+    error InvalidStakeAmount();
+    error InsufficientPaperBalance();
+    error PredictionAlreadyPlaced();
+    error RoundNotFinished();
+    error InvalidSettlementPrice();
+    error RoundNotSettled();
+    error NoPredictionPlaced();
+    error PayoutAlreadyClaimed();
+    error InsufficientWinStreak();
 
     enum Choice { ABOVE, BELOW }
     enum RoundStatus { OPEN, CLOSED, SETTLED, CANCELLED }
@@ -27,9 +44,9 @@ contract ReputationArena is ReentrancyGuard {
         string assetSymbol;      // e.g. "BTC/USD"
         uint256 strikePrice;     // Normalized with 8 decimals (e.g. 7844452000000 = $78,444.52)
         uint256 settlementPrice; // Final price upon resolution
-        uint256 startTime;
-        uint256 lockTime;
-        uint256 closeTime;
+        uint256 startBlock;
+        uint256 lockBlock;
+        uint256 closeBlock;
         uint256 totalAboveStake;
         uint256 totalBelowStake;
         Choice winningChoice;
@@ -65,19 +82,19 @@ contract ReputationArena is ReentrancyGuard {
     // ═══════════════════════════════════════════════════════════════════════
 
     event UserRegistered(address indexed user, uint256 initialBalance);
-    event RoundCreated(uint256 indexed roundId, string assetSymbol, uint256 strikePrice, uint256 lockTime, uint256 closeTime);
+    event RoundCreated(uint256 indexed roundId, string assetSymbol, uint256 strikePrice, uint256 lockBlock, uint256 closeBlock);
     event PredictionPlaced(uint256 indexed roundId, address indexed user, Choice choice, uint256 stakeAmount);
     event RoundSettled(uint256 indexed roundId, uint256 settlementPrice, Choice winningChoice);
     event PayoutClaimed(uint256 indexed roundId, address indexed user, uint256 payoutAmount);
     event ReputationBoostClaimed(address indexed user, uint256 streakCount, uint256 totalBoosts);
 
     modifier onlyOwner() {
-        require(msg.sender == owner, "Only owner");
+        if (msg.sender != owner) revert NotOwner();
         _;
     }
 
     constructor(address _credXHub) {
-        require(_credXHub != address(0), "Zero address: credXHub");
+        if (_credXHub == address(0)) revert ZeroAddress();
         CREDX_HUB = ICredXHub(_credXHub);
         owner = msg.sender;
     }
@@ -91,7 +108,7 @@ contract ReputationArena is ReentrancyGuard {
      */
     function registerUser() external {
         UserStats storage stats = userStats[msg.sender];
-        require(stats.paperBalance == 0 && stats.totalRounds == 0, "User already initialized");
+        if (stats.paperBalance != 0 || stats.totalRounds != 0) revert UserAlreadyInitialized();
         
         stats.paperBalance = INITIAL_PAPER_BALANCE;
         emit UserRegistered(msg.sender, INITIAL_PAPER_BALANCE);
@@ -107,33 +124,33 @@ contract ReputationArena is ReentrancyGuard {
     function createRound(
         string calldata assetSymbol,
         uint256 strikePrice,
-        uint256 durationSeconds
+        uint256 durationBlocks
     ) external onlyOwner returns (uint256 newRoundId) {
-        require(strikePrice > 0, "Strike price must be > 0");
-        require(durationSeconds >= 60, "Duration must be >= 60s");
+        if (strikePrice == 0) revert InvalidStrikePrice();
+        if (durationBlocks < 5) revert InvalidDuration();
 
         currentRoundId++;
         newRoundId = currentRoundId;
 
-        uint256 startTime = block.timestamp;
-        uint256 lockTime = startTime + (durationSeconds / 2);
-        uint256 closeTime = startTime + durationSeconds;
+        uint256 startBlock = block.number;
+        uint256 lockBlock = startBlock + (durationBlocks / 2);
+        uint256 closeBlock = startBlock + durationBlocks;
 
         rounds[newRoundId] = Round({
             roundId: newRoundId,
             assetSymbol: assetSymbol,
             strikePrice: strikePrice,
             settlementPrice: 0,
-            startTime: startTime,
-            lockTime: lockTime,
-            closeTime: closeTime,
+            startBlock: startBlock,
+            lockBlock: lockBlock,
+            closeBlock: closeBlock,
             totalAboveStake: 0,
             totalBelowStake: 0,
             winningChoice: Choice.ABOVE,
             status: RoundStatus.OPEN
         });
 
-        emit RoundCreated(newRoundId, assetSymbol, strikePrice, lockTime, closeTime);
+        emit RoundCreated(newRoundId, assetSymbol, strikePrice, lockBlock, closeBlock);
     }
 
     /**
@@ -145,9 +162,9 @@ contract ReputationArena is ReentrancyGuard {
         uint256 stakeAmount
     ) external nonReentrant {
         Round storage round = rounds[roundId];
-        require(round.status == RoundStatus.OPEN, "Round not open");
-        require(block.timestamp < round.lockTime, "Round locked for new predictions");
-        require(stakeAmount > 0, "Stake amount must be > 0");
+        if (round.status != RoundStatus.OPEN) revert RoundNotOpen();
+        if (block.number >= round.lockBlock) revert RoundLocked();
+        if (stakeAmount == 0) revert InvalidStakeAmount();
 
         UserStats storage stats = userStats[msg.sender];
         // Auto-register if new
@@ -156,9 +173,9 @@ contract ReputationArena is ReentrancyGuard {
             emit UserRegistered(msg.sender, INITIAL_PAPER_BALANCE);
         }
 
-        require(stats.paperBalance >= stakeAmount, "Insufficient paper balance");
+        if (stats.paperBalance < stakeAmount) revert InsufficientPaperBalance();
         Prediction storage userPred = userPredictions[roundId][msg.sender];
-        require(userPred.stakeAmount == 0, "Prediction already placed in this round");
+        if (userPred.stakeAmount != 0) revert PredictionAlreadyPlaced();
 
         stats.paperBalance -= stakeAmount;
         stats.totalRounds++;
@@ -181,9 +198,9 @@ contract ReputationArena is ReentrancyGuard {
      */
     function settleRound(uint256 roundId, uint256 settlementPrice) external onlyOwner {
         Round storage round = rounds[roundId];
-        require(round.status == RoundStatus.OPEN, "Round not open");
-        require(block.timestamp >= round.closeTime, "Round not yet finished");
-        require(settlementPrice > 0, "Invalid settlement price");
+        if (round.status != RoundStatus.OPEN) revert RoundNotOpen();
+        if (block.number < round.closeBlock) revert RoundNotFinished();
+        if (settlementPrice == 0) revert InvalidSettlementPrice();
 
         round.settlementPrice = settlementPrice;
         round.status = RoundStatus.SETTLED;
@@ -202,11 +219,11 @@ contract ReputationArena is ReentrancyGuard {
      */
     function claimPayout(uint256 roundId) external nonReentrant returns (uint256 payout) {
         Round storage round = rounds[roundId];
-        require(round.status == RoundStatus.SETTLED, "Round not settled");
+        if (round.status != RoundStatus.SETTLED) revert RoundNotSettled();
 
         Prediction storage userPred = userPredictions[roundId][msg.sender];
-        require(userPred.stakeAmount > 0, "No prediction placed");
-        require(!userPred.claimed, "Payout already claimed");
+        if (userPred.stakeAmount == 0) revert NoPredictionPlaced();
+        if (userPred.claimed) revert PayoutAlreadyClaimed();
 
         userPred.claimed = true;
         UserStats storage stats = userStats[msg.sender];
@@ -235,7 +252,7 @@ contract ReputationArena is ReentrancyGuard {
      */
     function syncStreakToReputation() external nonReentrant returns (bool) {
         UserStats storage stats = userStats[msg.sender];
-        require(stats.currentWinStreak >= STREAK_THRESHOLD, "Must have active win streak >= 3");
+        if (stats.currentWinStreak < STREAK_THRESHOLD) revert InsufficientWinStreak();
 
         stats.totalReputationBoostsClaimed++;
         // Reset streak counter after claiming to prevent infinite claiming from same streak

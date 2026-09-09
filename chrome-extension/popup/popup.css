@@ -1,0 +1,327 @@
+/* CredX Virtual Node - Chrome Extension Styling */
+:root {
+  --bg-main: #070a12;
+  --bg-card: rgba(15, 23, 42, 0.75);
+  --border-color: rgba(255, 255, 255, 0.08);
+  --cyan: #06b6d4;
+  --green: #10b981;
+  --purple: #a855f7;
+  --gold: #f59e0b;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --font-main: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  width: 360px;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: var(--font-main);
+  font-size: 13px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.popup-wrapper {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Header */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.brand-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.brand-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  display: block;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.status-badge.connected {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.status-badge.disconnected {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.status-dot {
+  font-size: 8px;
+}
+
+/* Hardware Banner */
+.hardware-banner {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.hw-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.hw-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.hw-value {
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--text-main);
+}
+
+.hw-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+}
+
+/* GPU Badge */
+.gpu-badge-container {
+  background: rgba(168, 85, 247, 0.08);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  border-radius: 10px;
+  padding: 7px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.gpu-icon {
+  font-size: 14px;
+}
+
+.gpu-info {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.gpu-label {
+  font-size: 8px;
+  text-transform: uppercase;
+  color: #c084fc;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.gpu-value {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-icon {
+  font-size: 12px;
+}
+
+.stat-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  letter-spacing: -0.5px;
+}
+
+.stat-hint {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.highlight-card {
+  background: radial-gradient(circle at 100% 0%, rgba(245, 158, 11, 0.12) 0%, rgba(15, 23, 42, 0.8) 100%);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.text-cyan { color: var(--cyan); }
+.text-green { color: var(--green); }
+.text-purple { color: #c084fc; }
+.text-gold { color: var(--gold); }
+.text-white { color: #fff; }
+
+/* Buttons */
+.actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn {
+  width: 100%;
+  padding: 11px;
+  border-radius: 12px;
+  font-family: var(--font-main);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #06b6d4, #3b82f6);
+  color: #040814;
+  border: none;
+  box-shadow: 0 4px 15px rgba(6, 182, 212, 0.25);
+}
+
+.btn-primary:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.btn-secondary {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Status Banner */
+.tx-status {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  text-align: center;
+}
+
+.tx-status.success {
+  background: rgba(16, 185, 129, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.tx-status.error {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.hidden {
+  display: none;
+}
+
+/* Footer */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  border-top: 1px solid var(--border-color);
+  padding-top: 10px;
+}
+
+.net-indicator {
+  color: #10b981;
+  font-size: 8px;
+}

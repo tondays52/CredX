@@ -425,7 +425,38 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Audio Synthesizer for Arena
+  function playArenaSound(type) {
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      if (type === 'fanfare') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime);
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.12);
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.24);
+        osc.frequency.setValueAtTime(1046.50, ctx.currentTime + 0.36);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.55);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.55);
+      }
+    } catch (e) {}
+  }
+
   // Sync to Creditcoin Score
+  const arenaSyncModal = document.getElementById('arenaSyncModal');
+  const closeArenaSyncModal = document.getElementById('closeArenaSyncModal');
+
+  if (closeArenaSyncModal && arenaSyncModal) {
+    closeArenaSyncModal.addEventListener('click', () => {
+      arenaSyncModal.classList.remove('active');
+    });
+  }
+
   syncScoreBtn.addEventListener('click', async () => {
     if (currentWinStreak < 3) return;
 
@@ -433,10 +464,14 @@ document.addEventListener('DOMContentLoaded', () => {
     syncScoreBtn.disabled = true;
 
     setTimeout(() => {
+      playArenaSound('fanfare');
+      if (arenaSyncModal) {
+        arenaSyncModal.classList.add('active');
+      }
       showToast(`🏆 CredX Score Boosted! +25 CTS credited on Creditcoin Testnet.`, 'success');
       currentWinStreak = 0;
       updateStatsUI();
-    }, 1200);
+    }, 1000);
   });
 
   // Startup

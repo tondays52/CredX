@@ -196,7 +196,29 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
 
 ---
 
-## 👥 10. Team & Open Source
+## 👥 10. Live Deployments (Creditcoin Testnet — Chain ID: 102031)
+
+| Contract | Address | Network |
+|---|---|---|
+| **AttestationVerifier (0x0FD2 Simulation)** | `0x34aA30efE2226ffC2E55607017FbA2F07e62b279` | Creditcoin Testnet |
+| **CreditScoreEngine (OCCR Model)** | `0xA31697bBd4900f8FA62015A51dA3c58972E96BB6` | Creditcoin Testnet |
+| **CredXHub (Core Registry & Batch Importer)** | `0x729b2D8B630c4241d051c92D4FeB31412846eE18` | Creditcoin Testnet |
+| **cUSD (Liquidity Stablecoin)** | `0xdec5170C46DC63D812c699E9dFE6561FFd1BF298` | Creditcoin Testnet |
+| **UndercollateralizedLendingPool** | `0x84234C1403768D9A509c1241e5F39f81246880d2` | Creditcoin Testnet |
+| **CreditAttestationSBT (Soulbound Token)** | `0xb22baF385067aF8d66823282bb4F2e3EECB60831` | Creditcoin Testnet |
+| **ReputationAMM (Track 1: DeFi)** | `0x81463b6bf1A8DD535c6DAeF034cAb6ee92434c32` | Creditcoin Testnet |
+| **ReputationFlashLoan (Track 1: DeFi)** | `0x4962e6AdF6E59C60058d09b7cA4516dD2410d637` | Creditcoin Testnet |
+| **ReputationYieldVault (Track 1: DeFi)** | `0x630943C1eD77b375d2Bb70647090F18a05490bc1` | Creditcoin Testnet |
+| **RWATreasuryYieldFund (Track 2: RWA)** | `0x2be1E6044ACEE8868b775a8C48C05f569d1Af80A` | Creditcoin Testnet |
+| **GamingEcosystemHub (Track 3: Gaming)** | `0xc9E671F2F07311384D08885Bf0B99E8F745B22Bb` | Creditcoin Testnet |
+| **DePINInfrastructureHub (Track 4: DePIN)** | `0x99b400D55dA3A9f9aDa967b1D60d9E3cBA2bB9Bc` | Creditcoin Testnet |
+| **AutonomousAIHub (Track 5: AI)** | `0xEc1445818cF57507Ff46B8a72daa9F7A66B60a5D` | Creditcoin Testnet |
+| **ReputationArena (PredictBay Arena)** | `0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5` | Creditcoin Testnet |
+
+---
+
+## 👥 11. Team & Open Source
 * **Team**: CredX Protocol Builders
 * **License**: MIT License
 * **Open Source Commitment**: Built specifically to enrich the Creditcoin L1 ecosystem.
+

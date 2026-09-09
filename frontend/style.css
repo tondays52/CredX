@@ -1,47 +1,158 @@
-/* Glassmorphic Cyber-Fintech Styles for CredX */
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+/* ==========================================================================
+   CredX Protocol — Professional Cyber-Fintech Design System (v3.0)
+   QClay & Levi Wilson Dribbble Aesthetics: Obsidian Glass, Neon Glows & Bento Depth
+   ========================================================================== */
 
-body {
-  background-color: #060913;
-  color: #f1f5f9;
-  font-family: 'Plus Jakarta Sans', sans-serif;
-  overflow-x: hidden;
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-deep: #05070d;
+  --bg-darker: #020307;
+  --bg-card: rgba(11, 17, 32, 0.72);
+  --bg-card-hover: rgba(16, 24, 46, 0.88);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-glow-cyan: rgba(6, 182, 212, 0.4);
+  --border-glow-purple: rgba(168, 85, 247, 0.4);
+  --border-glow-emerald: rgba(16, 185, 129, 0.4);
+
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+  --purple-400: #c084fc;
+  --purple-500: #a855f7;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+  --rose-400: #fb7185;
+  --rose-500: #f43f5e;
+  --blue-500: #3b82f6;
+
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-inter: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
 }
 
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: #f1f5f9;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   1. Glassmorphic Surface Cards & Glow Effects (QClay Style)
+   ═════════════════════════════════════════════════════════════════════════ */
 .glass-card {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  background: var(--bg-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 28px;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.02);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  pointer-events: none;
 }
 
 .glass-card-interactive {
-  background: rgba(15, 23, 42, 0.65);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background: var(--bg-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 24px;
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.5);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
 }
 
 .glass-card-interactive:hover {
-  transform: translateY(-2px);
-  border-color: rgba(6, 182, 212, 0.3);
-  box-shadow: 0 12px 40px 0 rgba(6, 182, 212, 0.12);
+  transform: translateY(-4px);
+  background: var(--bg-card-hover);
+  border-color: rgba(6, 182, 212, 0.4);
+  box-shadow: 0 25px 50px -10px rgba(6, 182, 212, 0.16), 0 0 20px rgba(6, 182, 212, 0.08);
+}
+
+.glass-card-interactive::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.04), transparent);
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+
+.glass-card-interactive:hover::after {
+  left: 100%;
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   2. Navigation Tabs & Active Pill Selectors
+   ═════════════════════════════════════════════════════════════════════════ */
+.tab-btn {
+  position: relative;
+  font-weight: 600;
+  transition: all 0.25s ease;
 }
 
 .tab-btn.active {
-  background: rgba(6, 182, 212, 0.15);
-  color: #22d3ee;
-  border: 1px solid rgba(6, 182, 212, 0.3);
-  box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.22), rgba(99, 102, 241, 0.22));
+  color: #22d3ee !important;
+  border: 1px solid rgba(6, 182, 212, 0.45);
+  box-shadow: 0 0 20px rgba(6, 182, 212, 0.25);
 }
 
-/* Soulbound Token Holographic Card */
+.tab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--cyan-400);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--cyan-400);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   3. Holographic Soulbound Attestation Card (CX-SBT)
+   ═════════════════════════════════════════════════════════════════════════ */
 .sbt-badge {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(6, 182, 212, 0.15) 50%, rgba(16, 185, 129, 0.15) 100%);
+  background: radial-gradient(circle at 50% 0%, rgba(139, 92, 246, 0.25) 0%, rgba(6, 182, 212, 0.15) 50%, rgba(11, 17, 32, 0.95) 100%);
   position: relative;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 32px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 40px rgba(139, 92, 246, 0.2);
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+}
+
+.sbt-badge:hover {
+  transform: perspective(1000px) rotateX(2deg) rotateY(-2deg) translateY(-4px);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.8), 0 0 50px rgba(6, 182, 212, 0.3);
 }
 
 .sbt-badge::before {
@@ -51,10 +162,10 @@ body {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.08) 0%, transparent 60%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 60%);
   transform: rotate(30deg);
   pointer-events: none;
-  animation: shimmer 8s infinite linear;
+  animation: shimmer 10s infinite linear;
 }
 
 @keyframes shimmer {
@@ -62,35 +173,230 @@ body {
   100% { transform: rotate(360deg); }
 }
 
-/* Custom Scrollbar */
+/* ═════════════════════════════════════════════════════════════════════════
+   4. Custom Scrollbar
+   ═════════════════════════════════════════════════════════════════════════ */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #060913;
+  background: #05070d;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.16);
   border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(6, 182, 212, 0.5);
+  background: rgba(6, 182, 212, 0.6);
 }
 
-/* Neon Glows */
+/* ═════════════════════════════════════════════════════════════════════════
+   5. Glowing Accents & Status Indicators
+   ═════════════════════════════════════════════════════════════════════════ */
 .glow-cyan {
-  box-shadow: 0 0 25px rgba(6, 182, 212, 0.35);
+  box-shadow: 0 0 25px rgba(6, 182, 212, 0.4);
 }
-
 .glow-emerald {
-  box-shadow: 0 0 25px rgba(16, 185, 129, 0.35);
+  box-shadow: 0 0 25px rgba(16, 185, 129, 0.4);
 }
-
 .glow-purple {
-  box-shadow: 0 0 25px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 0 25px rgba(139, 92, 246, 0.4);
+}
+.glow-amber {
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.4);
 }
 
-.glow-amber {
-  box-shadow: 0 0 25px rgba(245, 158, 11, 0.35);
+/* ═════════════════════════════════════════════════════════════════════════
+   6. Modern Top-Layer Modals with Discrete Transitions
+   ═════════════════════════════════════════════════════════════════════════ */
+.game-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(3, 5, 12, 0.88);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.game-modal.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.modal-container {
+  transform: scale(0.92) translateY(24px);
+  transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.game-modal.active .modal-container {
+  transform: scale(1) translateY(0);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   7. Interactive Gaming Component Styling (Farm, Chest, Vault)
+   ═════════════════════════════════════════════════════════════════════════ */
+@keyframes chest-shake {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  20% { transform: rotate(-6deg) scale(1.06); }
+  40% { transform: rotate(6deg) scale(1.09); }
+  60% { transform: rotate(-8deg) scale(1.12); }
+  80% { transform: rotate(8deg) scale(1.14); }
+}
+
+.chest-shaking {
+  animation: chest-shake 0.8s infinite ease-in-out;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 30px rgba(245, 158, 11, 0.4); }
+  50% { box-shadow: 0 0 70px rgba(245, 158, 11, 0.85); }
+}
+
+.chest-glow {
+  animation: pulse-glow 2s infinite ease-in-out;
+}
+
+.farm-tile {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: 18px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  user-select: none;
+}
+
+.farm-tile:hover:not(.harvested) {
+  transform: scale(1.08) translateY(-4px);
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 12px 30px rgba(16, 185, 129, 0.3);
+}
+
+.farm-tile.harvested {
+  opacity: 0.4;
+  filter: grayscale(0.85);
+  transform: scale(0.95);
+  cursor: default;
+}
+
+.item-card-mythic {
+  background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.3) 0%, rgba(11, 17, 32, 0.95) 75%);
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  box-shadow: 0 0 45px rgba(245, 158, 11, 0.35);
+}
+
+.item-card-legendary {
+  background: radial-gradient(circle at 50% 0%, rgba(168, 85, 247, 0.3) 0%, rgba(11, 17, 32, 0.95) 75%);
+  border: 1px solid rgba(168, 85, 247, 0.6);
+  box-shadow: 0 0 45px rgba(168, 85, 247, 0.35);
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   8. Professional Floating Toast Notifications Stack
+   ═════════════════════════════════════════════════════════════════════════ */
+#toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  max-width: 420px;
+  width: calc(100vw - 48px);
+}
+
+.toast-item {
+  pointer-events: auto;
+  background: rgba(11, 17, 32, 0.94);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 18px;
+  padding: 14px 18px;
+  box-shadow: 0 20px 45px -5px rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  transform: translateX(120%);
+  opacity: 0;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.toast-item.show {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.toast-item.toast-success {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: radial-gradient(circle at 0% 0%, rgba(16, 185, 129, 0.15) 0%, rgba(11, 17, 32, 0.95) 100%);
+}
+
+.toast-item.toast-error {
+  border-color: rgba(244, 63, 94, 0.4);
+  background: radial-gradient(circle at 0% 0%, rgba(244, 63, 94, 0.15) 0%, rgba(11, 17, 32, 0.95) 100%);
+}
+
+.toast-item.toast-info {
+  border-color: rgba(6, 182, 212, 0.4);
+  background: radial-gradient(circle at 0% 0%, rgba(6, 182, 212, 0.15) 0%, rgba(11, 17, 32, 0.95) 100%);
+}
+
+.toast-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: var(--cyan-400);
+  width: 100%;
+  animation: toast-countdown linear forwards;
+}
+
+.toast-success .toast-progress { background: var(--emerald-400); }
+.toast-error .toast-progress { background: var(--rose-400); }
+.toast-info .toast-progress { background: var(--cyan-400); }
+
+@keyframes toast-countdown {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+/* ═════════════════════════════════════════════════════════════════════════
+   9. Range Sliders & Inputs
+   ═════════════════════════════════════════════════════════════════════════ */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--cyan-400);
+  cursor: pointer;
+  box-shadow: 0 0 12px var(--cyan-400);
+  transition: transform 0.15s ease;
+}
+
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
 }

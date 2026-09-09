@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -11,6 +11,11 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
  */
 contract ReputationYieldVault {
     using SafeERC20 for IERC20;
+
+    error ZeroAddress();
+    error InvalidAmount();
+    error InsufficientBalance();
+    error NoRewards();
 
     ICredXHub public immutable CREDX_HUB;
     IERC20 public immutable STAKING_TOKEN;
@@ -32,9 +37,9 @@ contract ReputationYieldVault {
     event RewardsClaimed(address indexed user, uint256 reward, uint256 appliedMultiplier);
 
     constructor(address _credXHub, address _stakingToken, address _rewardToken) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_stakingToken != address(0), "Zero address: stakingToken");
-        require(_rewardToken != address(0), "Zero address: rewardToken");
+        if (_credXHub == address(0) || _stakingToken == address(0) || _rewardToken == address(0)) {
+            revert ZeroAddress();
+        }
         CREDX_HUB = ICredXHub(_credXHub);
         STAKING_TOKEN = IERC20(_stakingToken);
         REWARD_TOKEN = IERC20(_rewardToken);
@@ -62,7 +67,7 @@ contract ReputationYieldVault {
     }
 
     function stake(uint256 amount) external {
-        require(amount > 0, "Cannot stake 0");
+        if (amount == 0) revert InvalidAmount();
         _updateRewards(msg.sender);
         
         STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
@@ -72,8 +77,8 @@ contract ReputationYieldVault {
     }
 
     function unstake(uint256 amount) external {
-        require(amount > 0, "Cannot unstake 0");
-        require(stakers[msg.sender].balance >= amount, "Insufficient balance");
+        if (amount == 0) revert InvalidAmount();
+        if (stakers[msg.sender].balance < amount) revert InsufficientBalance();
         
         _updateRewards(msg.sender);
         
@@ -87,7 +92,7 @@ contract ReputationYieldVault {
         _updateRewards(msg.sender);
         
         uint256 reward = stakers[msg.sender].accumulatedRewards;
-        require(reward > 0, "No rewards");
+        if (reward == 0) revert NoRewards();
         
         stakers[msg.sender].accumulatedRewards = 0;
         

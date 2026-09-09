@@ -1,5 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
+const { mine } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 
 describe("ReputationArena: PredictBay-Style Binary Paper Trading", function () {
   let deployer, trader1, trader2;
@@ -32,7 +33,7 @@ describe("ReputationArena: PredictBay-Style Binary Paper Trading", function () {
     });
 
     it("should auto-register user on their first prediction if not registered", async function () {
-      await arena.createRound("BTC/USD", 7844452000000n, 120); // 2 min round
+      await arena.createRound("BTC/USD", 7844452000000n, 120); // 120 blocks round
       await arena.connect(trader1).placePrediction(1, 0, ethers.parseEther("100")); // Choice.ABOVE
       
       const stats = await arena.userStats(trader1.address);
@@ -59,9 +60,8 @@ describe("ReputationArena: PredictBay-Style Binary Paper Trading", function () {
       await arena.connect(trader1).placePrediction(1, 0, ethers.parseEther("500")); // ABOVE
       await arena.connect(trader2).placePrediction(1, 1, ethers.parseEther("500")); // BELOW
 
-      // Fast-forward time past round close
-      await ethers.provider.send("evm_increaseTime", [130]);
-      await ethers.provider.send("evm_mine");
+      // Mine blocks past round close
+      await mine(130);
 
       // Settlement price: $78,500.00 (> Strike -> ABOVE wins)
       const settlementPrice = 7850000000000n;
@@ -93,8 +93,7 @@ describe("ReputationArena: PredictBay-Style Binary Paper Trading", function () {
         await arena.createRound("BTC/USD", 7800000000000n, 120);
         await arena.connect(trader1).placePrediction(i, 0, ethers.parseEther("100")); // ABOVE
 
-        await ethers.provider.send("evm_increaseTime", [130]);
-        await ethers.provider.send("evm_mine");
+        await mine(130);
 
         await arena.settleRound(i, 7810000000000n); // ABOVE wins
         await arena.connect(trader1).claimPayout(i);
@@ -119,7 +118,7 @@ describe("ReputationArena: PredictBay-Style Binary Paper Trading", function () {
       await arena.connect(trader1).registerUser();
       await expect(
         arena.connect(trader1).syncStreakToReputation()
-      ).to.be.revertedWith("Must have active win streak >= 3");
+      ).to.be.revertedWithCustomError(arena, "InsufficientWinStreak");
     });
   });
 });

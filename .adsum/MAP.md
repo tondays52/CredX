@@ -1,70 +1,51 @@
-# Workspace map — 51 file(s)
+# Workspace map — 25 file(s)
 
 A map, not a substitute for reading. Paths are workspace-relative. Use read_file (with
 start_line/end_line) or search_files on these paths instead of re-listing directories.
 
-(root)
-  .env.example
-  .gitignore
-  .markdownlint.json
-  .markdownlintignore
-  deployments.json
-  hardhat.config.js
-  package-lock.json
-  package.json
-  update-pragmas.js
-contracts/core/
-  CreditAttestationSBT.sol
-  CreditScoreEngine.sol
-  CredXHub.sol
-  UndercollateralizedLendingPool.sol
-contracts/interfaces/
-  IAttestationVerifier.sol
-  ICredXHub.sol
-  ILendingPool.sol
-  IMockPriceOracle.sol
+chrome-extension/
+  background.js
+  manifest.json
 contracts/libraries/
   AttestcoinConstants.sol
-contracts/mocks/
-  MockAttestationOracle.sol
-  MockDePINToken.sol
-  MockERC20.sol
-  MockERC721.sol
-  MockFlashBorrower.sol
-  MockGameItem.sol
-  MockGameToken.sol
-  MockPriceOracle.sol
 extension/
   background.js
   manifest.json
+extension/icons/
+  icon128.png
+  icon16.png
+  icon48.png
 extension/lib/
   ethers.umd.min.js
 extension/popup/
   popup.css
   popup.html
   popup.js
-frontend/
-  app.js
-  arena.css
-  arena.html
-  arena.js
-  contracts.json
-  index.html
-  style.css
+frontend/public/
+  favicon.png
+  ryzen-hero.mp4
+frontend/src/
+  App.tsx
+  index.css
+  main.tsx
+  posthog.ts
+  vite-env.d.ts
 scripts/
   create_docx.js
   deploy.js
+  generate_extension_icons.js
   generateProof.js
+  serve.js
   test-e2e.js
-test/
-  AI.test.js
-  Arena.test.js
-  CredX.test.js
-  DeFi.test.js
-  DePIN.test.js
-  Gaming.test.js
-  RWA.test.js
-  Tracks.test.js
-(4 doc file(s) omitted)
+(5 doc file(s) omitted)
 contracts/core/tracks/ — 12 more file(s) (use list_files to enumerate)
+extensions/quarto-journals/acm/ — 21 more file(s) (use list_files to enumerate)
+frontend/public/images/ — 28 more file(s) (use list_files to enumerate)
+frontend/src/utils/ — 7 more file(s) (use list_files to enumerate)
+contracts/interfaces/ — 7 more file(s) (use list_files to enumerate)
+contracts/mocks/ — 8 more file(s) (use list_files to enumerate)
+./ — 10 more file(s) (use list_files to enumerate)
+frontend/ — 17 more file(s) (use list_files to enumerate)
+test/ — 8 more file(s) (use list_files to enumerate)
+(14 directories omitted)
 (walk stopped early: depth cap reached — use list_files for anything not listed)

@@ -1,21 +1,21 @@
 {
-  "network": "hardhat",
-  "chainId": "31337",
-  "timestamp": "2026-09-08T21:50:17.329Z",
+  "network": "creditcoinTestnet",
+  "chainId": "102031",
+  "timestamp": "2026-09-09T12:29:41.669Z",
   "contracts": {
-    "AttestationVerifier": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
-    "CreditScoreEngine": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
-    "CredXHub": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0",
-    "cUSD": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
-    "UndercollateralizedLendingPool": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
-    "CreditAttestationSBT": "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e",
-    "ReputationAMM": "0xA51c1fc2f0D1a1b8494Ed1FE312d7C3a78Ed91C0",
-    "ReputationFlashLoan": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
-    "ReputationYieldVault": "0x9A676e781A523b5d0C0e43731313A708CB607508",
-    "RWATreasuryYieldFund": "0x0B306BF915C4d645ff596e518fAf3F9669b97016",
-    "GamingEcosystemHub": "0x959922bE3CAee4b8Cd9a407cc3ac1C251C2007B1",
-    "DePINInfrastructureHub": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
-    "AutonomousAIHub": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed",
-    "ReputationArena": "0x3Aa5ebB10DC797CAC828524e59A333d0A371443c"
+    "AttestationVerifier": "0x34aA30efE2226ffC2E55607017FbA2F07e62b279",
+    "CreditScoreEngine": "0xA31697bBd4900f8FA62015A51dA3c58972E96BB6",
+    "CredXHub": "0x729b2D8B630c4241d051c92D4FeB31412846eE18",
+    "cUSD": "0xdec5170C46DC63D812c699E9dFE6561FFd1BF298",
+    "UndercollateralizedLendingPool": "0x84234C1403768D9A509c1241e5F39f81246880d2",
+    "CreditAttestationSBT": "0xb22baF385067aF8d66823282bb4F2e3EECB60831",
+    "ReputationAMM": "0x81463b6bf1A8DD535c6DAeF034cAb6ee92434c32",
+    "ReputationFlashLoan": "0x4962e6AdF6E59C60058d09b7cA4516dD2410d637",
+    "ReputationYieldVault": "0x630943C1eD77b375d2Bb70647090F18a05490bc1",
+    "RWATreasuryYieldFund": "0x2be1E6044ACEE8868b775a8C48C05f569d1Af80A",
+    "GamingEcosystemHub": "0xc9E671F2F07311384D08885Bf0B99E8F745B22Bb",
+    "DePINInfrastructureHub": "0x99b400D55dA3A9f9aDa967b1D60d9E3cBA2bB9Bc",
+    "AutonomousAIHub": "0xEc1445818cF57507Ff46B8a72daa9F7A66B60a5D",
+    "ReputationArena": "0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5"
   }
 }

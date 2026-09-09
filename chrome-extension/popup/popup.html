@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CredX Virtual Node</title>
+  <link rel="stylesheet" href="popup.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="popup-wrapper">
+    <!-- Header -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <h1 class="brand-title">CredX Node</h1>
+          <span class="brand-sub">Creditcoin DePIN Layer</span>
+        </div>
+      </div>
+      <div id="statusBadge" class="status-badge disconnected">
+        <span class="status-dot">●</span>
+        <span id="statusText">Inactive</span>
+      </div>
+    </header>
+
+    <!-- Real Machine Hardware Specs Banner -->
+    <div class="hardware-banner">
+      <div class="hw-item">
+        <span class="hw-label">CPU Cores</span>
+        <span class="hw-value" id="hwCoresValue">-- Cores</span>
+      </div>
+      <div class="hw-divider"></div>
+      <div class="hw-item">
+        <span class="hw-label">RAM</span>
+        <span class="hw-value" id="hwMemoryValue">-- GB</span>
+      </div>
+      <div class="hw-divider"></div>
+      <div class="hw-item">
+        <span class="hw-label">Live Ping</span>
+        <span class="hw-value text-green" id="hwPingValue">-- ms</span>
+      </div>
+    </div>
+
+    <!-- Real GPU & Machine Architecture Badge -->
+    <div class="gpu-badge-container">
+      <div class="gpu-icon">🎮</div>
+      <div class="gpu-info">
+        <span class="gpu-label">Detected Hardware Accelerator</span>
+        <span class="gpu-value" id="hwGpuValue">Detecting GPU...</span>
+      </div>
+    </div>
+
+    <!-- Live Telemetry Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-icon">💎</span>
+          <span class="stat-label">CredX Points</span>
+        </div>
+        <span class="stat-value text-cyan" id="pointsValue">0</span>
+        <span class="stat-hint">+10 pts / min active</span>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-icon">⏱️</span>
+          <span class="stat-label">Node Uptime</span>
+        </div>
+        <span class="stat-value text-white" id="uptimeValue">00:00:00</span>
+        <span class="stat-hint">100% Availability</span>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-header">
+          <span class="stat-icon">📡</span>
+          <span class="stat-label">Shared Bandwidth</span>
+        </div>
+        <span class="stat-value text-purple" id="bandwidthValue">0 MB</span>
+        <span class="stat-hint" id="downlinkSpeedHint">Downlink: -- Mbps</span>
+      </div>
+
+      <div class="stat-card highlight-card">
+        <div class="stat-header">
+          <span class="stat-icon">🛡️</span>
+          <span class="stat-label">Credit Score</span>
+        </div>
+        <span class="stat-value text-gold" id="scoreValue">794 CTS</span>
+        <span class="stat-hint text-gold font-bold">Super-Prime Tier</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="toggleNodeBtn" class="btn btn-primary">
+        <span id="toggleIcon">🚀</span>
+        <span id="toggleBtnText">Start Virtual Node</span>
+      </button>
+      <button id="syncChainBtn" class="btn btn-secondary" disabled>
+        <span>⚡ Sync Proof to Creditcoin</span>
+      </button>
+    </div>
+
+    <!-- Live Status & Network Footer -->
+    <div id="txStatus" class="tx-status hidden"></div>
+
+    <footer class="footer">
+      <span class="net-indicator">●</span>
+      <span>Creditcoin Testnet (Chain ID: 102031)</span>
+    </footer>
+  </div>
+
+  <script src="../lib/ethers.umd.min.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

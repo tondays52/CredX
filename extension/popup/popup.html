@@ -1,44 +1,101 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>CredX Node</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CredX Pulse Node</title>
   <link rel="stylesheet" href="popup.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <h1>CredX Virtual Node</h1>
-      <div id="statusBadge" class="badge disconnected">Disconnected</div>
-    </div>
-    
-    <div class="stats-grid">
-      <div class="stat-card">
-        <span class="stat-label">CredX Points</span>
-        <span class="stat-value" id="pointsValue">0</span>
+  <div class="popup-wrapper">
+    <!-- Header with Epoch 0 Earnings -->
+    <header class="header">
+      <div class="brand">
+        <div class="brand-icon">⚡</div>
+        <div>
+          <h1 class="brand-title">CredX Pulse</h1>
+          <span class="brand-sub">Creditcoin DePIN Layer</span>
+        </div>
       </div>
-      <div class="stat-card">
-        <span class="stat-label">Uptime</span>
-        <span class="stat-value" id="uptimeValue">00:00:00</span>
+      <div class="epoch-earnings">
+        <span class="epoch-label">Epoch 0:</span>
+        <div class="earnings-badges">
+          <span class="earning-item text-green">🍃 <strong id="extUptimePts">41,706</strong></span>
+          <span class="earning-item text-cyan">💎 <strong id="extNetworkPts">54.57</strong></span>
+        </div>
       </div>
-      <div class="stat-card">
-        <span class="stat-label">Bandwidth Shared</span>
-        <span class="stat-value" id="bandwidthValue">0 MB</span>
-      </div>
-      <div class="stat-card highlight">
-        <span class="stat-label">Credit Score</span>
-        <span class="stat-value" id="scoreValue">---</span>
+    </header>
+
+    <!-- Main Centerpiece: Iconic Giant Glowing Power Button -->
+    <div class="power-section">
+      <button id="bigPowerBtn" class="big-power-btn connected" title="Toggle CredX Pulse Node">
+        <svg class="power-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+          <line x1="12" y1="2" x2="12" y2="12"></line>
+        </svg>
+        <div class="pulse-ring"></div>
+      </button>
+      <div class="power-status">
+        <span id="powerStatusTitle" class="power-title">Pulse is Connected</span>
+        <span id="powerStatusSubtitle" class="power-sub">You're doing great! Keep contributing to earn.</span>
       </div>
     </div>
 
-    <div class="actions">
-      <button id="toggleNodeBtn" class="btn primary">Start Node</button>
-      <button id="syncChainBtn" class="btn outline" disabled>Sync to Chain</button>
+    <!-- Network Quality Progress Bar -->
+    <div class="quality-card">
+      <div class="quality-header">
+        <span>Network Quality:</span>
+        <strong id="qualityPercent" class="text-lime">98%</strong>
+      </div>
+      <div class="progress-track">
+        <div id="qualityBar" class="progress-fill" style="width: 98%;"></div>
+      </div>
+      <div class="quality-footer">
+        <span id="hwPingValue">18 ms ping</span>
+        <span>0.00% Packet Loss</span>
+      </div>
     </div>
-    
+
+    <!-- Real Machine Hardware Specs Pill -->
+    <div class="hardware-banner">
+      <div class="hw-item">
+        <span class="hw-label">CPU Cores</span>
+        <span class="hw-value" id="hwCoresValue">-- Cores</span>
+      </div>
+      <div class="hw-divider"></div>
+      <div class="hw-item">
+        <span class="hw-label">RAM</span>
+        <span class="hw-value" id="hwMemoryValue">-- GB</span>
+      </div>
+      <div class="hw-divider"></div>
+      <div class="hw-item">
+        <span class="hw-label">Accelerator</span>
+        <span class="hw-value truncate" id="hwGpuValue">WebGL</span>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="syncChainBtn" class="btn btn-primary">
+        <span>⚡ Sync to Creditcoin (+35 CTS)</span>
+      </button>
+      <button id="openDashboardBtn" class="btn btn-secondary">
+        <span>Desktop Dashboard ↗</span>
+      </button>
+    </div>
+
+    <!-- Live Status -->
     <div id="txStatus" class="tx-status hidden"></div>
+
+    <footer class="footer">
+      <span class="net-indicator">●</span>
+      <span>Creditcoin Testnet • Precompile 0x0FD2</span>
+    </footer>
   </div>
-  
+
   <script src="../lib/ethers.umd.min.js"></script>
   <script src="popup.js"></script>
 </body>

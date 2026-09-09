@@ -61,7 +61,7 @@ describe("AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification)", fun
 
       await expect(
         aiHub.processCrossChainRiskSignal(proof, 2000, 300)
-      ).to.be.revertedWith("Proof already processed");
+      ).to.be.revertedWithCustomError(aiHub, "ProofAlreadyProcessed");
     });
 
     it("should reject invalid cryptographic state proofs", async function () {
@@ -70,7 +70,7 @@ describe("AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification)", fun
 
       await expect(
         aiHub.processCrossChainRiskSignal(proof, 2000, 300)
-      ).to.be.revertedWith("Cryptographic proof invalid");
+      ).to.be.revertedWithCustomError(aiHub, "CryptographicProofInvalid");
     });
   });
 
@@ -86,7 +86,7 @@ describe("AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification)", fun
       await aiHub.connect(aiAgent).registerAIAgent();
       await expect(
         aiHub.connect(aiAgent).triggerAutonomousAgentLoan(ethers.parseEther("1000"))
-      ).to.be.revertedWith("Agent credit score below Prime threshold (700)");
+      ).to.be.revertedWithCustomError(aiHub, "ScoreBelowThreshold");
     });
 
     it("should boost agent reputation via verified performance proofs and dispatch loans", async function () {
@@ -167,7 +167,7 @@ describe("AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification)", fun
       const proof2 = buildMockEventProof(1, "0x" + "d".repeat(64), 19500002, null, null, "2500");
       await expect(
         aiHub.settleVerifiableComputeTask(taskId, proof2)
-      ).to.be.revertedWith("Task already settled");
+      ).to.be.revertedWithCustomError(aiHub, "TaskAlreadySettled");
     });
   });
 });

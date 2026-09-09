@@ -1,6 +1,6 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
-const { time } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
+const { time, mine } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 
 describe("GamingEcosystemHub", function () {
     let credXHub;
@@ -86,10 +86,10 @@ describe("GamingEcosystemHub", function () {
 
         it("Enforces 1 day cooldown", async function () {
             await hub.connect(primeUser).gatherResources();
-            await expect(hub.connect(primeUser).gatherResources()).to.be.revertedWith("Gather cooldown active");
+            await expect(hub.connect(primeUser).gatherResources()).to.be.revertedWithCustomError(hub, "GatherCooldownActive");
 
-            // Fast forward 1 day
-            await time.increase(86400);
+            // Fast forward 1 day (~7200 blocks)
+            await mine(7200);
 
             await hub.connect(primeUser).gatherResources();
             const balance = await gameToken.balanceOf(primeUser.address);
@@ -99,7 +99,7 @@ describe("GamingEcosystemHub", function () {
 
     describe("Anti-Sybil Fair Lootbox", function () {
         it("Reverts if user score is < 500", async function () {
-            await expect(hub.connect(sybilUser).openLootbox()).to.be.revertedWith("Score too low for lootbox");
+            await expect(hub.connect(sybilUser).openLootbox()).to.be.revertedWithCustomError(hub, "ScoreTooLowForLootbox");
         });
 
         it("Allows Standard and Prime users to open lootboxes", async function () {

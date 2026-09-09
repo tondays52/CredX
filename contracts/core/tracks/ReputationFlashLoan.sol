@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
+import {IFlashBorrower} from "../../interfaces/IFlashBorrower.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-
-interface IFlashBorrower {
-    function onFlashLoan(address initiator, uint256 amount, uint256 fee, bytes calldata data) external returns (bytes32);
-}
 
 /**
  * @title ReputationFlashLoan
@@ -15,6 +12,11 @@ interface IFlashBorrower {
  */
 contract ReputationFlashLoan {
     using SafeERC20 for IERC20;
+
+    error ZeroAddress();
+    error InvalidAmount();
+    error InsufficientLiquidity();
+    error CallbackFailed();
 
     ICredXHub public immutable CREDX_HUB;
     IERC20 public immutable TOKEN;
@@ -29,8 +31,7 @@ contract ReputationFlashLoan {
     event FlashLoan(address indexed receiver, address indexed token, uint256 amount, uint256 fee, uint256 score);
 
     constructor(address _credXHub, address _token) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_token != address(0), "Zero address: token");
+        if (_credXHub == address(0) || _token == address(0)) revert ZeroAddress();
         CREDX_HUB = ICredXHub(_credXHub);
         TOKEN = IERC20(_token);
     }
@@ -42,9 +43,9 @@ contract ReputationFlashLoan {
      * @param data Arbitrary data passed to the receiver.
      */
     function flashLoan(address receiver, uint256 amount, bytes calldata data) external {
-        require(receiver != address(0), "Zero address: receiver");
-        require(amount > 0, "Amount must be > 0");
-        require(TOKEN.balanceOf(address(this)) >= amount, "Not enough liquidity");
+        if (receiver == address(0)) revert ZeroAddress();
+        if (amount == 0) revert InvalidAmount();
+        if (TOKEN.balanceOf(address(this)) < amount) revert InsufficientLiquidity();
 
         // Determine fee based on caller's credit score (not the receiver contract, but the initiator)
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
@@ -62,10 +63,9 @@ contract ReputationFlashLoan {
         TOKEN.safeTransfer(receiver, amount);
 
         // Execute callback
-        require(
-            IFlashBorrower(receiver).onFlashLoan(msg.sender, amount, fee, data) == CALLBACK_SUCCESS,
-            "FlashLoan: Callback failed"
-        );
+        if (IFlashBorrower(receiver).onFlashLoan(msg.sender, amount, fee, data) != CALLBACK_SUCCESS) {
+            revert CallbackFailed();
+        }
 
         // Pull funds back (principal + fee)
         TOKEN.safeTransferFrom(receiver, address(this), amount + fee);

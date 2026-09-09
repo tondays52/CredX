@@ -74,7 +74,7 @@ describe("RWA Track: Treasury Yield Fund", function () {
     
     await expect(
       treasuryFund.connect(lowScoreUser).deposit(depositAmount)
-    ).to.be.revertedWith("Credit score too low for institutional fund");
+    ).to.be.revertedWithCustomError(treasuryFund, "CreditScoreTooLow");
   });
 
   it("should allow a Prime user (Score >= 600) to deposit and mint tbUSD", async function () {

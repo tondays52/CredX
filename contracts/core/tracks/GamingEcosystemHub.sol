@@ -1,21 +1,25 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IMockGameToken} from "../../interfaces/IMockGameToken.sol";
+import {IMockGameItem} from "../../interfaces/IMockGameItem.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
-// Interfaces for our mocks since this is just a hub
-interface IMockGameToken is IERC20 {
-    function mint(address to, uint256 amount) external;
-}
-interface IMockGameItem is IERC721 {
-    function mint(address to, uint256 rarity) external returns (uint256);
-}
-
 contract GamingEcosystemHub is IERC721Receiver, Ownable {
+    // Custom Errors
+    error ZeroAddress();
+    error GatherCooldownActive();
+    error ScoreTooLowForLootbox();
+    error NotItemOwner();
+    error NotApproved();
+    error NotListed();
+    error NotSeller();
+    error CannotBuyOwnListing();
+    error FeeTransferFailed();
+    error SellerPaymentFailed();
+
     ICredXHub public immutable CREDX_HUB;
     IMockGameToken public gameToken;
     IMockGameItem public gameItem;
@@ -23,12 +27,13 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
     // Constants
     uint256 public constant MIN_SCORE_LOOTBOX = 500;
     uint256 public constant SUPER_PRIME_SCORE = 750;
-    uint256 public constant GATHER_COOLDOWN = 1 days;
+    uint256 public constant GATHER_COOLDOWN_BLOCKS = 7200; // ~1 day on Creditcoin (12s blocks)
     uint256 public constant BASE_GATHER_AMOUNT = 10 * 10**18;
     uint256 public constant MARKETPLACE_FEE_PERCENT = 2; // 2%
 
     // State
-    mapping(address player => uint256 timestamp) public lastGatherTime;
+    mapping(address player => uint256 blockNumber) public lastGatherBlock;
+    uint256 private _lootboxNonce;
     
     // Marketplace state
     struct Listing {
@@ -51,9 +56,9 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         address _gameToken,
         address _gameItem
     ) Ownable(msg.sender) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_gameToken != address(0), "Zero address: gameToken");
-        require(_gameItem != address(0), "Zero address: gameItem");
+        if (_credXHub == address(0) || _gameToken == address(0) || _gameItem == address(0)) {
+            revert ZeroAddress();
+        }
         CREDX_HUB = ICredXHub(_credXHub);
         gameToken = IMockGameToken(_gameToken);
         gameItem = IMockGameItem(_gameItem);
@@ -61,7 +66,9 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
 
     // 1. Frictionless Daily Gathering (Pixels Style)
     function gatherResources() external {
-        require(block.timestamp >= lastGatherTime[msg.sender] + GATHER_COOLDOWN, "Gather cooldown active");
+        if (lastGatherBlock[msg.sender] != 0 && block.number < lastGatherBlock[msg.sender] + GATHER_COOLDOWN_BLOCKS) {
+            revert GatherCooldownActive();
+        }
         
         uint256 amount = BASE_GATHER_AMOUNT;
         
@@ -76,19 +83,25 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
             amount = BASE_GATHER_AMOUNT * 3; // 3x Multiplier for OG players
         }
 
-        lastGatherTime[msg.sender] = block.timestamp;
+        lastGatherBlock[msg.sender] = block.number;
         gameToken.mint(msg.sender, amount);
 
         emit ResourcesGathered(msg.sender, amount);
     }
 
-    // 2. Anti-Sybil Fair Lootbox
-    function openLootbox() external {
+    /**
+     * @notice Opens a lootbox using an external entropy seed (e.g. from Chainlink VRF or Pyth Entropy).
+     * @param entropySeed Cryptographic entropy seed provided by oracle or VRF callback.
+     */
+    function openLootboxWithEntropy(bytes32 entropySeed) public {
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
-        require(creditScore >= MIN_SCORE_LOOTBOX, "Score too low for lootbox");
+        if (creditScore < MIN_SCORE_LOOTBOX) {
+            revert ScoreTooLowForLootbox();
+        }
 
-        // Pseudorandom rarity
-        uint256 rand = uint256(keccak256(abi.encodePacked(block.timestamp, msg.sender))) % 100;
+        _lootboxNonce++;
+        // Combine VRF/entropy seed with user address and internal sequence nonce
+        uint256 rand = uint256(keccak256(abi.encodePacked(entropySeed, msg.sender, _lootboxNonce))) % 100;
         
         uint256 rarity = 0; // Common
         
@@ -112,10 +125,22 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         emit LootboxOpened(msg.sender, tokenId, rarity);
     }
 
+    /**
+     * @notice Opens a lootbox with default protocol entropy.
+     */
+    function openLootbox() external {
+        bytes32 seed = keccak256(abi.encodePacked(msg.sender, address(this), _lootboxNonce));
+        openLootboxWithEntropy(seed);
+    }
+
     // 3. Zero-Fee Marketplace (IMX Style)
     function listNFT(uint256 tokenId, uint256 price) external {
-        require(gameItem.ownerOf(tokenId) == msg.sender, "Not the owner");
-        require(gameItem.getApproved(tokenId) == address(this) || gameItem.isApprovedForAll(msg.sender, address(this)), "Not approved");
+        if (gameItem.ownerOf(tokenId) != msg.sender) {
+            revert NotItemOwner();
+        }
+        if (gameItem.getApproved(tokenId) != address(this) && !gameItem.isApprovedForAll(msg.sender, address(this))) {
+            revert NotApproved();
+        }
 
         listings[tokenId] = Listing({
             seller: msg.sender,
@@ -128,8 +153,12 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
 
     function cancelListing(uint256 tokenId) external {
         Listing storage listing = listings[tokenId];
-        require(listing.active, "Not listed");
-        require(listing.seller == msg.sender, "Not the seller");
+        if (!listing.active) {
+            revert NotListed();
+        }
+        if (listing.seller != msg.sender) {
+            revert NotSeller();
+        }
         
         listing.active = false;
         emit ListingCancelled(msg.sender, tokenId);
@@ -137,8 +166,12 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
 
     function buyNFT(uint256 tokenId) external {
         Listing storage listing = listings[tokenId];
-        require(listing.active, "Not listed");
-        require(listing.seller != msg.sender, "Cannot buy own listing");
+        if (!listing.active) {
+            revert NotListed();
+        }
+        if (listing.seller == msg.sender) {
+            revert CannotBuyOwnListing();
+        }
 
         uint256 price = listing.price;
         address seller = listing.seller;
@@ -163,9 +196,13 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
         // Transfer funds
         // Need to transfer fee to the hub (address(this)) and sellerAmount to the seller
         if (fee > 0) {
-            require(gameToken.transferFrom(msg.sender, address(this), fee), "Fee transfer failed");
+            if (!gameToken.transferFrom(msg.sender, address(this), fee)) {
+                revert FeeTransferFailed();
+            }
         }
-        require(gameToken.transferFrom(msg.sender, seller, sellerAmount), "Seller payment failed");
+        if (!gameToken.transferFrom(msg.sender, seller, sellerAmount)) {
+            revert SellerPaymentFailed();
+        }
 
         // Transfer NFT
         gameItem.safeTransferFrom(seller, msg.sender, tokenId);

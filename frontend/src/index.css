@@ -1,0 +1,189 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-deep: #030a0d;
+  --bg-darker: #010507;
+  --bg-card: rgba(4, 18, 24, 0.75);
+  --bg-card-hover: rgba(6, 26, 34, 0.90);
+  --border-subtle: rgba(34, 211, 238, 0.12);
+  --border-glow-cyan: rgba(34, 211, 238, 0.45);
+  --border-glow-purple: rgba(168, 85, 247, 0.45);
+  --border-glow-emerald: rgba(16, 185, 129, 0.45);
+
+  --cyan-400: #22d3ee;
+  --cyan-500: #06b6d4;
+  --teal-400: #2dd4bf;
+  --teal-500: #14b8a6;
+  --emerald-400: #34d399;
+  --emerald-500: #10b981;
+  --purple-400: #c084fc;
+  --purple-500: #a855f7;
+  --amber-400: #fbbf24;
+  --amber-500: #f59e0b;
+}
+
+body {
+  background-color: var(--bg-deep);
+  color: #f1f5f9;
+  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Subtle Cyber Grid Background */
+.subtle-cyber-grid {
+  background-image: 
+    linear-gradient(to right, rgba(34, 211, 238, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(34, 211, 238, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* 3D Float Animations */
+@keyframes float-hero-token {
+  0% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(2deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+@keyframes pulse-beam {
+  0% { opacity: 0.75; transform: scaleX(1); }
+  50% { opacity: 1; transform: scaleX(1.08); }
+  100% { opacity: 0.75; transform: scaleX(1); }
+}
+
+@keyframes laser-sweep {
+  0% { transform: rotate(-45deg) translateY(-20px); opacity: 0.3; }
+  50% { transform: rotate(-45deg) translateY(20px); opacity: 0.8; }
+  100% { transform: rotate(-45deg) translateY(-20px); opacity: 0.3; }
+}
+
+.animate-float-token {
+  animation: float-hero-token 5s ease-in-out infinite;
+}
+
+.animate-pulse-beam {
+  animation: pulse-beam 3s ease-in-out infinite;
+}
+
+/* Glassmorphism Classes with Sentra Teal Accents */
+.glass-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 28px;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(34, 211, 238, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.25), transparent);
+  pointer-events: none;
+}
+
+.glass-card-interactive {
+  background: var(--bg-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 24px;
+  box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.6);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.glass-card-interactive:hover {
+  transform: translateY(-6px) scale(1.01);
+  background: var(--bg-card-hover);
+  border-color: rgba(34, 211, 238, 0.45);
+  box-shadow: 0 25px 50px -10px rgba(6, 182, 212, 0.25), 0 0 25px rgba(34, 211, 238, 0.15);
+}
+
+/* Big Typography Outline Watermark */
+.text-outline-watermark {
+  -webkit-text-stroke: 1.5px rgba(34, 211, 238, 0.12);
+  color: transparent;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Floating Satellite Chips */
+.hud-pill-badge {
+  background: rgba(3, 14, 20, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7), 0 0 20px rgba(34, 211, 238, 0.1);
+}
+
+.float-chip-1 { animation: float-slow-1 6s infinite ease-in-out alternate; }
+.float-chip-2 { animation: float-slow-2 7s infinite ease-in-out alternate; }
+
+@keyframes float-slow-1 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  100% { transform: translateY(-10px) rotate(-1deg); }
+}
+
+@keyframes float-slow-2 {
+  0% { transform: translateY(0px) rotate(0deg); }
+  100% { transform: translateY(10px) rotate(1deg); }
+}
+
+/* Infinite Marquee */
+.qclay-marquee {
+  width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  position: relative;
+  mask-image: linear-gradient(to right, transparent, black 15%, black 85%, transparent);
+}
+
+.qclay-marquee-inner {
+  display: inline-flex;
+  gap: 3.5rem;
+  animation: marquee-scroll 25s linear infinite;
+}
+
+@keyframes marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #030a0d;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(34, 211, 238, 0.2);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(34, 211, 238, 0.6);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

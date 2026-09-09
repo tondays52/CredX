@@ -81,7 +81,7 @@ describe("BUIDL CTC 2026 Fall: Multi-Track Extension", function () {
       
       await expect(
         depinModule.connect(user1).delegateToNode(nodeOperator.address, ethers.parseEther("10"))
-      ).to.be.revertedWith("Node score too low");
+      ).to.be.revertedWithCustomError(depinModule, "NodeScoreTooLow");
     });
 
     it("should allow delegation to nodes with high scores", async function () {
@@ -106,7 +106,7 @@ describe("BUIDL CTC 2026 Fall: Multi-Track Extension", function () {
     it("should prevent low score users from borrowing", async function () {
       await expect(
         gamingModule.connect(user2).borrowNFT(await mockNFT.getAddress(), 0)
-      ).to.be.revertedWith("Score too low for zero-collateral borrow");
+      ).to.be.revertedWithCustomError(gamingModule, "ScoreTooLowForScholarship");
     });
 
     it("should let high score users borrow without collateral", async function () {
@@ -119,7 +119,7 @@ describe("BUIDL CTC 2026 Fall: Multi-Track Extension", function () {
     it("should prevent non-AI agents from updating risk", async function () {
       await expect(
         aiModule.connect(user1).updateRiskParameters(2000, 500)
-      ).to.be.revertedWith("Only AI agent can call");
+      ).to.be.revertedWithCustomError(aiModule, "NotAIAgent");
     });
 
     it("should let AI agent update risk and calculate adjusted APR", async function () {

@@ -1,0 +1,8 @@
+title: Support for academicons
+author: David Schoch
+version: 0.4.0
+contributes:
+  shortcodes:
+    - academicons.lua
+source: schochastics/academicons@2adf8a2
+source-type: registry

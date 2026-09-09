@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -21,31 +21,48 @@ contract DePINDelegationPool {
     mapping(address user => uint256 amount) public userDeposits;
     mapping(address node => uint256 amount) public nodeDelegations;
 
+    // Custom Errors
+    error ZeroAddress();
+    error ZeroAmount();
+    error InsufficientDeposit();
+    error NodeScoreTooLow();
+
     event Deposited(address indexed user, uint256 amount);
     event Delegated(address indexed user, address indexed node, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
 
     constructor(address _credXHub, address _delegationToken) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_delegationToken != address(0), "Zero address: delegationToken");
+        if (_credXHub == address(0) || _delegationToken == address(0)) {
+            revert ZeroAddress();
+        }
         CREDX_HUB = ICredXHub(_credXHub);
         DELEGATION_TOKEN = IERC20(_delegationToken);
     }
 
     function depositCapital(uint256 amount) external {
-        require(amount > 0, "Must deposit > 0");
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
         DELEGATION_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
         userDeposits[msg.sender] += amount;
         emit Deposited(msg.sender, amount);
     }
 
     function delegateToNode(address node, uint256 amount) external {
-        require(node != address(0), "Zero address: node");
-        require(userDeposits[msg.sender] >= amount, "Insufficient deposit");
-        require(amount > 0, "Must delegate > 0");
+        if (node == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+        if (userDeposits[msg.sender] < amount) {
+            revert InsufficientDeposit();
+        }
 
         (uint256 nodeScore, , , , , ) = CREDX_HUB.getBorrowerProfile(node);
-        require(nodeScore >= MIN_SCORE_FOR_DELEGATION, "Node score too low");
+        if (nodeScore < MIN_SCORE_FOR_DELEGATION) {
+            revert NodeScoreTooLow();
+        }
 
         userDeposits[msg.sender] -= amount;
         nodeDelegations[node] += amount;
@@ -57,7 +74,9 @@ contract DePINDelegationPool {
     }
 
     function withdrawCapital(uint256 amount) external {
-        require(userDeposits[msg.sender] >= amount, "Insufficient deposit");
+        if (userDeposits[msg.sender] < amount) {
+            revert InsufficientDeposit();
+        }
         userDeposits[msg.sender] -= amount;
         DELEGATION_TOKEN.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount);

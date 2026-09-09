@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 /**
  * @title AIRiskOracle
@@ -16,32 +16,46 @@ contract AIRiskOracle {
     // Ranges from 0 to 10000 (bps)
     uint256 public globalDefaultRateBps;
 
-    uint256 public lastUpdated;
+    uint256 public lastUpdatedBlock;
 
-    event RiskParametersUpdated(uint256 volatilityIndex, uint256 defaultRate, uint256 timestamp);
+    // Custom Errors (Gas-efficient alternative to string requires)
+    error NotAIAgent();
+    error InvalidAIAgent();
+    error InvalidVolatility();
+    error InvalidDefaultRate();
+
+    event RiskParametersUpdated(uint256 volatilityIndex, uint256 defaultRate, uint256 blockNumber);
 
     modifier onlyAIAgent() {
-        require(msg.sender == aiAgent, "Only AI agent can call");
+        if (msg.sender != aiAgent) {
+            revert NotAIAgent();
+        }
         _;
     }
 
     constructor(address _aiAgent) {
-        require(_aiAgent != address(0), "Invalid AI agent");
+        if (_aiAgent == address(0)) {
+            revert InvalidAIAgent();
+        }
         aiAgent = _aiAgent;
         marketVolatilityIndex = 1000; // 10% default
         globalDefaultRateBps = 200;   // 2% default
-        lastUpdated = block.timestamp;
+        lastUpdatedBlock = block.number;
     }
 
     function updateRiskParameters(uint256 _volatilityIndex, uint256 _defaultRateBps) external onlyAIAgent {
-        require(_volatilityIndex <= 10000, "Invalid volatility");
-        require(_defaultRateBps <= 10000, "Invalid default rate");
+        if (_volatilityIndex > 10000) {
+            revert InvalidVolatility();
+        }
+        if (_defaultRateBps > 10000) {
+            revert InvalidDefaultRate();
+        }
 
         marketVolatilityIndex = _volatilityIndex;
         globalDefaultRateBps = _defaultRateBps;
-        lastUpdated = block.timestamp;
+        lastUpdatedBlock = block.number;
 
-        emit RiskParametersUpdated(_volatilityIndex, _defaultRateBps, block.timestamp);
+        emit RiskParametersUpdated(_volatilityIndex, _defaultRateBps, block.number);
     }
 
     /**

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,6 +13,16 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  */
 contract ReputationAMM is ReentrancyGuard {
     using SafeERC20 for IERC20;
+
+    error ZeroAddress();
+    error InsufficientLiquidityMinted();
+    error InsufficientLPBalance();
+    error InsufficientLiquidityBurned();
+    error InsufficientOutputAmount();
+    error InsufficientLiquidity();
+    error InsufficientInputAmount();
+    error InvalidK();
+    error InvalidToken();
 
     ICredXHub public immutable CREDX_HUB;
     IERC20 public immutable TOKEN0;
@@ -28,6 +38,7 @@ contract ReputationAMM is ReentrancyGuard {
     uint256 public constant PRIME_FEE_BPS = 15;    // 0.15%
     uint256 public constant SUPER_PRIME_FEE_BPS = 5; // 0.05%
 
+    event Transfer(address indexed from, address indexed to, uint256 value);
     event Mint(address indexed sender, uint256 amount0, uint256 amount1);
     event Burn(address indexed sender, uint256 amount0, uint256 amount1);
     event Swap(
@@ -40,24 +51,26 @@ contract ReputationAMM is ReentrancyGuard {
     );
 
     constructor(address _credXHub, address _token0, address _token1) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_token0 != address(0), "Zero address: token0");
-        require(_token1 != address(0), "Zero address: token1");
+        if (_credXHub == address(0) || _token0 == address(0) || _token1 == address(0)) {
+            revert ZeroAddress();
+        }
         CREDX_HUB = ICredXHub(_credXHub);
         TOKEN0 = IERC20(_token0);
         TOKEN1 = IERC20(_token1);
     }
 
     function _mint(address to, uint256 amount) internal {
-        require(to != address(0), "Zero address: to");
+        if (to == address(0)) revert ZeroAddress();
         balanceOf[to] += amount;
         totalSupply += amount;
+        emit Transfer(address(0), to, amount);
     }
 
     function _burn(address from, uint256 amount) internal {
-        require(from != address(0), "Zero address: from");
+        if (from == address(0)) revert ZeroAddress();
         balanceOf[from] -= amount;
         totalSupply -= amount;
+        emit Transfer(from, address(0), amount);
     }
 
     function _update(uint256 balance0, uint256 balance1) private {
@@ -91,7 +104,7 @@ contract ReputationAMM is ReentrancyGuard {
             liquidity = liq0 < liq1 ? liq0 : liq1;
         }
 
-        require(liquidity > 0, "Insufficient liquidity minted");
+        if (liquidity == 0) revert InsufficientLiquidityMinted();
         _mint(msg.sender, liquidity);
         _update(TOKEN0.balanceOf(address(this)), TOKEN1.balanceOf(address(this)));
 
@@ -99,11 +112,11 @@ contract ReputationAMM is ReentrancyGuard {
     }
 
     function removeLiquidity(uint256 liquidity) external nonReentrant returns (uint256 amount0, uint256 amount1) {
-        require(balanceOf[msg.sender] >= liquidity, "Insufficient LP balance");
+        if (balanceOf[msg.sender] < liquidity) revert InsufficientLPBalance();
 
         amount0 = (liquidity * reserve0) / totalSupply;
         amount1 = (liquidity * reserve1) / totalSupply;
-        require(amount0 > 0 && amount1 > 0, "Insufficient liquidity burned");
+        if (amount0 == 0 || amount1 == 0) revert InsufficientLiquidityBurned();
 
         _burn(msg.sender, liquidity);
         
@@ -116,8 +129,8 @@ contract ReputationAMM is ReentrancyGuard {
     }
 
     function swap(uint256 amount0Out, uint256 amount1Out) external nonReentrant {
-        require(amount0Out > 0 || amount1Out > 0, "Insufficient output amount");
-        require(amount0Out < reserve0 && amount1Out < reserve1, "Insufficient liquidity");
+        if (amount0Out == 0 && amount1Out == 0) revert InsufficientOutputAmount();
+        if (amount0Out >= reserve0 || amount1Out >= reserve1) revert InsufficientLiquidity();
 
         uint256 balance0;
         uint256 balance1;
@@ -131,7 +144,7 @@ contract ReputationAMM is ReentrancyGuard {
 
         uint256 amount0In = balance0 > reserve0 - amount0Out ? balance0 - (reserve0 - amount0Out) : 0;
         uint256 amount1In = balance1 > reserve1 - amount1Out ? balance1 - (reserve1 - amount1Out) : 0;
-        require(amount0In > 0 || amount1In > 0, "Insufficient input amount");
+        if (amount0In == 0 && amount1In == 0) revert InsufficientInputAmount();
 
         // Determine fee based on trader's score
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
@@ -149,10 +162,9 @@ contract ReputationAMM is ReentrancyGuard {
         uint256 balance0Adjusted = (balance0 * 10000) - (amount0In * feeBps);
         uint256 balance1Adjusted = (balance1 * 10000) - (amount1In * feeBps);
         
-        require(
-            balance0Adjusted * balance1Adjusted >= reserve0 * reserve1 * (10000**2),
-            "K"
-        );
+        if (balance0Adjusted * balance1Adjusted < reserve0 * reserve1 * (10000**2)) {
+            revert InvalidK();
+        }
 
         _update(balance0, balance1);
         emit Swap(msg.sender, amount0In, amount1In, amount0Out, amount1Out, feeBps);
@@ -160,10 +172,9 @@ contract ReputationAMM is ReentrancyGuard {
 
     // Helper for frontend to calculate expected output
     function getAmountOut(uint256 amountIn, address tokenIn, address user) external view returns (uint256 amountOut) {
-        require(amountIn > 0, "Insufficient input amount");
-        require(tokenIn != address(0), "Zero address: tokenIn");
-        require(user != address(0), "Zero address: user");
-        require(tokenIn == address(TOKEN0) || tokenIn == address(TOKEN1), "Invalid token");
+        if (amountIn == 0) revert InsufficientInputAmount();
+        if (tokenIn == address(0) || user == address(0)) revert ZeroAddress();
+        if (tokenIn != address(TOKEN0) && tokenIn != address(TOKEN1)) revert InvalidToken();
 
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(user);
         uint256 feeBps = STANDARD_FEE_BPS;

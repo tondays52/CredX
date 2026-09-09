@@ -1,0 +1,12 @@
+title: academic-letter-quarto
+author: Simon Reif
+version: 0.1.0
+description: "A modern cover letter template using Quarto and Typst. Features customizable colors, social media links and professional header layout."
+quarto-required: ">=1.7.0"
+contributes:
+  formats:
+    typst:
+      template-partials:
+        - typst-show.typ
+source: simonreif/academic-cv-quarto@v0.1.0
+source-type: registry

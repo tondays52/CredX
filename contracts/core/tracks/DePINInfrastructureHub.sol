@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -14,6 +14,14 @@ import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 contract DePINInfrastructureHub is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    // Custom Errors
+    error ZeroAddress();
+    error ZeroAmount();
+    error CannotDelegateToSelf();
+    error OperatorReliabilityTooLow();
+    error InsufficientScoreForLoan();
+    error InsufficientLiquidity();
+
     ICredXHub public immutable CREDX_HUB;
     IERC20 public immutable DEPIN_TOKEN;
     
@@ -27,8 +35,9 @@ contract DePINInfrastructureHub is ReentrancyGuard {
     event HardwareLoanIssued(address indexed operator, uint256 amount);
 
     constructor(address _credXHub, address _depinToken) {
-        require(_credXHub != address(0), "Zero address: credXHub");
-        require(_depinToken != address(0), "Zero address: depinToken");
+        if (_credXHub == address(0) || _depinToken == address(0)) {
+            revert ZeroAddress();
+        }
         CREDX_HUB = ICredXHub(_credXHub);
         DEPIN_TOKEN = IERC20(_depinToken);
     }
@@ -41,15 +50,23 @@ contract DePINInfrastructureHub is ReentrancyGuard {
      * @notice Delegates capital to a DePIN node operator, strictly enforcing their reliability.
      */
     function delegateStake(address operator, uint256 amount) external nonReentrant {
-        require(operator != address(0), "Zero address: operator");
-        require(amount > 0, "Amount must be > 0");
-        require(operator != msg.sender, "Cannot delegate to self");
+        if (operator == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+        if (operator == msg.sender) {
+            revert CannotDelegateToSelf();
+        }
 
         // Fetch operator's profile
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(operator);
         
         // Strict reputation check: Prime operators (Score >= 700) only
-        require(creditScore >= 700, "Operator reliability too low");
+        if (creditScore < 700) {
+            revert OperatorReliabilityTooLow();
+        }
 
         // Transfer funds from user to this contract
         DEPIN_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
@@ -68,16 +85,22 @@ contract DePINInfrastructureHub is ReentrancyGuard {
      * @notice Allows top-tier node operators to request an undercollateralized loan to buy more hardware.
      */
     function requestHardwareLoan(uint256 amount) external nonReentrant {
-        require(amount > 0, "Amount must be > 0");
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
         
         // Fetch operator's profile
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
         
         // Strict reputation check: Super-Prime operators (Score >= 750) only
-        require(creditScore >= 750, "Insufficient score for uncollateralized hardware loan");
+        if (creditScore < 750) {
+            revert InsufficientScoreForLoan();
+        }
         
         // Ensure pool has enough liquidity
-        require(DEPIN_TOKEN.balanceOf(address(this)) >= amount, "Insufficient pool liquidity");
+        if (DEPIN_TOKEN.balanceOf(address(this)) < amount) {
+            revert InsufficientLiquidity();
+        }
 
         // Update state
         hardwareLoans[msg.sender] += amount;

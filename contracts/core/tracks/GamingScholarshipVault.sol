@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
@@ -10,13 +10,19 @@ import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Recei
  * @notice Vault for zero-collateral NFT scholarships based on gaming reputation.
  */
 contract GamingScholarshipVault is IERC721Receiver {
+    // Custom Errors
+    error ZeroAddress();
+    error NFTNotInVault();
+    error NFTAlreadyBorrowed();
+    error ScoreTooLowForScholarship();
+    error NotTheBorrower();
 
     ICredXHub public immutable CREDX_HUB;
     uint256 public constant MIN_SCORE_FOR_SCHOLARSHIP = 700;
 
     struct BorrowRecord {
         address borrower;
-        uint256 borrowedAt;
+        uint256 borrowedAtBlock;
         address originalOwner;
     }
 
@@ -28,17 +34,22 @@ contract GamingScholarshipVault is IERC721Receiver {
     event NFTReturned(address indexed borrower, address indexed nftContract, uint256 tokenId);
 
     constructor(address _credXHub) {
-        require(_credXHub != address(0), "Invalid CredXHub");
+        if (_credXHub == address(0)) {
+            revert ZeroAddress();
+        }
         CREDX_HUB = ICredXHub(_credXHub);
     }
 
     function depositNFT(address nftContract, uint256 tokenId) external {
+        if (nftContract == address(0)) {
+            revert ZeroAddress();
+        }
         IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
         
         // We set the borrower to address(0) to signify it's available, and track originalOwner
         activeBorrows[nftContract][tokenId] = BorrowRecord({
             borrower: address(0),
-            borrowedAt: 0,
+            borrowedAtBlock: 0,
             originalOwner: msg.sender
         });
 
@@ -46,15 +57,24 @@ contract GamingScholarshipVault is IERC721Receiver {
     }
 
     function borrowNFT(address nftContract, uint256 tokenId) external {
+        if (nftContract == address(0)) {
+            revert ZeroAddress();
+        }
         BorrowRecord storage record = activeBorrows[nftContract][tokenId];
-        require(record.originalOwner != address(0), "NFT not in vault");
-        require(record.borrower == address(0), "NFT already borrowed");
+        if (record.originalOwner == address(0)) {
+            revert NFTNotInVault();
+        }
+        if (record.borrower != address(0)) {
+            revert NFTAlreadyBorrowed();
+        }
 
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
-        require(creditScore >= MIN_SCORE_FOR_SCHOLARSHIP, "Score too low for zero-collateral borrow");
+        if (creditScore < MIN_SCORE_FOR_SCHOLARSHIP) {
+            revert ScoreTooLowForScholarship();
+        }
 
         record.borrower = msg.sender;
-        record.borrowedAt = block.timestamp;
+        record.borrowedAtBlock = block.number;
 
         IERC721(nftContract).safeTransferFrom(address(this), msg.sender, tokenId);
 
@@ -62,13 +82,18 @@ contract GamingScholarshipVault is IERC721Receiver {
     }
 
     function returnNFT(address nftContract, uint256 tokenId) external {
+        if (nftContract == address(0)) {
+            revert ZeroAddress();
+        }
         BorrowRecord storage record = activeBorrows[nftContract][tokenId];
-        require(record.borrower == msg.sender, "Not the borrower");
+        if (record.borrower != msg.sender) {
+            revert NotTheBorrower();
+        }
 
         IERC721(nftContract).safeTransferFrom(msg.sender, address(this), tokenId);
 
         record.borrower = address(0);
-        record.borrowedAt = 0;
+        record.borrowedAtBlock = 0;
 
         emit NFTReturned(msg.sender, nftContract, tokenId);
     }

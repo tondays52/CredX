@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CredX — Cross-Chain Trustless Credit Bureau on Creditcoin</title>
+  <meta name="description" content="Turn multi-chain financial activity and node uptime into a portable on-chain credit score. Unlock 70% under-collateralized borrowing, 0.01% flash loans, and multi-track capital.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="landing.css">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            inter: ['"Inter"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              400: '#22d3ee',
+              500: '#06b6d4',
+              600: '#0891b2',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-[#05070d] text-slate-100 min-h-screen font-sans selection:bg-cyan-500 selection:text-black subtle-cyber-grid">
+
+  <!-- Ambient Glow Atmosphere (QClay Style) -->
+  <div class="ambient-glow-wrapper">
+    <div class="glow-orb-hero"></div>
+    <div class="glow-orb-purple"></div>
+    <div class="glow-orb-emerald"></div>
+  </div>
+
+  <div class="relative z-10 flex flex-col min-h-screen">
+    
+    <!-- ==================== FLOATING PILL NAVBAR ==================== -->
+    <div class="fixed top-5 left-0 right-0 z-50 px-4 max-w-4xl mx-auto">
+      <header class="qclay-navbar rounded-full px-5 py-2.5 flex items-center justify-between">
+        
+        <!-- Brand Logo -->
+        <a href="landing.html" class="flex items-center space-x-2.5 group">
+          <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-400 via-indigo-500 to-purple-600 flex items-center justify-center shadow-md shadow-cyan-500/30 border border-white/20 group-hover:scale-105 transition-transform">
+            <i data-lucide="shield-check" class="w-4 h-4 text-white"></i>
+          </div>
+          <div class="flex items-center space-x-1.5">
+            <span class="text-base font-black tracking-tight text-white">CredX</span>
+            <span class="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">v2</span>
+          </div>
+        </a>
+
+        <!-- Center Nav Links -->
+        <nav class="hidden md:flex items-center space-x-1">
+          <a href="#simulator" class="nav-link-pill">Simulator</a>
+          <a href="#bento" class="nav-link-pill">Ecosystem</a>
+          <a href="#how-it-works" class="nav-link-pill">OCCR Engine</a>
+          <a href="#extension" class="nav-link-pill">Virtual Node</a>
+          <a href="arena.html" class="nav-link-pill text-amber-300 hover:text-amber-200 flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+            <span>Arena ⚔️</span>
+          </a>
+        </nav>
+
+        <!-- Action Buttons -->
+        <div class="flex items-center space-x-2">
+          <a href="arena.html" class="hidden sm:inline-flex px-3 py-1.5 rounded-full text-xs font-bold text-amber-300 hover:text-white bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 transition-all">
+            PredictBay
+          </a>
+          <a href="index.html" class="btn-qclay-primary px-4 py-1.5 text-xs font-bold flex items-center space-x-1.5 cursor-pointer">
+            <span>Launch App</span>
+            <i data-lucide="arrow-up-right" class="w-3.5 h-3.5"></i>
+          </a>
+        </div>
+      </header>
+    </div>
+
+    <!-- ==================== HERO SECTION ==================== -->
+    <section class="pt-32 sm:pt-36 pb-16 overflow-hidden relative">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <!-- Hero Header Copy -->
+        <div class="text-center max-w-3xl mx-auto space-y-5">
+          
+          <!-- Eyebrow Pill -->
+          <div class="inline-flex items-center space-x-2 px-3.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-cyan-400 text-xs font-semibold shadow-inner backdrop-blur-md">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span class="text-slate-300">Creditcoin Testnet &middot; Attestcoin Precompile</span>
+            <span class="text-cyan-400 font-mono font-bold">0x0FD2</span>
+          </div>
+
+          <!-- Main Hero Headline (Compact, Elegant, Bold) -->
+          <h1 class="text-4xl sm:text-5xl lg:text-6xl font-black text-white tracking-tight leading-[1.12]">
+            The Cross-Chain Trustless <br/>
+            <span class="bg-gradient-to-r from-cyan-400 via-indigo-300 to-purple-400 bg-clip-text text-transparent">Credit Layer for Web3.</span>
+          </h1>
+
+          <!-- Subtitle -->
+          <p class="text-slate-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
+            CredX transforms cross-chain DeFi activity, loan repayments, and DePIN node uptime into a portable credit score. Unlock <strong class="text-emerald-400 font-semibold">70% under-collateralized borrowing</strong> and <strong class="text-cyan-400 font-semibold">0.01% flash loans</strong>.
+          </p>
+
+          <!-- Dual Call to Actions -->
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <a href="index.html" class="w-full sm:w-auto btn-qclay-primary px-7 py-3.5 text-xs sm:text-sm flex items-center justify-center space-x-2">
+              <i data-lucide="zap" class="w-4 h-4"></i>
+              <span>Enter CredX Terminal</span>
+            </a>
+            <a href="arena.html" class="w-full sm:w-auto btn-qclay-ghost px-6 py-3.5 text-xs sm:text-sm flex items-center justify-center space-x-2">
+              <i data-lucide="trending-up" class="w-4 h-4 text-amber-400"></i>
+              <span>PredictBay Trading Arena</span>
+            </a>
+          </div>
+
+        </div>
+
+        <!-- ==================== HERO HUD CENTERPIECE (QClay Signature) ==================== -->
+        <div class="mt-12 max-w-4xl mx-auto relative" id="simulator">
+          
+          <!-- Top Left Floating Badge -->
+          <div class="hidden sm:flex absolute -top-4 -left-6 hud-pill-badge float-chip-1 px-3.5 py-2 items-center space-x-2.5 z-20">
+            <span class="text-base">⚡</span>
+            <div>
+              <div class="text-[9px] uppercase font-bold text-cyan-400 tracking-wider">Flash Loan Router</div>
+              <p class="text-xs font-bold text-white font-mono">$500,000 &middot; 0.01% Fee</p>
+            </div>
+          </div>
+
+          <!-- Top Right Floating Badge -->
+          <div class="hidden sm:flex absolute -top-4 -right-6 hud-pill-badge float-chip-2 px-3.5 py-2 items-center space-x-2.5 z-20">
+            <span class="text-base">🛡️</span>
+            <div>
+              <div class="text-[9px] uppercase font-bold text-purple-400 tracking-wider">Precompile 0x0FD2</div>
+              <p class="text-xs font-bold text-white font-mono">Merkle Proof Verified</p>
+            </div>
+          </div>
+
+          <!-- Main Glass HUD Card -->
+          <div class="hero-hud-card p-6 sm:p-8 space-y-6">
+            
+            <!-- HUD Top Status Bar -->
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-b border-white/10 pb-4">
+              <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
+                  <i data-lucide="gauge" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-extrabold text-white">OCCR Reputation & Capital Sandbox</h3>
+                  <p class="text-[11px] text-slate-400 font-mono">Address: 0x742d...f44e &middot; Creditcoin Testnet</p>
+                </div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <span id="heroTierBadge" class="px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono">
+                  Tier: Super-Prime (780+)
+                </span>
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              </div>
+            </div>
+
+            <!-- HUD 3-Column Content Layout -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+              
+              <!-- Column 1: Score Circular Speedometer (4 cols) -->
+              <div class="md:col-span-4 flex flex-col items-center justify-center p-4 rounded-2xl bg-black/40 border border-white/10 text-center">
+                <div class="relative w-32 h-32 flex items-center justify-center">
+                  <svg class="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    <circle cx="50" cy="50" r="42" stroke="rgba(255,255,255,0.06)" stroke-width="8" fill="transparent"/>
+                    <circle id="heroScoreCircle" cx="50" cy="50" r="42" stroke="url(#qclayHeroGrad)" stroke-width="8" fill="transparent"
+                            stroke-dasharray="264" stroke-dashoffset="28" stroke-linecap="round" class="transition-all duration-500"/>
+                    <defs>
+                      <linearGradient id="qclayHeroGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                        <stop offset="0%" stop-color="#06b6d4" />
+                        <stop offset="60%" stop-color="#a855f7" />
+                        <stop offset="100%" stop-color="#10b981" />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div class="absolute inset-0 flex flex-col items-center justify-center">
+                    <span id="heroScoreNum" class="text-3xl font-black font-mono text-white">794</span>
+                    <span class="text-[9px] text-slate-400 uppercase tracking-widest">out of 850 CTS</span>
+                  </div>
+                </div>
+                <span class="text-[11px] text-emerald-400 font-mono font-bold mt-2">↑ Top 1.2% Super-Prime</span>
+              </div>
+
+              <!-- Column 2: Interactive Slider Controls (5 cols) -->
+              <div class="md:col-span-5 space-y-4 p-4 rounded-2xl bg-black/40 border border-white/10">
+                <div>
+                  <div class="flex justify-between text-xs font-semibold mb-1.5">
+                    <span class="text-slate-300">Credit Score (CTS):</span>
+                    <span id="heroScoreSliderText" class="text-cyan-400 font-mono font-bold">794 CTS</span>
+                  </div>
+                  <input type="range" id="heroScoreSlider" min="300" max="850" value="794" class="w-full accent-cyan-400">
+                  <div class="flex justify-between text-[9px] text-slate-500 font-mono mt-1">
+                    <span>300 (Subprime)</span>
+                    <span>700 (Prime)</span>
+                    <span>850 (Max)</span>
+                  </div>
+                </div>
+
+                <div>
+                  <div class="flex justify-between text-xs font-semibold mb-1.5">
+                    <span class="text-slate-300">Borrow Principal:</span>
+                    <span id="heroBorrowSliderText" class="text-white font-mono font-bold">$10,000 cUSD</span>
+                  </div>
+                  <input type="range" id="heroBorrowSlider" min="1000" max="100000" step="1000" value="10000" class="w-full accent-purple-400">
+                </div>
+              </div>
+
+              <!-- Column 3: Unlocked Capital Terms (3 cols) -->
+              <div class="md:col-span-3 p-4 rounded-2xl bg-gradient-to-br from-cyan-950/40 via-purple-950/30 to-black/60 border border-cyan-500/30 space-y-2.5">
+                <span class="text-[9px] uppercase font-bold text-cyan-400 tracking-wider">Unlocked Terms</span>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="text-slate-400">Collateral:</span>
+                  <span id="heroRatioText" class="text-emerald-400 font-mono font-black">70.0%</span>
+                </div>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="text-slate-400">Borrow APR:</span>
+                  <span id="heroAprText" class="text-purple-400 font-mono font-black">2.50%</span>
+                </div>
+                <div class="flex justify-between items-center text-xs">
+                  <span class="text-slate-400">Flash Fee:</span>
+                  <span class="text-cyan-400 font-mono font-black">0.01%</span>
+                </div>
+                <div class="pt-2 border-t border-white/10 flex justify-between items-center text-xs">
+                  <span class="text-slate-300 font-bold">Capital Saved:</span>
+                  <span id="heroSavingsText" class="text-emerald-400 font-mono font-bold">+$8,000</span>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== PARTNER LOGO MARQUEE STRIP ==================== -->
+    <div class="border-y border-white/5 bg-white/[0.01] py-6 overflow-hidden">
+      <div class="max-w-6xl mx-auto px-4">
+        <div class="qclay-marquee">
+          <div class="qclay-marquee-inner font-mono text-xs font-bold text-slate-400">
+            <span class="flex items-center gap-2 text-white"><span class="text-cyan-400">●</span> CREDITCOIN TESTNET</span>
+            <span class="flex items-center gap-2"><span class="text-purple-400">●</span> ATTESTCOIN 0x0FD2</span>
+            <span class="flex items-center gap-2"><span class="text-emerald-400">●</span> ETHEREUM MAINNET</span>
+            <span class="flex items-center gap-2"><span class="text-blue-400">●</span> ARBITRUM ONE</span>
+            <span class="flex items-center gap-2"><span class="text-cyan-400">●</span> BASE L2</span>
+            <span class="flex items-center gap-2"><span class="text-amber-400">●</span> PYTH ORACLE</span>
+            <span class="flex items-center gap-2"><span class="text-pink-400">●</span> UNISWAP V3</span>
+            <span class="flex items-center gap-2"><span class="text-emerald-400">●</span> AAVE V3</span>
+            <!-- Marquee duplicate -->
+            <span class="flex items-center gap-2 text-white"><span class="text-cyan-400">●</span> CREDITCOIN TESTNET</span>
+            <span class="flex items-center gap-2"><span class="text-purple-400">●</span> ATTESTCOIN 0x0FD2</span>
+            <span class="flex items-center gap-2"><span class="text-emerald-400">●</span> ETHEREUM MAINNET</span>
+            <span class="flex items-center gap-2"><span class="text-blue-400">●</span> ARBITRUM ONE</span>
+            <span class="flex items-center gap-2"><span class="text-cyan-400">●</span> BASE L2</span>
+            <span class="flex items-center gap-2"><span class="text-amber-400">●</span> PYTH ORACLE</span>
+            <span class="flex items-center gap-2"><span class="text-pink-400">●</span> UNISWAP V3</span>
+            <span class="flex items-center gap-2"><span class="text-emerald-400">●</span> AAVE V3</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== ASYMMETRICAL BENTO GRID (QClay Signature) ==================== -->
+    <section id="bento" class="py-20 border-b border-white/5">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="text-center max-w-2xl mx-auto space-y-3 mb-14">
+          <span class="px-3.5 py-1 rounded-full bg-cyan-500/10 text-cyan-400 text-xs font-bold border border-cyan-500/30">
+            Multi-Track Ecosystem
+          </span>
+          <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            One Portable Score. 5 Ecosystem Hubs.
+          </h2>
+          <p class="text-slate-400 text-xs sm:text-sm">
+            CredX reputation natively unlocks liquidity, computational leases, gaming character vaults, and tokenized trade debt.
+          </p>
+        </div>
+
+        <!-- 6 Bento Cards Layout -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+          
+          <!-- Bento 1: Large OCCR 7-Factor Model (2 Cols) -->
+          <div class="qclay-bento-card md:col-span-2 space-y-5">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="text-[10px] uppercase font-bold text-cyan-400 tracking-wider">Multi-Factor Risk Assessment</span>
+                <span class="text-[10px] px-2.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 font-mono">7 Dimensions</span>
+              </div>
+              <h3 class="text-xl font-extrabold text-white">OCCR Credit Risk Scoring Engine</h3>
+              <p class="text-xs text-slate-400 mt-1">Multi-dimensional weighting replacing primitive single-metric TVL checks.</p>
+            </div>
+
+            <!-- Factor Bars -->
+            <div class="space-y-3 bg-black/40 p-4 rounded-2xl border border-white/10 text-xs">
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                  <span>1. Historical Loan Repayment Proofs (Aave / Compound)</span>
+                  <span class="text-cyan-400 font-mono font-bold">+200 / 200 pts (35%)</span>
+                </div>
+                <div class="w-full bg-white/5 rounded-full h-1.5"><div class="bg-cyan-400 h-1.5 rounded-full w-full"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                  <span>2. Verified Cross-Chain Volume ($150,000 USD)</span>
+                  <span class="text-purple-400 font-mono font-bold">+150 / 150 pts (25%)</span>
+                </div>
+                <div class="w-full bg-white/5 rounded-full h-1.5"><div class="bg-purple-400 h-1.5 rounded-full w-full"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                  <span>3. Multi-Protocol & Chain Diversity (3 DeFi &middot; 2 Chains)</span>
+                  <span class="text-emerald-400 font-mono font-bold">+120 / 120 pts (20%)</span>
+                </div>
+                <div class="w-full bg-white/5 rounded-full h-1.5"><div class="bg-emerald-400 h-1.5 rounded-full w-full"></div></div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-1 text-xs">
+              <span class="text-slate-400">Total Verified Volume: <strong class="text-white font-mono">$150,000,000</strong></span>
+              <a href="index.html" class="text-cyan-400 hover:text-cyan-300 font-bold flex items-center gap-1">
+                <span>View Full Scoring Breakdown</span> →
+              </a>
+            </div>
+          </div>
+
+          <!-- Bento 2: Holographic Soulbound Attestation Token (1 Col) -->
+          <div class="qclay-bento-card bento-holo-sbt space-y-4">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] uppercase font-bold text-purple-300 tracking-wider">Soulbound Token</span>
+              <span class="px-2 py-0.5 rounded-full text-[9px] font-bold bg-purple-500/20 text-purple-300 font-mono">ERC-5192</span>
+            </div>
+            
+            <div class="p-5 rounded-2xl bg-black/50 border border-white/10 space-y-3 text-center">
+              <div class="w-10 h-10 mx-auto rounded-xl bg-purple-500/20 text-purple-300 flex items-center justify-center font-bold text-lg border border-purple-500/30">
+                🛡️
+              </div>
+              <div>
+                <h4 class="text-sm font-extrabold text-white">CX-SBT Passport</h4>
+                <p class="text-[10px] text-slate-400 font-mono">Token ID: #1 &middot; Non-Transferable</p>
+              </div>
+              <div class="text-[10px] font-mono text-cyan-300 bg-white/5 py-1 px-2.5 rounded-lg border border-white/10 truncate">
+                0x73549c...84f
+              </div>
+            </div>
+
+            <div class="text-xs text-slate-300 space-y-1">
+              <p class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i> Zero-Knowledge Tier Proofs</p>
+              <p class="flex items-center gap-1.5"><i data-lucide="check" class="w-3.5 h-3.5 text-emerald-400"></i> Selective Identity Disclosure</p>
+            </div>
+          </div>
+
+          <!-- Bento 3: Advanced DeFi Hub -->
+          <div class="qclay-bento-card space-y-3">
+            <div class="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
+              <i data-lucide="repeat" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">0.01% Flash Loans</h3>
+              <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                Super-Prime borrowers access zero-collateral arbitrage liquidity with fees slashed from 0.09% to 0.01%.
+              </p>
+            </div>
+            <div class="pt-2 border-t border-white/5 flex justify-between items-center text-xs">
+              <span class="text-slate-400">Yield Boost:</span>
+              <span class="text-cyan-400 font-mono font-bold">2.0x Multiplier</span>
+            </div>
+          </div>
+
+          <!-- Bento 4: DePIN GPU Leases -->
+          <div class="qclay-bento-card space-y-3">
+            <div class="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 flex items-center justify-center border border-indigo-500/30">
+              <i data-lucide="server" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h3 class="text-base font-bold text-white">DePIN GPU Clusters</h3>
+              <p class="text-xs text-slate-400 mt-1 leading-relaxed">
+                $25,000 to $100,000 hardware financing lines for verified operators running H100 and B200 AI compute clusters.
+              </p>
+            </div>
+            <div class="pt-2 border-t border-white/5 flex justify-between items-center text-xs">
+              <span class="text-slate-400">Hardware APY:</span>
+              <span class="text-indigo-400 font-mono font-bold">14.5% Yield</span>
+            </div>
+          </div>
+
+          <!-- Bento 5: PredictBay Arena Featurette -->
+          <div class="qclay-bento-card border-amber-500/30 bg-amber-950/10 space-y-3">
+            <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+              <i data-lucide="trending-up" class="w-4 h-4"></i>
+            </div>
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-bold text-white">PredictBay Arena</h3>
+              <span class="text-[9px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono">LIVE</span>
+            </div>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              High-frequency binary trading terminal with Pyth feeds. 3-win streaks sync directly to on-chain Creditcoin CTS (+25 CTS).
+            </p>
+            <a href="arena.html" class="pt-2 border-t border-white/5 flex justify-between items-center text-xs text-amber-300 font-bold hover:text-white">
+              <span>Enter Trading Arena</span> →
+            </a>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== HOW OCCR WORKS TIMELINE ==================== -->
+    <section id="how-it-works" class="py-20 border-b border-white/5 relative">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="text-center max-w-2xl mx-auto space-y-3 mb-14">
+          <span class="px-3.5 py-1 rounded-full bg-purple-500/10 text-purple-400 text-xs font-bold border border-purple-500/30">
+            Deterministic Verification
+          </span>
+          <h2 class="text-3xl sm:text-4xl font-black text-white tracking-tight">
+            How OCCR Protocol Works
+          </h2>
+          <p class="text-slate-400 text-xs sm:text-sm">
+            Oracle-less Cross-Chain Reputation on Creditcoin executes deterministically in 3 cryptographic steps.
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          
+          <div class="p-7 rounded-3xl bg-white/[0.02] border border-white/10 space-y-3">
+            <span class="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-black text-base border border-cyan-500/30">
+              01
+            </span>
+            <h3 class="text-lg font-bold text-white">Multi-Chain Proof Aggregation</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              User submits cryptographic Merkle inclusion proofs of historical loan repayments and trade receipts across Ethereum, Base, and Arbitrum.
+            </p>
+          </div>
+
+          <div class="p-7 rounded-3xl bg-white/[0.02] border border-white/10 space-y-3">
+            <span class="w-9 h-9 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-black text-base border border-purple-500/30">
+              02
+            </span>
+            <h3 class="text-lg font-bold text-white">Attestcoin Precompile 0x0FD2</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Creditcoin native precompile verifies source block hashes and receipts at consensus level, eliminating reliance on third-party bridge oracles.
+            </p>
+          </div>
+
+          <div class="p-7 rounded-3xl bg-white/[0.02] border border-white/10 space-y-3">
+            <span class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-black text-base border border-emerald-500/30">
+              03
+            </span>
+            <h3 class="text-lg font-bold text-white">Soulbound Credit Tier Mint</h3>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Borrower is issued an on-chain CX-SBT granting access to 70% under-collateralized loans, 0.01% flash loans, and DePIN hardware lines.
+            </p>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== VIRTUAL NODE EXTENSION SPOTLIGHT ==================== -->
+    <section id="extension" class="py-20 border-b border-white/5 bg-slate-950/60">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          
+          <div class="space-y-5">
+            <span class="px-3.5 py-1 rounded-full bg-pink-500/10 text-pink-400 text-xs font-bold border border-pink-500/30">
+              Manifest V3 Chrome Extension
+            </span>
+            <h2 class="text-3xl sm:text-4xl font-black text-white leading-tight">
+              Earn Credit Points with Idle Hardware.
+            </h2>
+            <p class="text-slate-300 text-xs sm:text-sm leading-relaxed">
+              Install the CredX Virtual Node extension to inspect your PC's CPU cores, RAM capacity, GPU hardware accelerator, and live edge ping to share idle bandwidth and continuously accumulate on-chain credit score points.
+            </p>
+
+            <div class="space-y-2 text-xs text-slate-300">
+              <div class="flex items-center space-x-2.5">
+                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+                <span>Real PC Hardware Inspection (`navigator.hardwareConcurrency`, WebGL GPU)</span>
+              </div>
+              <div class="flex items-center space-x-2.5">
+                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+                <span>Live Edge Ping latency measurement & bandwidth point accumulator</span>
+              </div>
+              <div class="flex items-center space-x-2.5">
+                <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+                <span>1-Click cryptographic proof synchronization to Creditcoin EVM</span>
+              </div>
+            </div>
+
+            <div class="pt-3 flex flex-wrap items-center gap-3">
+              <a href="index.html" class="btn-qclay-primary px-5 py-2.5 text-xs">
+                Simulate Node Extension
+              </a>
+              <code class="bg-black/60 text-slate-400 px-3 py-2 rounded-xl border border-white/10 font-mono text-[11px]">
+                d:\money\extension
+              </code>
+            </div>
+          </div>
+
+          <!-- Live Mockup Card -->
+          <div class="qclay-bento-card max-w-md mx-auto w-full p-6 border-pink-500/30 space-y-4">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3">
+              <div class="flex items-center space-x-2">
+                <span class="text-xl">⚡</span>
+                <span class="font-extrabold text-sm text-white">CredX Virtual Node</span>
+              </div>
+              <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                Connected
+              </span>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-white/[0.03] border border-white/10 text-center font-mono">
+              <div>
+                <span class="text-[9px] uppercase text-slate-400">CPU</span>
+                <p class="text-xs font-bold text-white mt-0.5">16 Cores</p>
+              </div>
+              <div class="border-x border-white/10">
+                <span class="text-[9px] uppercase text-slate-400">RAM</span>
+                <p class="text-xs font-bold text-white mt-0.5">16 GB</p>
+              </div>
+              <div>
+                <span class="text-[9px] uppercase text-slate-400">Ping</span>
+                <p class="text-xs font-bold text-emerald-400 mt-0.5">18 ms</p>
+              </div>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-black/50 border border-white/10 flex justify-between items-center">
+              <div>
+                <span class="text-[10px] text-slate-400">CredX Points</span>
+                <p class="text-xl font-mono font-black text-cyan-400">1,480 PTS</p>
+              </div>
+              <button class="px-4 py-2 rounded-xl bg-pink-500 text-white font-bold text-xs shadow-md">
+                Sync Proof
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ==================== HIGH-IMPACT BOTTOM CTA BANNER ==================== -->
+    <section class="py-20 relative overflow-hidden">
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+        <div class="hero-hud-card p-8 sm:p-14 rounded-3xl border border-cyan-500/30 bg-gradient-to-b from-cyan-950/20 to-slate-950/80 shadow-2xl space-y-5 relative overflow-hidden">
+          
+          <div class="w-14 h-14 mx-auto rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/40 shadow-lg shadow-cyan-500/25">
+            <i data-lucide="shield-check" class="w-7 h-7"></i>
+          </div>
+
+          <h2 class="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            Ready to Unlock Trustless <br/>
+            On-Chain Credit?
+          </h2>
+
+          <p class="text-slate-400 text-xs sm:text-sm max-w-lg mx-auto leading-relaxed">
+            Experience 70% under-collateralized loans, 0.01% flash loans, and multi-track liquidity directly on Creditcoin Testnet.
+          </p>
+
+          <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <a href="index.html" class="w-full sm:w-auto btn-qclay-primary px-7 py-3.5 text-xs sm:text-sm flex items-center justify-center space-x-2">
+              <span>Launch CredX Terminal</span>
+              <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </a>
+            <a href="arena.html" class="w-full sm:w-auto btn-qclay-ghost px-6 py-3.5 text-xs sm:text-sm flex items-center justify-center space-x-2">
+              <span>Enter PredictBay Arena</span>
+            </a>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ==================== FOOTER ==================== -->
+    <footer class="border-t border-white/10 bg-[#020409] py-10 text-slate-500 text-xs">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-center justify-between gap-5">
+        
+        <div class="flex items-center space-x-3">
+          <div class="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center border border-cyan-500/30">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+          </div>
+          <div>
+            <span class="font-extrabold text-xs text-white">CredX Protocol</span>
+            <p class="text-[10px] text-slate-500">Cross-Chain Trustless Credit Bureau &middot; Creditcoin Testnet (Chain ID 102031)</p>
+          </div>
+        </div>
+
+        <div class="flex items-center space-x-5 text-xs">
+          <a href="index.html" class="hover:text-white transition-colors">Protocol Terminal</a>
+          <a href="arena.html" class="hover:text-white transition-colors">PredictBay Arena</a>
+          <a href="#simulator" class="hover:text-white transition-colors">Simulator</a>
+          <a href="https://creditcoin.org" target="_blank" class="hover:text-white transition-colors">Creditcoin Network</a>
+        </div>
+
+        <div class="text-slate-600 font-mono text-[10px]">
+          &copy; 2026 CredX Protocol. Built for Creditcoin Ecosystem.
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    if (window.lucide) lucide.createIcons();
+
+    // Interactive Hero HUD Simulator Logic
+    const scoreSlider = document.getElementById('heroScoreSlider');
+    const borrowSlider = document.getElementById('heroBorrowSlider');
+
+    const scoreNum = document.getElementById('heroScoreNum');
+    const scoreSliderText = document.getElementById('heroScoreSliderText');
+    const borrowSliderText = document.getElementById('heroBorrowSliderText');
+    const scoreCircle = document.getElementById('heroScoreCircle');
+    const tierBadge = document.getElementById('heroTierBadge');
+    
+    const ratioText = document.getElementById('heroRatioText');
+    const aprText = document.getElementById('heroAprText');
+    const savingsText = document.getElementById('heroSavingsText');
+
+    function updateHeroCalc() {
+      const score = parseInt(scoreSlider.value);
+      const borrow = parseInt(borrowSlider.value);
+
+      if (scoreNum) scoreNum.innerText = score;
+      if (scoreSliderText) scoreSliderText.innerText = `${score} CTS`;
+      if (borrowSliderText) borrowSliderText.innerText = `$${borrow.toLocaleString()} cUSD`;
+
+      // Gauge progress offset
+      const normalized = Math.min(Math.max((score - 300) / 550, 0), 1);
+      const offset = 264 - (normalized * 264);
+      if (scoreCircle) scoreCircle.style.strokeDashoffset = offset;
+
+      let ratio = 1.50;
+      let apr = '12.00%';
+      let tier = 'Subprime';
+      let badgeClass = 'px-3 py-1 rounded-full text-xs font-bold bg-slate-500/20 text-slate-400 border border-slate-500/30 font-mono';
+
+      if (score >= 780) {
+        ratio = 0.70;
+        apr = '2.50%';
+        tier = 'Super-Prime (780+)';
+        badgeClass = 'px-3 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 font-mono';
+      } else if (score >= 700) {
+        ratio = 0.85;
+        apr = '4.50%';
+        tier = 'Prime (700+)';
+        badgeClass = 'px-3 py-1 rounded-full text-xs font-bold bg-purple-500/20 text-purple-300 border border-purple-500/30 font-mono';
+      } else if (score >= 650) {
+        ratio = 1.00;
+        apr = '7.00%';
+        tier = 'Near-Prime (650+)';
+        badgeClass = 'px-3 py-1 rounded-full text-xs font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-mono';
+      }
+
+      if (tierBadge) {
+        tierBadge.className = badgeClass;
+        tierBadge.innerText = `Tier: ${tier}`;
+      }
+
+      if (ratioText) ratioText.innerText = `${(ratio * 100).toFixed(1)}%`;
+      if (aprText) aprText.innerText = apr;
+
+      const standardDefiUSD = borrow * 1.50;
+      const reqDepositUSD = borrow * ratio;
+      const savingsUSD = standardDefiUSD - reqDepositUSD;
+      if (savingsText) savingsText.innerText = `+$${savingsUSD.toLocaleString()}`;
+    }
+
+    if (scoreSlider && borrowSlider) {
+      scoreSlider.addEventListener('input', updateHeroCalc);
+      borrowSlider.addEventListener('input', updateHeroCalc);
+      updateHeroCalc();
+    }
+  </script>
+</body>
+</html>

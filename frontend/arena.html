@@ -19,8 +19,11 @@
         <span class="logo-text">PredictBay <span class="badge-credx">CredX Arena</span></span>
       </a>
       <nav class="nav-links">
-        <a href="index.html" class="nav-link" style="color: #06b6d4; font-weight: 700; display: flex; items-center: center; gap: 4px;">
-          <span>← Back to CredX Terminal</span>
+        <a href="landing.html" class="nav-link" style="color: #9ca3af; font-weight: 600; display: flex; align-items: center; gap: 4px;">
+          <span>Home</span>
+        </a>
+        <a href="index.html" class="nav-link" style="color: #06b6d4; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+          <span>← Back to Terminal</span>
         </a>
         <button id="resetBalanceBtn" class="nav-link" style="background: none; border: none; cursor: pointer;" title="Reset Paper Balance to $10,000">
           🔄 Reset Balance
@@ -203,7 +206,29 @@
       <span>Connected to Creditcoin Testnet (102031)</span>
       <span class="keyboard-icon">⌨ Hotkeys [A] Above · [B] Below</span>
     </div>
-  </footer>
+  <!-- Arena Reputation Sync Celebration Modal -->
+  <div id="arenaSyncModal" class="arena-modal">
+    <div class="arena-modal-card">
+      <div style="font-size: 48px; margin-bottom: 12px;">🏆</div>
+      <h3 style="font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 6px;">Streak Proof Synchronized!</h3>
+      <p style="font-size: 13px; color: #9ca3af; margin-bottom: 20px;">Your 3-win prediction streak was cryptographically verified on Creditcoin precompile 0x0FD2.</p>
+      
+      <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 16px; padding: 16px; margin-bottom: 24px; font-family: var(--font-mono); font-size: 13px;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+          <span style="color: #9ca3af;">Consecutive Wins:</span>
+          <span style="color: #fff; font-weight: bold;">3 Wins 🔥</span>
+        </div>
+        <div style="display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 8px;">
+          <span style="color: #10b981; font-weight: bold;">On-Chain CTS Boost:</span>
+          <span style="color: #10b981; font-weight: 800; font-size: 15px;">+25 CTS Points</span>
+        </div>
+      </div>
+
+      <button id="closeArenaSyncModal" style="width: 100%; padding: 14px; background: #10b981; color: #000; border: none; border-radius: 12px; font-weight: 800; font-size: 13px; cursor: pointer; transition: all 0.2s;">
+        ✅ Claim Reputation Boost & Continue Trading
+      </button>
+    </div>
+  </div>
 
   <script src="arena.js"></script>
 </body>

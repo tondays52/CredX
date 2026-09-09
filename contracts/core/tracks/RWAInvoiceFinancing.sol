@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.24;
 
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -13,6 +13,14 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 contract RWAInvoiceFinancing {
     using SafeERC20 for IERC20;
 
+    error ZeroAddress();
+    error InvalidAmount();
+    error InvoiceNotFound();
+    error AlreadyFunded();
+    error CannotFundOwnInvoice();
+    error NotFunded();
+    error AlreadyRepaid();
+
     ICredXHub public immutable CREDX_HUB;
     IERC20 public immutable PAYMENT_TOKEN;
 
@@ -21,8 +29,8 @@ contract RWAInvoiceFinancing {
         address funder;
         uint256 faceValue;
         uint256 fundedAmount;
-        uint256 duration;
-        uint256 createdAt;
+        uint256 durationBlocks;
+        uint256 createdBlock;
         bool isFunded;
         bool isRepaid;
     }
@@ -35,14 +43,13 @@ contract RWAInvoiceFinancing {
     event InvoiceRepaid(uint256 indexed invoiceId, address indexed business);
 
     constructor(address _credXHub, address _paymentToken) {
-        require(_credXHub != address(0), "Invalid CredXHub");
-        require(_paymentToken != address(0), "Invalid PaymentToken");
+        if (_credXHub == address(0) || _paymentToken == address(0)) revert ZeroAddress();
         CREDX_HUB = ICredXHub(_credXHub);
         PAYMENT_TOKEN = IERC20(_paymentToken);
     }
 
-    function tokenizeInvoice(uint256 faceValue, uint256 duration) external returns (uint256) {
-        require(faceValue > 0, "Face value must be > 0");
+    function tokenizeInvoice(uint256 faceValue, uint256 durationBlocks) external returns (uint256) {
+        if (faceValue == 0) revert InvalidAmount();
         
         uint256 invoiceId = nextInvoiceId++;
         invoices[invoiceId] = Invoice({
@@ -50,8 +57,8 @@ contract RWAInvoiceFinancing {
             funder: address(0),
             faceValue: faceValue,
             fundedAmount: 0,
-            duration: duration,
-            createdAt: block.timestamp,
+            durationBlocks: durationBlocks,
+            createdBlock: block.number,
             isFunded: false,
             isRepaid: false
         });
@@ -62,9 +69,9 @@ contract RWAInvoiceFinancing {
 
     function fundInvoice(uint256 invoiceId) external {
         Invoice storage invoice = invoices[invoiceId];
-        require(invoice.business != address(0), "Invoice does not exist");
-        require(!invoice.isFunded, "Already funded");
-        require(invoice.business != msg.sender, "Cannot fund own invoice");
+        if (invoice.business == address(0)) revert InvoiceNotFound();
+        if (invoice.isFunded) revert AlreadyFunded();
+        if (invoice.business == msg.sender) revert CannotFundOwnInvoice();
 
         // Discount based on credit score
         (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(invoice.business);
@@ -92,8 +99,8 @@ contract RWAInvoiceFinancing {
 
     function repayInvoice(uint256 invoiceId) external {
         Invoice storage invoice = invoices[invoiceId];
-        require(invoice.isFunded, "Not funded");
-        require(!invoice.isRepaid, "Already repaid");
+        if (!invoice.isFunded) revert NotFunded();
+        if (invoice.isRepaid) revert AlreadyRepaid();
 
         invoice.isRepaid = true;
         

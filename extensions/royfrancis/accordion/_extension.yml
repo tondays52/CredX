@@ -1,0 +1,10 @@
+title: Accordion
+author: Roy Francis
+version: 1.1.0
+quarto-required: ">=1.4.0"
+contributes:
+  shortcodes:
+    - accordion.lua
+
+source: royfrancis/quarto-accordion@1.1.0
+source-type: registry

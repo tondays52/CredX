@@ -19,8 +19,8 @@ function walk(dir) {
 const files = walk('./contracts');
 files.forEach(file => {
     let content = fs.readFileSync(file, 'utf8');
-    if (content.includes('pragma solidity 0.8.20;')) {
-        content = content.replace('pragma solidity 0.8.20;', 'pragma solidity ^0.8.20;');
+    if (content.includes('pragma solidity ^0.8.20;') || content.includes('pragma solidity ^0.8.24;')) {
+        content = content.replace(/pragma solidity \^[0-9.]*;/g, 'pragma solidity 0.8.24;');
         fs.writeFileSync(file, content, 'utf8');
         console.log(`Updated ${file}`);
     }

@@ -54,7 +54,7 @@ describe("DePINInfrastructureHub", function () {
         it("Reverts if operator score < 700", async function () {
             await expect(
                 hub.connect(delegator).delegateStake(standardOperator.address, ethers.parseEther("100"))
-            ).to.be.revertedWith("Operator reliability too low");
+            ).to.be.revertedWithCustomError(hub, "OperatorReliabilityTooLow");
         });
 
         it("Allows delegation to Prime operator (score >= 700)", async function () {
@@ -72,7 +72,7 @@ describe("DePINInfrastructureHub", function () {
         it("Reverts if operator score < 750", async function () {
             await expect(
                 hub.connect(primeOperator).requestHardwareLoan(ethers.parseEther("5000"))
-            ).to.be.revertedWith("Insufficient score for uncollateralized hardware loan");
+            ).to.be.revertedWithCustomError(hub, "InsufficientScoreForLoan");
         });
 
         it("Allows hardware loan for Super-Prime operator (score >= 750)", async function () {

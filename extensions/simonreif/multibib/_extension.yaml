@@ -1,0 +1,8 @@
+title: multibib
+author: Albert Krewinkel
+version: 1.0.0
+contributes:
+  filters:
+    - multibib.lua
+source: simonreif/academic-cv-quarto@v0.1.0
+source-type: registry
