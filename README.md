@@ -63,7 +63,7 @@ CredX fulfills all Attestcoin Protocol requirements:
 
 ---
 
-## 🧪 Comprehensive Verification (63/63 Passing Tests)
+## 🧪 Comprehensive Verification (70/70 Passing Tests)
 
 Run the full automated test suite:
 ```bash
@@ -71,21 +71,26 @@ npx hardhat test
 ```
 ```text
   AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification) (8 tests)
-  CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch + SBT) (22 tests)
+  ReputationArena: PredictBay-Style Binary Paper Trading (7 tests)
+  CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch + SBT + Deadswitch) (23 tests)
   Advanced DeFi Modules: Flash Loans & Yield Vault (5 tests)
   DePINInfrastructureHub (4 tests)
   GamingEcosystemHub (7 tests)
   RWA Track: Treasury Yield Fund (4 tests)
-  BUIDL CTC 2026 Fall: Multi-Track Extension (13 tests)
+  BUIDL CTC 2026 Fall: Multi-Track Extension (12 tests)
 
-  63 passing (23s)
+  70 passing (17s)
 ```
 
 ---
 
-## 🚀 Chrome Extension (CredX Virtual Node)
+## 🚀 Chrome Extension (CredX Virtual Node & Attestcoin Daemon)
 
-Load the unpacked extension from `d:\money\extension` into Google Chrome (`chrome://extensions`) to run a background virtual node, accumulate points, and sync proofs directly to Creditcoin.
+CredX includes a production Manifest V3 browser extension (`extension/`):
+1. **Pulse Virtual Node**: Detects real CPU, RAM, and WebGL accelerator specs, measures live ping, and shares idle bandwidth to earn Creditcoin reputation points.
+2. **Attestcoin Light Client Daemon**: Tracks cross-chain block headers (Sepolia, Base, Arbitrum), audits Merkle Patricia Trie transaction receipts in-browser, and relays verified proofs to precompile `0x0FD2`.
+
+Load unpacked in Chrome via `chrome://extensions` from the `extension/` directory.
 
 ---
 
