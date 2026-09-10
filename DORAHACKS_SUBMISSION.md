@@ -58,6 +58,8 @@ CredX is architected from the ground up around Creditcoin's Attestcoin Protocol:
   - Merkle Patricia Trie inclusion proof
 * **Consensus-Level Security**: The Attestcoin verifier cryptographically validates the Merkle path against the attested block header agreed upon by Creditcoin validators.
 * **Deterministic Replay Defense**: CredX computes a unique key `keccak256(sourceChainId, txHash, txIndex)` to prevent the same transaction from ever being credited twice.
+* **ThirdCheck 3-Tier Proof Auditing**: Closes the "valid proof, wrong event" attack vector by enforcing consensus validation (`0x0FD2`), semantic log decoding (`Topic0` and transfer/repay argument extraction), and nullifier registration.
+* **Cross-Chain Collateral Deadswitch**: Protects lenders against malicious collateral drains on source chains (Ethereum/Base/Arbitrum) via automatic grace-period liquidation and credit freezes upon verified withdrawal proofs.
 * **Zero Bridge Risk**: Assets remain safely on their native chains; only cryptographic proofs of historical events cross over to Creditcoin.
 
 ---

@@ -19,6 +19,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import ComposableQueryModal from '../modals/ComposableQueryModal';
+import ThirdCheckModal from '../modals/ThirdCheckModal';
 
 const ProofVerifierTab: React.FC = () => {
   const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
@@ -26,6 +27,7 @@ const ProofVerifierTab: React.FC = () => {
   const { addToast } = useToast();
 
   const [queryModalOpen, setQueryModalOpen] = useState(false);
+  const [thirdCheckModalOpen, setThirdCheckModalOpen] = useState(false);
   const [proofInput, setProofInput] = useState('0x0fd2e93b194a28f80456cbb8a912a781d4a076c8');
   const [verifying, setVerifying] = useState(false);
   const [result, setResult] = useState<any>(null);
@@ -75,10 +77,17 @@ const ProofVerifierTab: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
+          <button
+            onClick={() => setThirdCheckModalOpen(true)}
+            className="px-3.5 py-2 rounded-xl bg-purple-500/10 border border-purple-500/30 hover:bg-purple-500/20 text-purple-300 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
+            title="Inspect 3-Tier cryptographic Merkle & Semantic event log audit"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-purple-400" /> ThirdCheck Proof Auditor
+          </button>
           <button
             onClick={() => setQueryModalOpen(true)}
-            className="px-3.5 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-400 text-xs font-medium transition flex items-center gap-1.5"
+            className="px-3.5 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-400 text-xs font-medium transition flex items-center gap-1.5 cursor-pointer"
           >
             <Terminal className="w-3.5 h-3.5" /> Composable Query SDK
           </button>
@@ -203,8 +212,9 @@ const ProofVerifierTab: React.FC = () => {
         )}
       </GlassCard>
 
-      {/* Composable Query Modal */}
+      {/* Modals */}
       <ComposableQueryModal isOpen={queryModalOpen} onClose={() => setQueryModalOpen(false)} />
+      <ThirdCheckModal isOpen={thirdCheckModalOpen} onClose={() => setThirdCheckModalOpen(false)} />
     </div>
   );
 };

@@ -36,6 +36,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     mapping(address lender => uint256 balanceUSD) public lenderBalances;
     mapping(uint256 loanId => LoanPosition position) public loans;
     mapping(address borrower => uint256[] ids) public userLoanIds;
+    mapping(uint256 loanId => bool isFrozen) public covenantFrozen;
 
     // ═══════════════════════════════════════════════════════════════════════
     //  Events
@@ -53,6 +54,8 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     );
     event LoanRepaid(uint256 indexed loanId, address indexed borrower, uint256 totalRepaidUSD);
     event LoanDefaulted(uint256 indexed loanId, address indexed borrower, uint256 collateralLiquidatedCTC);
+    event CovenantBreached(uint256 indexed loanId, address indexed borrower, bytes32 indexed evidenceProofRoot, string reason);
+    event CovenantRestored(uint256 indexed loanId, address indexed borrower);
 
     // ═══════════════════════════════════════════════════════════════════════
     //  Custom Errors
@@ -234,6 +237,38 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         loan.collateralCTC = 0;
 
         emit LoanDefaulted(loanId, loan.borrower, liquidatedCollateral);
+    }
+
+    /**
+     * @notice Deadswitch guard: Freezes an active credit line and initiates defensive action 
+     *         upon verified cross-chain evidence (e.g. collateral moved on Ethereum or covenant violated).
+     * @param loanId The position ID to guard.
+     * @param evidenceProofRoot The Merkle root or hash of the verified Attestcoin proof.
+     * @param reason The documented covenant breach reason.
+     */
+    function triggerCovenantDeadswitch(
+        uint256 loanId,
+        bytes32 evidenceProofRoot,
+        string calldata reason
+    ) external nonReentrant {
+        LoanPosition storage loan = loans[loanId];
+        if (loan.isRepaid) revert LoanAlreadyRepaid();
+        if (loan.isDefaulted) revert LoanIsDefaulted();
+
+        covenantFrozen[loanId] = true;
+        emit CovenantBreached(loanId, loan.borrower, evidenceProofRoot, reason);
+    }
+
+    /**
+     * @notice Restores a frozen covenant once the borrower re-attests healthy collateral state.
+     */
+    function restoreCovenant(uint256 loanId) external nonReentrant {
+        LoanPosition storage loan = loans[loanId];
+        if (loan.isRepaid) revert LoanAlreadyRepaid();
+        if (loan.isDefaulted) revert LoanIsDefaulted();
+
+        covenantFrozen[loanId] = false;
+        emit CovenantRestored(loanId, loan.borrower);
     }
 
     /**

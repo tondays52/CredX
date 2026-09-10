@@ -18,13 +18,16 @@ import {
 } from 'lucide-react';
 import BorrowModal from '../modals/BorrowModal';
 import RepayModal from '../modals/RepayModal';
+import DeadswitchModal from '../modals/DeadswitchModal';
 import { LoanPosition } from '../../types/protocol';
+import { ShieldAlert } from 'lucide-react';
 
 const LendingTab: React.FC = () => {
   const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
   const { score, tier, maxBorrowLimit, activeLoans } = useProtocol();
   const [borrowModalOpen, setBorrowModalOpen] = useState(false);
   const [repayModalOpen, setRepayModalOpen] = useState(false);
+  const [deadswitchModalOpen, setDeadswitchModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<LoanPosition | null>(null);
 
   const userWalletCTC = balanceCTC > 0 ? balanceCTC : 10000;
@@ -54,14 +57,22 @@ const LendingTab: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
           <div className="text-right hidden sm:block">
             <span className="text-[10px] font-mono text-white/40 block">Max Approved Credit Line</span>
             <span className="text-xs font-mono font-bold text-emerald-400">${maxBorrowLimit.toLocaleString()} USDC</span>
           </div>
           <button
+            onClick={() => setDeadswitchModalOpen(true)}
+            className="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            title="Inspect autonomous cross-chain collateral monitoring & covenant enforcement"
+          >
+            <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+            <span>Deadswitch & Covenants</span>
+          </button>
+          <button
             onClick={() => setBorrowModalOpen(true)}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-white text-xs font-semibold shadow-md shadow-cyan-500/20 transition flex items-center gap-1.5"
+            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-600 hover:from-emerald-400 hover:to-cyan-500 text-white text-xs font-semibold shadow-md shadow-cyan-500/20 transition flex items-center gap-1.5 cursor-pointer"
           >
             <ArrowDownLeft className="w-3.5 h-3.5" /> Request Credit Line
           </button>
@@ -214,6 +225,7 @@ const LendingTab: React.FC = () => {
       {/* Modals */}
       <BorrowModal isOpen={borrowModalOpen} onClose={() => setBorrowModalOpen(false)} />
       <RepayModal isOpen={repayModalOpen} onClose={() => setRepayModalOpen(false)} loan={selectedLoan} />
+      <DeadswitchModal isOpen={deadswitchModalOpen} onClose={() => setDeadswitchModalOpen(false)} />
     </div>
   );
 };

@@ -488,4 +488,42 @@ describe("CredX Protocol — Full Test Suite (v2: OCCR + Multi-Protocol + Batch 
       expect(extended.protocolDiversity).to.equal(2);
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  TEST 11: Cross-Chain Deadswitch & Autonomous Covenant Guard
+  // ═══════════════════════════════════════════════════════════════════════
+  describe("11. Cross-Chain Deadswitch & Covenant Guard", function () {
+    it("should trigger deadswitch upon verified cross-chain proof and freeze covenant", async function () {
+      // Seed pool liquidity
+      const poolAddr = await lendingPool.getAddress();
+      await cUSD.mint(deployer.address, ethers.parseEther("50000"));
+      await cUSD.approve(poolAddr, ethers.parseEther("50000"));
+      await lendingPool.depositLiquidity(ethers.parseEther("50000"));
+
+      // User borrows
+      const borrowAmt = ethers.parseEther("1000");
+      const colAmt = ethers.parseEther("750");
+      await lendingPool.connect(borrower).borrow(borrowAmt, { value: colAmt });
+
+      const proofRoot = ethers.id("proof-collateral-moved-on-ethereum");
+      await expect(
+        lendingPool.triggerCovenantDeadswitch(
+          1,
+          proofRoot,
+          "Collateral withdrawn on Ethereum Sepolia before Creditcoin settlement"
+        )
+      )
+        .to.emit(lendingPool, "CovenantBreached")
+        .withArgs(1, borrower.address, proofRoot, "Collateral withdrawn on Ethereum Sepolia before Creditcoin settlement");
+
+      expect(await lendingPool.covenantFrozen(1)).to.be.true;
+
+      // Restore covenant
+      await expect(lendingPool.restoreCovenant(1))
+        .to.emit(lendingPool, "CovenantRestored")
+        .withArgs(1, borrower.address);
+
+      expect(await lendingPool.covenantFrozen(1)).to.be.false;
+    });
+  });
 });

@@ -16,12 +16,27 @@ const ComposableQueryModal: React.FC<ComposableQueryModalProps> = ({ isOpen, onC
   const [queryOutput, setQueryOutput] = useState<string | null>(null);
 
   const sampleSolidity = `// SPDX-License-Identifier: MIT
-import { ICredXPassport } from "@credx/core/interfaces/ICredXPassport.sol";
+pragma solidity 0.8.24;
 
-function verifyBorrowerScore(address user) external view returns (uint256 ctsScore, bool eligible) {
-    ICredXPassport passport = ICredXPassport(0x0FD2...);
-    ctsScore = passport.getCTS(user);
-    eligible = ctsScore >= 700; // Sovereign / Prime threshold
+interface ICredXHub {
+    // Queries on-chain Credit Trust Score (300-850) verified via 0x0FD2 Attestcoin precompile
+    function getBorrowerScore(address borrower) external view returns (uint256 score);
+
+    // Queries prime eligibility tier (SUBPRIME, STANDARD, NEAR_PRIME, PRIME, SUPER_PRIME)
+    function getCreditTier(address borrower) external view returns (uint8 tier);
+
+    // Verifies whether a cross-chain Attestcoin proof nullifier has already been settled
+    function isProofSettled(bytes32 nullifierHash) external view returns (bool settled);
+}
+
+// 1-Line Integration in your external protocol / dApp:
+contract ExternalDeFiOrRWA {
+    ICredXHub public constant CREDX = ICredXHub(0x729b2D8B630c4241d051c92D4FeB31412846eE18);
+
+    function executeVIPDiscount(address user) external view returns (bool eligible) {
+        // Super-Prime borrowers (CTS >= 780) unlock 0% protocol fees & undercollateralized terms
+        return CREDX.getBorrowerScore(user) >= 780;
+    }
 }`;
 
   const handleCopy = () => {
