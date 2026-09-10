@@ -204,25 +204,42 @@ export const ArenaPage: React.FC = () => {
   const [volume24h, setVolume24h] = useState<string>('$1.84B');
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
 
-  // User Paper Trading State
+  // User Paper Trading & Multi-Lane Active Bets
   const [paperBalanceUSD, setPaperBalanceUSD] = useState<number>(10000);
-  const [userBet, setUserBet] = useState<UserBet | null>(null);
+  const [activeBets, setActiveBets] = useState<Record<string, UserBet>>({});
+  const activeBetsRef = useRef<Record<string, UserBet>>({});
+  activeBetsRef.current = activeBets;
+
+  const currentLaneKey = `${selectedAsset}_${selectedTimeframe}`;
+  const userBet = activeBets[currentLaneKey] || null;
 
   const wsRef = useRef<WebSocket | null>(null);
-  const roundEndTimeRef = useRef<number>(Date.now() + timeframeDurations['5m'] * 1000);
   const currentPriceRef = useRef<number>(currentAssetConfig.basePrice);
   currentPriceRef.current = currentPrice;
 
   const strikePriceRef = useRef<number>(currentAssetConfig.basePrice);
   strikePriceRef.current = strikePrice;
 
-  const userBetRef = useRef<UserBet | null>(null);
-  userBetRef.current = userBet;
+  const laneStrikesRef = useRef<Record<string, number>>({
+    [currentLaneKey]: currentAssetConfig.basePrice,
+  });
 
-  const roundIdRef = useRef<number>(1042);
+  // Epoch Synchronizer (Global Wall-Clock alignment: rounds never reset on asset switch)
+  const getLaneEpoch = useCallback((tf: Timeframe, isFast: boolean) => {
+    const durationSec = isFast ? 15 : timeframeDurations[tf] || 300;
+    const durationMs = durationSec * 1000;
+    const now = Date.now();
+    const epochIndex = Math.floor(now / durationMs);
+    const startTime = epochIndex * durationMs;
+    const endTime = (epochIndex + 1) * durationMs;
+    const remainingSec = Math.max(0, Math.ceil((endTime - now) / 1000));
+    return { durationSec, durationMs, epochIndex, startTime, endTime, remainingSec };
+  }, []);
+
+  const initialEpoch = getLaneEpoch(selectedTimeframe, isFastTestMode);
 
   const [currentRound, setCurrentRound] = useState<PredictionRound>({
-    id: 1042,
+    id: initialEpoch.epochIndex,
     asset: 'BTC',
     timeframe: '5m',
     strikePrice: currentAssetConfig.basePrice,
@@ -230,8 +247,8 @@ export const ArenaPage: React.FC = () => {
     upPool: 14500,
     downPool: 9800,
     status: 'ACTIVE',
-    startTime: Date.now() - 60000,
-    endTime: Date.now() + 240000,
+    startTime: initialEpoch.startTime,
+    endTime: initialEpoch.endTime,
   });
 
   const [pastRounds, setPastRounds] = useState<PredictionRound[]>([
@@ -325,21 +342,18 @@ export const ArenaPage: React.FC = () => {
     };
   }, [selectedAsset]);
 
-  // 3. Robust Settlement Executor
+  // 3. Manual Immediate Settlement Trigger
   const triggerSettlement = useCallback(() => {
+    const currentBet = activeBetsRef.current[currentLaneKey];
     const resolvedPrice = currentPriceRef.current;
     const targetStrike = strikePriceRef.current;
     const isUpWon = resolvedPrice >= targetStrike;
-    const currentRoundId = roundIdRef.current;
-    const currentBet = userBetRef.current;
+    const mult = timeframeMultipliers[selectedTimeframe] || 1.92;
 
-    // Check if user had an active prediction stake
     if (currentBet) {
       const userWon =
         (currentBet.direction === 'UP' && isUpWon) ||
         (currentBet.direction === 'DOWN' && !isUpWon);
-
-      const mult = timeframeMultipliers[selectedTimeframe] || 1.92;
 
       if (userWon) {
         const payout = currentBet.amount * mult;
@@ -366,11 +380,15 @@ export const ArenaPage: React.FC = () => {
         );
       }
 
-      setUserBet(null);
+      setActiveBets((prev) => {
+        const copy = { ...prev };
+        delete copy[currentLaneKey];
+        return copy;
+      });
     } else {
       addToast(
         'info',
-        `Round #${currentRoundId} Settled`,
+        `Round #${currentRound.id} Settled`,
         `Resolved at $${formatDisplayPrice(resolvedPrice)} (Strike $${formatDisplayPrice(targetStrike)}). ${isUpWon ? 'UP POOL WON ↗' : 'DOWN POOL WON ↘'}.`
       );
     }
@@ -378,7 +396,7 @@ export const ArenaPage: React.FC = () => {
     // Archive into Past Settled Rounds
     setPastRounds((prev) => [
       {
-        id: currentRoundId,
+        id: currentRound.id,
         asset: selectedAsset,
         timeframe: selectedTimeframe,
         strikePrice: targetStrike,
@@ -389,54 +407,127 @@ export const ArenaPage: React.FC = () => {
         startTime: Date.now() - (isFastTestMode ? 15000 : timeframeDurations[selectedTimeframe] * 1000),
         endTime: Date.now(),
       },
-      ...prev.slice(0, 5),
+      ...prev.slice(0, 7),
     ]);
 
-    // Spawn Next Round
-    const nextRoundId = currentRoundId + 1;
-    roundIdRef.current = nextRoundId;
+    // Update Strike Price for next round
+    laneStrikesRef.current[currentLaneKey] = resolvedPrice;
     setStrikePrice(resolvedPrice);
     strikePriceRef.current = resolvedPrice;
+  }, [currentLaneKey, selectedAsset, selectedTimeframe, isFastTestMode, currentRound.id, currentRound.upPool, currentRound.downPool, streak, addToast]);
 
-    const roundDurationSec = isFastTestMode ? 15 : timeframeDurations[selectedTimeframe];
-    roundEndTimeRef.current = Date.now() + roundDurationSec * 1000;
-    setTimeRemaining(roundDurationSec);
-
-    setCurrentRound({
-      id: nextRoundId,
-      asset: selectedAsset,
-      timeframe: selectedTimeframe,
-      strikePrice: resolvedPrice,
-      closePrice: null,
-      upPool: Math.floor(Math.random() * 8000 + 10000),
-      downPool: Math.floor(Math.random() * 8000 + 9000),
-      status: 'ACTIVE',
-      startTime: Date.now(),
-      endTime: Date.now() + roundDurationSec * 1000,
-    });
-  }, [selectedAsset, selectedTimeframe, isFastTestMode, currentRound.upPool, currentRound.downPool, streak, addToast]);
-
-  // 4. Reliable Decoupled Countdown Timer (Does NOT get wiped when price updates!)
+  // 4. Continuous Multi-Lane 1-Second Master Clock
+  // (Never resets on asset/timeframe click — tracks true real-time epoch!)
   useEffect(() => {
-    const roundDurationSec = isFastTestMode ? 15 : timeframeDurations[selectedTimeframe];
-    roundEndTimeRef.current = Date.now() + roundDurationSec * 1000;
-    setTimeRemaining(roundDurationSec);
-
     const timer = setInterval(() => {
       const now = Date.now();
-      const diffMs = roundEndTimeRef.current - now;
-      const remainingSec = Math.max(0, Math.ceil(diffMs / 1000));
-      setTimeRemaining(remainingSec);
 
-      if (remainingSec <= 0) {
-        triggerSettlement();
+      // Update current lane's countdown
+      const currentEpoch = getLaneEpoch(selectedTimeframe, isFastTestMode);
+      setTimeRemaining(currentEpoch.remainingSec);
+
+      // Ensure current lane has a strike price set
+      if (!laneStrikesRef.current[currentLaneKey] && currentPriceRef.current > 0) {
+        laneStrikesRef.current[currentLaneKey] = currentPriceRef.current;
+        setStrikePrice(currentPriceRef.current);
       }
+
+      // Check all active bets across all lanes for epoch completion
+      const currentBets = { ...activeBetsRef.current };
+      let betsChanged = false;
+
+      Object.entries(currentBets).forEach(([laneKey, bet]) => {
+        const betDurationMs = (isFastTestMode ? 15 : timeframeDurations[bet.timeframe] || 300) * 1000;
+        const betEpoch = getLaneEpoch(bet.timeframe, isFastTestMode);
+
+        // Check if bet round has concluded
+        if (now >= bet.timestamp + betDurationMs || betEpoch.epochIndex > bet.roundId) {
+          betsChanged = true;
+          const assetCfg = ASSETS_REGISTRY[bet.asset] || ASSETS_REGISTRY.BTC;
+          const resolvedPrice =
+            bet.asset === selectedAsset
+              ? currentPriceRef.current
+              : assetCfg.basePrice || bet.strikePrice;
+
+          const isUpWon = resolvedPrice >= bet.strikePrice;
+          const userWon =
+            (bet.direction === 'UP' && isUpWon) ||
+            (bet.direction === 'DOWN' && !isUpWon);
+          const mult = timeframeMultipliers[bet.timeframe] || 1.92;
+
+          if (userWon) {
+            const payout = bet.amount * mult;
+            setPaperBalanceUSD((prev) => prev + payout);
+            setStreak((prev) => {
+              const next = prev + 1;
+              if (next >= 3) setStreakModalOpen(true);
+              return next;
+            });
+            addToast(
+              'success',
+              `🎉 ${bet.asset} PREDICTION WON! (+CTS REPUTATION)`,
+              `Resolved at $${formatDisplayPrice(resolvedPrice)}. Won $${payout.toFixed(2)} USDC (${mult}x) on ${bet.asset} ${bet.timeframe}!`
+            );
+          } else {
+            setStreak(0);
+            addToast(
+              'error',
+              `${bet.asset} ${bet.timeframe} Expired Out-of-the-Money`,
+              `Resolved at $${formatDisplayPrice(resolvedPrice)} vs Strike $${formatDisplayPrice(bet.strikePrice)}.`
+            );
+          }
+
+          // Log into settled rounds
+          setPastRounds((prev) => [
+            {
+              id: bet.roundId,
+              asset: bet.asset,
+              timeframe: bet.timeframe,
+              strikePrice: bet.strikePrice,
+              closePrice: resolvedPrice,
+              upPool: Math.floor(Math.random() * 8000 + 10000),
+              downPool: Math.floor(Math.random() * 8000 + 9000),
+              status: 'RESOLVED',
+              startTime: bet.timestamp,
+              endTime: now,
+            },
+            ...prev.slice(0, 7),
+          ]);
+
+          delete currentBets[laneKey];
+        }
+      });
+
+      if (betsChanged) {
+        setActiveBets(currentBets);
+      }
+
+      // Roll current round if epoch changed
+      setCurrentRound((prev) => {
+        if (prev.id !== currentEpoch.epochIndex) {
+          const newStrike = currentPriceRef.current > 0 ? currentPriceRef.current : prev.strikePrice;
+          laneStrikesRef.current[currentLaneKey] = newStrike;
+          setStrikePrice(newStrike);
+          return {
+            ...prev,
+            id: currentEpoch.epochIndex,
+            asset: selectedAsset,
+            timeframe: selectedTimeframe,
+            strikePrice: newStrike,
+            startTime: currentEpoch.startTime,
+            endTime: currentEpoch.endTime,
+            upPool: Math.floor(Math.random() * 8000 + 11000),
+            downPool: Math.floor(Math.random() * 8000 + 9500),
+          };
+        }
+        return prev;
+      });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [selectedTimeframe, isFastTestMode, triggerSettlement]);
+  }, [selectedAsset, selectedTimeframe, isFastTestMode, currentLaneKey, getLaneEpoch, addToast]);
 
-  // Handle Asset Switch
+  // Handle Asset Switch (Continuous clock: timer is NEVER reset!)
   const handleSelectAsset = (sym: AssetSymbol) => {
     setSelectedAsset(sym);
     const cfg = ASSETS_REGISTRY[sym];
@@ -445,81 +536,93 @@ export const ArenaPage: React.FC = () => {
     setCurrentPrice(initialPrice);
     currentPriceRef.current = initialPrice;
 
-    setStrikePrice(initialPrice);
-    strikePriceRef.current = initialPrice;
+    const newLaneKey = `${sym}_${selectedTimeframe}`;
+    if (!laneStrikesRef.current[newLaneKey]) {
+      laneStrikesRef.current[newLaneKey] = initialPrice;
+    }
+    const currentStrike = laneStrikesRef.current[newLaneKey];
+    setStrikePrice(currentStrike);
+    strikePriceRef.current = currentStrike;
 
-    const roundDurationSec = isFastTestMode ? 15 : timeframeDurations[selectedTimeframe];
-    roundEndTimeRef.current = Date.now() + roundDurationSec * 1000;
-    setTimeRemaining(roundDurationSec);
+    const { epochIndex, startTime, endTime, remainingSec } = getLaneEpoch(selectedTimeframe, isFastTestMode);
+    setTimeRemaining(remainingSec);
 
-    const nextRoundId = roundIdRef.current + 1;
-    roundIdRef.current = nextRoundId;
-
-    setCurrentRound({
-      id: nextRoundId,
+    setCurrentRound((prev) => ({
+      ...prev,
+      id: epochIndex,
       asset: sym,
       timeframe: selectedTimeframe,
-      strikePrice: initialPrice,
-      closePrice: null,
-      upPool: Math.floor(Math.random() * 8000 + 10000),
-      downPool: Math.floor(Math.random() * 8000 + 9000),
-      status: 'ACTIVE',
-      startTime: Date.now(),
-      endTime: Date.now() + roundDurationSec * 1000,
-    });
-
-    setUserBet(null);
+      strikePrice: currentStrike,
+      startTime,
+      endTime,
+    }));
   };
 
-  // Handle Timeframe Switch
+  // Handle Timeframe Switch (Calculates target epoch clock seamlessly)
   const handleSelectTimeframe = (tf: Timeframe) => {
     setSelectedTimeframe(tf);
-    const roundDurationSec = isFastTestMode ? 15 : timeframeDurations[tf];
-    roundEndTimeRef.current = Date.now() + roundDurationSec * 1000;
-    setTimeRemaining(roundDurationSec);
+    const newLaneKey = `${selectedAsset}_${tf}`;
+    if (!laneStrikesRef.current[newLaneKey]) {
+      laneStrikesRef.current[newLaneKey] = currentPriceRef.current;
+    }
+    const currentStrike = laneStrikesRef.current[newLaneKey];
+    setStrikePrice(currentStrike);
+    strikePriceRef.current = currentStrike;
 
-    setStrikePrice(currentPrice);
-    strikePriceRef.current = currentPrice;
-
-    const nextRoundId = roundIdRef.current + 1;
-    roundIdRef.current = nextRoundId;
+    const { epochIndex, startTime, endTime, remainingSec } = getLaneEpoch(tf, isFastTestMode);
+    setTimeRemaining(remainingSec);
 
     setCurrentRound((curr) => ({
       ...curr,
-      id: nextRoundId,
+      id: epochIndex,
       timeframe: tf,
-      strikePrice: currentPrice,
-      startTime: Date.now(),
-      endTime: Date.now() + roundDurationSec * 1000,
+      strikePrice: currentStrike,
+      startTime,
+      endTime,
     }));
 
-    addToast('info', 'Timeframe Switched', `Active prediction window changed to ${tf.toUpperCase()}. Historical candles recalibrated.`);
+    addToast('info', 'Timeframe Switched', `Switched to ${tf.toUpperCase()} epoch lane. Countdown continuously synchronized.`);
   };
 
-  // Handle User Bet Placement
+  // Handle User Bet Placement in Current Lane
   const handlePlaceBet = (direction: 'UP' | 'DOWN', amount: number) => {
+    if (amount > paperBalanceUSD) {
+      addToast('error', 'Insufficient Capital', `Your available balance is $${paperBalanceUSD.toFixed(2)} USDC.`);
+      return;
+    }
+
     // Deduct stake from paper balance
     setPaperBalanceUSD((prev) => Math.max(0, prev - amount));
 
-    // Record user bet
+    const { epochIndex } = getLaneEpoch(selectedTimeframe, isFastTestMode);
+    const lockStrike = currentPriceRef.current > 0 ? currentPriceRef.current : strikePrice;
+
+    // Record user bet in active bets registry for this lane
     const newBet: UserBet = {
-      roundId: currentRound.id,
+      id: `${selectedAsset}_${selectedTimeframe}_${epochIndex}_${Date.now()}`,
+      roundId: epochIndex,
+      asset: selectedAsset,
+      timeframe: selectedTimeframe,
+      laneKey: currentLaneKey,
       direction,
       amount,
-      strikePrice: currentPrice,
+      strikePrice: lockStrike,
       timestamp: Date.now(),
+      potentialPayout: amount * (timeframeMultipliers[selectedTimeframe] || 1.92),
     };
-    setUserBet(newBet);
-    userBetRef.current = newBet;
 
-    // Lock strike price at placement if not locked
-    setStrikePrice(currentPrice);
-    strikePriceRef.current = currentPrice;
+    setActiveBets((prev) => ({
+      ...prev,
+      [currentLaneKey]: newBet,
+    }));
+
+    // Lock strike price
+    setStrikePrice(lockStrike);
+    strikePriceRef.current = lockStrike;
 
     // Update round pools
     setCurrentRound((prev) => ({
       ...prev,
-      strikePrice: currentPrice,
       upPool: direction === 'UP' ? prev.upPool + amount : prev.upPool,
       downPool: direction === 'DOWN' ? prev.downPool + amount : prev.downPool,
     }));
@@ -682,6 +785,52 @@ export const ArenaPage: React.FC = () => {
           })}
         </div>
       </div>
+
+      {/* Active Positions Across Lanes Strip */}
+      {Object.values(activeBets).length > 0 && (
+        <div className="p-3.5 rounded-2xl bg-cyan-950/25 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shadow-lg shadow-cyan-500/5">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="font-bold text-white uppercase tracking-wider">
+              Active Multi-Asset Lanes ({Object.values(activeBets).length}):
+            </span>
+            <span className="text-white/40 hidden sm:inline">&bull; Real-time isolated epoch resolution</span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {Object.values(activeBets).map((b) => {
+              const isCurrent = b.asset === selectedAsset && b.timeframe === selectedTimeframe;
+              return (
+                <button
+                  key={b.id}
+                  onClick={() => {
+                    handleSelectAsset(b.asset);
+                    handleSelectTimeframe(b.timeframe);
+                  }}
+                  className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition flex items-center gap-2 cursor-pointer ${
+                    isCurrent
+                      ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-500/40 shadow-sm'
+                      : 'bg-white/[0.04] border-white/[0.08] text-white/70 hover:border-cyan-500/40 hover:text-white'
+                  }`}
+                  title={`Jump to ${b.asset} ${b.timeframe} lane`}
+                >
+                  <span className="text-white">{b.asset}</span>
+                  <span className="text-white/40 text-[10px]">{b.timeframe.toUpperCase()}</span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                      b.direction === 'UP'
+                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                    }`}
+                  >
+                    {b.direction} ${b.amount}
+                  </span>
+                  {isCurrent && <span className="text-[10px] text-cyan-400 font-normal">&bull; Active View</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Main Trading Stage */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

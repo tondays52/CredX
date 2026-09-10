@@ -61,9 +61,30 @@ export interface PredictionRound {
 }
 
 export interface UserBet {
+  id: string;
   roundId: number;
+  asset: AssetSymbol;
+  timeframe: Timeframe;
+  laneKey: string;
   direction: 'UP' | 'DOWN';
   amount: number;
   strikePrice: number;
   timestamp: number;
+  potentialPayout?: number;
+  settled?: boolean;
+  won?: boolean;
 }
+
+export interface LaneState {
+  laneKey: string;
+  asset: AssetSymbol;
+  timeframe: Timeframe;
+  roundId: number;
+  strikePrice: number;
+  upPool: number;
+  downPool: number;
+  status: 'ACTIVE' | 'RESOLVED';
+  startTime: number;
+  endTime: number;
+}
+
