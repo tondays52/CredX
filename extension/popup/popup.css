@@ -353,3 +353,234 @@ body {
 }
 
 .hidden { display: none; }
+
+/* Tab Switcher */
+.tab-switcher {
+  display: flex;
+  background: rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 8px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: #fff;
+}
+
+.tab-btn.active {
+  background: var(--bg-card);
+  color: var(--lime);
+  border: 1px solid rgba(171, 246, 0, 0.2);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.tab-content {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tab-content.active {
+  display: flex;
+}
+
+/* Attestcoin Daemon Card */
+.daemon-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.daemon-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.daemon-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 3px 8px;
+  border-radius: 99px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #34d399;
+}
+
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #34d399;
+  box-shadow: 0 0 8px #34d399;
+  animation: pulseAnim 1.5s infinite;
+}
+
+.daemon-precompile {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--lime);
+}
+
+.daemon-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.d-stat {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.d-stat-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  display: block;
+}
+
+.d-stat-val {
+  font-size: 12px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: #fff;
+  margin-top: 2px;
+  display: block;
+}
+
+/* Chains Card */
+.chains-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chains-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin-bottom: 2px;
+}
+
+.chain-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  padding: 3px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.chain-row:last-child {
+  border-bottom: none;
+}
+
+.chain-name {
+  color: #e2e8f0;
+}
+
+.chain-block {
+  color: var(--cyan);
+  font-size: 10px;
+}
+
+.chain-status {
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+/* Proof Stream */
+.live-proofs-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.live-proofs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.proof-stream-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.stream-item {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  padding: 6px 8px;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stream-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stream-hash {
+  font-size: 10px;
+  color: var(--lime);
+}
+
+.stream-badge {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.stream-sub {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.text-xs { font-size: 9px; }

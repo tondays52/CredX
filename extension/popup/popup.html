@@ -29,62 +29,159 @@
       </div>
     </header>
 
-    <!-- Main Centerpiece: Iconic Giant Glowing Power Button -->
-    <div class="power-section">
-      <button id="bigPowerBtn" class="big-power-btn connected" title="Toggle CredX Pulse Node">
-        <svg class="power-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-          <line x1="12" y1="2" x2="12" y2="12"></line>
-        </svg>
-        <div class="pulse-ring"></div>
+    <!-- Tab Switcher: Pulse Node vs Attestcoin Light Client Daemon -->
+    <div class="tab-switcher">
+      <button id="tabPulseBtn" class="tab-btn active">
+        <span>⚡ Pulse Node</span>
       </button>
-      <div class="power-status">
-        <span id="powerStatusTitle" class="power-title">Pulse is Connected</span>
-        <span id="powerStatusSubtitle" class="power-sub">You're doing great! Keep contributing to earn.</span>
+      <button id="tabAttestBtn" class="tab-btn">
+        <span>🛡️ Attestcoin Daemon</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: Pulse Node (DePIN Telemetry) -->
+    <div id="tabPulseContent" class="tab-content active">
+      <!-- Main Centerpiece: Iconic Giant Glowing Power Button -->
+      <div class="power-section">
+        <button id="bigPowerBtn" class="big-power-btn connected" title="Toggle CredX Pulse Node">
+          <svg class="power-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+            <line x1="12" y1="2" x2="12" y2="12"></line>
+          </svg>
+          <div class="pulse-ring"></div>
+        </button>
+        <div class="power-status">
+          <span id="powerStatusTitle" class="power-title">Pulse is Connected</span>
+          <span id="powerStatusSubtitle" class="power-sub">You're doing great! Keep contributing to earn.</span>
+        </div>
+      </div>
+
+      <!-- Network Quality Progress Bar -->
+      <div class="quality-card">
+        <div class="quality-header">
+          <span>Network Quality:</span>
+          <strong id="qualityPercent" class="text-lime">98%</strong>
+        </div>
+        <div class="progress-track">
+          <div id="qualityBar" class="progress-fill" style="width: 98%;"></div>
+        </div>
+        <div class="quality-footer">
+          <span id="hwPingValue">18 ms ping</span>
+          <span>0.00% Packet Loss</span>
+        </div>
+      </div>
+
+      <!-- Real Machine Hardware Specs Pill -->
+      <div class="hardware-banner">
+        <div class="hw-item">
+          <span class="hw-label">CPU Cores</span>
+          <span class="hw-value" id="hwCoresValue">-- Cores</span>
+        </div>
+        <div class="hw-divider"></div>
+        <div class="hw-item">
+          <span class="hw-label">RAM</span>
+          <span class="hw-value" id="hwMemoryValue">-- GB</span>
+        </div>
+        <div class="hw-divider"></div>
+        <div class="hw-item">
+          <span class="hw-label">Accelerator</span>
+          <span class="hw-value truncate" id="hwGpuValue">WebGL</span>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="actions">
+        <button id="syncChainBtn" class="btn btn-primary">
+          <span>⚡ Sync to Creditcoin (+35 CTS)</span>
+        </button>
+        <button id="openDashboardBtn" class="btn btn-secondary">
+          <span>Desktop Dashboard ↗</span>
+        </button>
       </div>
     </div>
 
-    <!-- Network Quality Progress Bar -->
-    <div class="quality-card">
-      <div class="quality-header">
-        <span>Network Quality:</span>
-        <strong id="qualityPercent" class="text-lime">98%</strong>
-      </div>
-      <div class="progress-track">
-        <div id="qualityBar" class="progress-fill" style="width: 98%;"></div>
-      </div>
-      <div class="quality-footer">
-        <span id="hwPingValue">18 ms ping</span>
-        <span>0.00% Packet Loss</span>
-      </div>
-    </div>
+    <!-- TAB 2: Attestcoin Light Client Daemon -->
+    <div id="tabAttestContent" class="tab-content">
+      <!-- Light Client Status Card -->
+      <div class="daemon-card">
+        <div class="daemon-header">
+          <div class="daemon-badge">
+            <span class="pulse-dot"></span>
+            <span>DAEMON ACTIVE</span>
+          </div>
+          <span class="daemon-precompile">Precompile 0x0FD2</span>
+        </div>
 
-    <!-- Real Machine Hardware Specs Pill -->
-    <div class="hardware-banner">
-      <div class="hw-item">
-        <span class="hw-label">CPU Cores</span>
-        <span class="hw-value" id="hwCoresValue">-- Cores</span>
+        <div class="daemon-stats-grid">
+          <div class="d-stat">
+            <span class="d-stat-label">Chains Monitored</span>
+            <span class="d-stat-val text-lime">4 Networks</span>
+          </div>
+          <div class="d-stat">
+            <span class="d-stat-label">Proofs Audited</span>
+            <span class="d-stat-val text-cyan" id="proofsAuditedCount">1,842</span>
+          </div>
+          <div class="d-stat">
+            <span class="d-stat-label">MPT Validation</span>
+            <span class="d-stat-val text-green">100% Trustless</span>
+          </div>
+          <div class="d-stat">
+            <span class="d-stat-label">Relay Latency</span>
+            <span class="d-stat-val">1.2s avg</span>
+          </div>
+        </div>
       </div>
-      <div class="hw-divider"></div>
-      <div class="hw-item">
-        <span class="hw-label">RAM</span>
-        <span class="hw-value" id="hwMemoryValue">-- GB</span>
-      </div>
-      <div class="hw-divider"></div>
-      <div class="hw-item">
-        <span class="hw-label">Accelerator</span>
-        <span class="hw-value truncate" id="hwGpuValue">WebGL</span>
-      </div>
-    </div>
 
-    <!-- Action Buttons -->
-    <div class="actions">
-      <button id="syncChainBtn" class="btn btn-primary">
-        <span>⚡ Sync to Creditcoin (+35 CTS)</span>
-      </button>
-      <button id="openDashboardBtn" class="btn btn-secondary">
-        <span>Desktop Dashboard ↗</span>
-      </button>
+      <!-- Monitored Cross-Chain Heads -->
+      <div class="chains-card">
+        <div class="chains-title">Monitored Header Roots</div>
+        <div class="chain-row">
+          <span class="chain-name">Sepolia Testnet</span>
+          <span class="chain-block font-mono" id="sepoliaBlock">#7,219,842</span>
+          <span class="chain-status text-green">● Synced</span>
+        </div>
+        <div class="chain-row">
+          <span class="chain-name">Base Mainnet</span>
+          <span class="chain-block font-mono" id="baseBlock">#21,804,119</span>
+          <span class="chain-status text-green">● Synced</span>
+        </div>
+        <div class="chain-row">
+          <span class="chain-name">Arbitrum One</span>
+          <span class="chain-block font-mono" id="arbBlock">#274,019,233</span>
+          <span class="chain-status text-green">● Synced</span>
+        </div>
+      </div>
+
+      <!-- Live Merkle Verification Stream -->
+      <div class="live-proofs-card">
+        <div class="live-proofs-header">
+          <span>In-Browser Proof Audit Stream</span>
+          <span class="text-lime text-xs">Live MPT</span>
+        </div>
+        <div class="proof-stream-list" id="proofStreamList">
+          <div class="stream-item">
+            <div class="stream-top">
+              <span class="stream-hash font-mono">0x8f2a...c419</span>
+              <span class="stream-badge text-green">VERIFIED</span>
+            </div>
+            <div class="stream-sub">Sepolia Aave V3 Repay • 2,500 USDC • RLP Root Valid</div>
+          </div>
+          <div class="stream-item">
+            <div class="stream-top">
+              <span class="stream-hash font-mono">0x14d0...e89b</span>
+              <span class="stream-badge text-green">VERIFIED</span>
+            </div>
+            <div class="stream-sub">Base Compound V3 • 1.8 ETH • Merkle Leaf Proven</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Daemon Actions -->
+      <div class="actions">
+        <button id="auditNowBtn" class="btn btn-primary">
+          <span>🛡️ Audit & Verify Test MPT Proof</span>
+        </button>
+      </div>
     </div>
 
     <!-- Live Status -->

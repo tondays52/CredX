@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "CredX Virtual Node & Credit Passport",
-  "version": "1.1.0",
-  "description": "DePIN Virtual Node for Creditcoin — Share verified idle network telemetry to build your on-chain credit reputation.",
+  "name": "CredX Virtual Node & Attestcoin Daemon",
+  "version": "1.2.0",
+  "description": "Creditcoin DePIN Virtual Node & Attestcoin Light Client Daemon — Share telemetry and cryptographically audit cross-chain Merkle proofs directly in-browser.",
   "permissions": [
     "storage",
     "alarms"

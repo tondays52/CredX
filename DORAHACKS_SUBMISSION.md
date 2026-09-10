@@ -8,10 +8,10 @@
 
 * **Project Name**: CredX Protocol
 * **Tagline**: The first cross-chain trustless credit bureau and under-collateralized lending protocol powered by Creditcoin's Attestcoin Protocol (USC).
-* **Track**: **DeFi** (Primary) & **RWA** (Secondary)
-* **GitHub Repository**: `https://github.com/<YOUR-GITHUB-USERNAME>/CredX`
+* **Track**: **Creditcoin Ecosystem / DeFi / RWA / DePIN / AI / Gaming** (Multi-Track)
+* **GitHub Repository**: `https://github.com/tondays52/CredX`
 * **Target Network**: Creditcoin L1 (Chain ID: `102031`)
-* **Source Blockchains Attested**: Ethereum Mainnet (Chain ID `1`), Ethereum Sepolia (Chain ID `11155111`)
+* **Source Blockchains Attested**: Ethereum Mainnet (Chain ID `1`), Ethereum Sepolia (Chain ID `11155111`), Base, Arbitrum
 
 ---
 
@@ -154,17 +154,21 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
 
 ## 🧪 8. Testing, Verification & Demonstration Evidence
 
-* **Automated Unit & Integration Test Suite**: **23 passing tests (100% pass rate)** covering:
-  - OCCR multi-factor scoring calculation
-  - Multi-protocol action weights
-  - Replay attack defense
+* **Automated Unit & Integration Test Suite**: **70 passing tests (100% pass rate)** covering all 5 hackathon tracks:
+  - OCCR multi-factor scoring calculation (300 to 850 CTS)
+  - Multi-protocol action weights & replay attack defense
   - Batch proof import & size limits
-  - Dynamic APR tier assignment
-  - Soulbound Token non-transferability & composability
+  - Dynamic APR tier assignment & Super-Prime under-collateralized borrowing
+  - Soulbound Token (CX-SBT) non-transferability & composability
   - Social vouching delegation constraints
-  - Privacy commitment generation
-  - Under-collateralized borrow/repay workflow
-  - Multi-chain diversity tracking
+  - Privacy commitment generation (`keccak256`)
+  - Cross-Chain Deadswitch & Covenant Guard liquidation freeze
+  - Track 1 DeFi (Reputation Flash Loans, Multiplier Yield Vault, Dynamic AMM)
+  - Track 2 RWA (Institutional Invoice Financing & Treasury Yield Fund)
+  - Track 3 Gaming (Anti-Sybil Lootboxes, Fair Gathering, Zero-Fee Marketplace)
+  - Track 4 DePIN (Hardware Operator Staking & Financing)
+  - Track 5 AI (Autonomous AI Hub, AgentFi Credit Lines, Proof-of-Compute Settlement)
+  - Reputation Arena (PredictBay-Style Binary BTC/ETH Paper Trading with Win-Streak Sync)
 * **End-to-End Simulation Script** (`scripts/test-e2e.js`):
   - Simulates an unregistered user (`CTS = 300`, 150% collateral required).
   - Submits Aave v3 Sepolia repayment ($50k) and Mainnet Compound proof ($75k).
@@ -173,13 +177,17 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
   - Mints **CX-SBT #1** with privacy commitment hash.
   - Executes under-collateralized borrow ($10,000 cUSD locking 3,500 CTC vs. 7,500 CTC standard DeFi — **saving 4,000 CTC / $8,000 USD in capital**).
   - Repays loan with accrued dynamic APR and refunds collateral.
-* **Interactive Cyber-Fintech Web3 DApp**:
-  - Live animated SVG score gauge.
-  - OCCR 7-factor progress breakdown.
-  - Soulbound Token holographic credential with selective disclosure toggle.
-  - Multi-protocol proof submitter with batch mode and real-time precompile visualizer.
-  - Dynamic collateral calculator with capital savings comparison.
-  - Social vouching terminal.
+
+### 🌐 8.1. Chrome Extension: Virtual Node & Attestcoin Light Client Daemon
+CredX includes a production Manifest V3 browser extension (`extension/`) enabling everyday users to participate in the Creditcoin network:
+1. **Pulse Virtual Node (DePIN Telemetry)**: Continuously benchmarks local hardware (real CPU cores, device memory, WebGL accelerator, and live millisecond network latency) and shares verified idle bandwidth to earn Creditcoin reputation points.
+2. **Attestcoin Light Client Daemon**: Actively tracks cross-chain block headers across Sepolia, Base, and Arbitrum, auditing Merkle Patricia Trie transaction receipts in real time directly inside Chrome before relaying to Creditcoin precompile `0x0FD2`.
+
+![CredX Pulse Virtual Node](https://raw.githubusercontent.com/tondays52/CredX/main/screenshots/09_chrome_extension.png)
+*Figure 9: CredX Chrome Extension — Pulse Virtual Node DePIN telemetry & real-time point accrual.*
+
+![CredX Attestcoin Daemon](https://raw.githubusercontent.com/tondays52/CredX/main/screenshots/10_chrome_extension_daemon.png)
+*Figure 10: CredX Chrome Extension — In-browser Attestcoin Light Client Daemon auditing cross-chain MPT proofs.*
 
 ---
 

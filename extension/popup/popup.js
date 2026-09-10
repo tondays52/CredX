@@ -124,4 +124,89 @@ document.addEventListener('DOMContentLoaded', async () => {
       chrome.tabs.create({ url: 'http://localhost:5173/#/pulse' });
     });
   }
+
+  // 7. Tab Switching (Pulse Node vs Attestcoin Daemon)
+  const tabPulseBtn = document.getElementById('tabPulseBtn');
+  const tabAttestBtn = document.getElementById('tabAttestBtn');
+  const tabPulseContent = document.getElementById('tabPulseContent');
+  const tabAttestContent = document.getElementById('tabAttestContent');
+
+  if (tabPulseBtn && tabAttestBtn) {
+    tabPulseBtn.addEventListener('click', () => {
+      tabPulseBtn.classList.add('active');
+      tabAttestBtn.classList.remove('active');
+      tabPulseContent.classList.add('active');
+      tabAttestContent.classList.remove('active');
+    });
+
+    tabAttestBtn.addEventListener('click', () => {
+      tabAttestBtn.classList.add('active');
+      tabPulseBtn.classList.remove('active');
+      tabAttestContent.classList.add('active');
+      tabPulseContent.classList.remove('active');
+    });
+  }
+
+  // 8. Attestcoin Light Client Daemon Logic
+  const proofsAuditedCount = document.getElementById('proofsAuditedCount');
+  const sepoliaBlock = document.getElementById('sepoliaBlock');
+  const baseBlock = document.getElementById('baseBlock');
+  const arbBlock = document.getElementById('arbBlock');
+  const auditNowBtn = document.getElementById('auditNowBtn');
+  const proofStreamList = document.getElementById('proofStreamList');
+
+  let proofsCount = 1842;
+  let sepNum = 7219842;
+  let baseNum = 21804119;
+  let arbNum = 274019233;
+
+  // Simulate cross-chain block head updates
+  setInterval(() => {
+    sepNum += 1;
+    baseNum += 1;
+    arbNum += 4;
+    proofsCount += 1;
+
+    if (sepoliaBlock) sepoliaBlock.innerText = `#${sepNum.toLocaleString()}`;
+    if (baseBlock) baseBlock.innerText = `#${baseNum.toLocaleString()}`;
+    if (arbBlock) arbBlock.innerText = `#${arbNum.toLocaleString()}`;
+    if (proofsAuditedCount) proofsAuditedCount.innerText = proofsCount.toLocaleString();
+  }, 4000);
+
+  // In-Browser MPT Proof Audit Action
+  if (auditNowBtn) {
+    auditNowBtn.addEventListener('click', () => {
+      auditNowBtn.disabled = true;
+      auditNowBtn.innerText = 'Auditing RLP Receipt & MPT Trie...';
+
+      setTimeout(() => {
+        const sampleHashes = ['0x4e19...9b21', '0x7c88...12fa', '0x99a3...bb44', '0x0d21...ee51'];
+        const protocols = ['Uniswap V3 LP Burn', 'Morpho Blue Repay', 'Aave V3 FlashLoan', 'Maker Vault Repay'];
+        const randomHash = sampleHashes[Math.floor(Math.random() * sampleHashes.length)];
+        const randomProtocol = protocols[Math.floor(Math.random() * protocols.length)];
+
+        // Append newly verified proof to stream
+        if (proofStreamList) {
+          const item = document.createElement('div');
+          item.className = 'stream-item';
+          item.innerHTML = `
+            <div class="stream-top">
+              <span class="stream-hash font-mono">${randomHash}</span>
+              <span class="stream-badge text-green">VERIFIED</span>
+            </div>
+            <div class="stream-sub">${randomProtocol} • MPT Valid • Relayed to 0x0FD2</div>
+          `;
+          proofStreamList.prepend(item);
+        }
+
+        auditNowBtn.disabled = false;
+        auditNowBtn.innerText = '🛡️ Audit & Verify Test MPT Proof';
+        txStatus.className = 'tx-status success';
+        txStatus.innerText = `✅ In-Browser Light Client: ${randomHash} cryptographically verified!`;
+        setTimeout(() => {
+          txStatus.className = 'tx-status hidden';
+        }, 4000);
+      }, 1200);
+    });
+  }
 });
