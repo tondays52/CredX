@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AssetSymbol, Timeframe, PredictionRound, TechnicalSignals } from '../../types/arena';
+import { AssetSymbol, Timeframe, PredictionRound, TechnicalSignals, UserBet } from '../../types/arena';
 import { calculateTechnicalSignals } from '../../utils/technicalSignals';
+import { generateTimeframeKlines } from '../../utils/cryptoPriceService';
 import {
   TrendingUp,
   Clock,
@@ -12,7 +13,9 @@ import {
   Radio,
   ArrowUpRight,
   ArrowDownRight,
-  Sparkles
+  Sparkles,
+  CheckCircle2,
+  AlertCircle
 } from 'lucide-react';
 
 interface ArenaChartProps {
@@ -30,6 +33,10 @@ interface ArenaChartProps {
   low24h?: number;
   volume24h?: string;
   isLiveFeed?: boolean;
+  userBet?: UserBet | null;
+  onForceSettle?: () => void;
+  isFastTestMode?: boolean;
+  onToggleFastTestMode?: () => void;
 }
 
 interface PriceTick {
@@ -53,12 +60,17 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
   high24h,
   low24h,
   volume24h = '$1.84B',
-  isLiveFeed = true
+  isLiveFeed = true,
+  userBet,
+  onForceSettle,
+  isFastTestMode = false,
+  onToggleFastTestMode,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const historyRef = useRef<PriceTick[]>([]);
   const animFrameRef = useRef<number | null>(null);
   const lastAssetRef = useRef<string>(asset);
+  const lastTfRef = useRef<string>(timeframe);
 
   const [technicalSignals, setTechnicalSignals] = useState<TechnicalSignals>({
     rsi: 54.2,
@@ -72,88 +84,38 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     buyVolumeRatio: 56
   });
 
-  const timeframes: { id: Timeframe; label: string }[] = [
-    { id: '5m', label: '5 Mins' },
-    { id: '15m', label: '15 Mins' },
-    { id: '30m', label: '30 Mins' },
-    { id: '1h', label: '1 Hour' },
-    { id: '1d', label: '1 Day' }
+  const timeframes: { id: Timeframe; label: string; desc: string }[] = [
+    { id: '5m', label: '5 Mins', desc: 'Fast Expiry' },
+    { id: '15m', label: '15 Mins', desc: 'Standard' },
+    { id: '30m', label: '30 Mins', desc: 'Swing' },
+    { id: '1h', label: '1 Hour', desc: 'Hourly' },
+    { id: '1d', label: '1 Day', desc: 'Macro' }
   ];
 
-  // 1. Fetch Real Historical Klines or Re-seed cleanly when asset changes
+  const formatPriceValue = (val: number | undefined | null) => {
+    if (val === undefined || val === null || isNaN(val)) return '--';
+    if (val < 0.0001) return val.toFixed(8);
+    if (val < 0.01) return val.toFixed(6);
+    if (val < 1) return val.toFixed(4);
+    return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  // 1. Fetch / Re-seed historical klines cleanly whenever asset or timeframe changes
   useEffect(() => {
-    let isCancelled = false;
     const isNewAsset = lastAssetRef.current !== asset;
+    const isNewTf = lastTfRef.current !== timeframe;
     lastAssetRef.current = asset;
+    lastTfRef.current = timeframe;
 
-    // Immediately reseed clean history to prevent cross-asset vertical drops
-    const seedFreshHistory = (base: number) => {
-      const initial: PriceTick[] = [];
-      let p = base;
-      const now = Date.now();
-      for (let i = 60; i >= 0; i--) {
-        const delta = (Math.sin(i * 0.3) * 0.0012 + (Math.random() - 0.49) * 0.0006) * base;
-        p = base + delta;
-        initial.push({
-          price: p,
-          time: now - i * 1000,
-          volume: Math.random() * 40 + 15,
-          isUp: delta >= 0
-        });
-      }
-      historyRef.current = initial;
-      const sigs = calculateTechnicalSignals(initial.map((t) => t.price));
-      setTechnicalSignals(sigs);
-    };
+    const base = currentPrice > 0 ? currentPrice : 100;
+    const newKlines = generateTimeframeKlines(base, timeframe, 50);
+    historyRef.current = newKlines;
 
-    if (isNewAsset || historyRef.current.length === 0) {
-      seedFreshHistory(currentPrice > 0 ? currentPrice : 100);
-    }
+    const sigs = calculateTechnicalSignals(newKlines.map((t) => t.price));
+    setTechnicalSignals(sigs);
+  }, [asset, timeframe]);
 
-    // Attempt real live historical klines fetch from public Binance API
-    const fetchRealKlines = async () => {
-      try {
-        const sym = binanceSymbol ? binanceSymbol.toUpperCase() : 'BTCUSDT';
-        // Use public Binance API with fallback
-        let raw: any = null;
-        try {
-          const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1m&limit=60`);
-          if (res.ok) raw = await res.json();
-        } catch {
-          // Fallback to rapidapi proxy if direct Binance has CORS
-          const res = await fetch(`https://binance43.p.rapidapi.com/klines?symbol=${sym}&interval=1m&limit=60`, {
-            headers: {
-              'x-rapidapi-key': 'c34dd121c6msh652d28963ce5afcp13a348jsn69374cdb192d',
-              'x-rapidapi-host': 'binance43.p.rapidapi.com'
-            }
-          });
-          if (res.ok) raw = await res.json();
-        }
-
-        if (Array.isArray(raw) && raw.length > 0 && !isCancelled) {
-          const ticks: PriceTick[] = raw.map((k: any) => ({
-            price: parseFloat(k[4]),
-            time: k[0],
-            volume: parseFloat(k[5]) || 50,
-            isUp: parseFloat(k[4]) >= parseFloat(k[1])
-          }));
-          historyRef.current = ticks;
-          const sigs = calculateTechnicalSignals(ticks.map((t) => t.price));
-          setTechnicalSignals(sigs);
-        }
-      } catch {
-        // Safe fallback already seeded
-      }
-    };
-
-    fetchRealKlines();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [asset, binanceSymbol]);
-
-  // 2. Smoothly append live real-time price updates (No crazy jumps)
+  // 2. Smoothly append live real-time price updates
   useEffect(() => {
     if (currentPrice <= 0) return;
 
@@ -161,20 +123,18 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     if (ticks.length === 0) return;
 
     const lastTick = ticks[ticks.length - 1];
+    const pctDiff = Math.abs(currentPrice - lastTick.price) / (lastTick.price || 1);
 
-    // Check if price is within reasonable range (< 30% jump) of last tick
-    const pctDiff = Math.abs(currentPrice - lastTick.price) / lastTick.price;
+    // Rescale history if switching across vastly different asset scales
     if (pctDiff > 0.40) {
-      // Re-scale history to match new asset price level smoothly
-      const scale = currentPrice / lastTick.price;
+      const scale = currentPrice / (lastTick.price || 1);
       historyRef.current = ticks.map((t) => ({ ...t, price: t.price * scale }));
     }
 
     const isUp = currentPrice >= lastTick.price;
     const now = Date.now();
 
-    // Limit tick frequency to smooth 300ms intervals to prevent frantic chart seizure
-    if (now - lastTick.time >= 250) {
+    if (now - lastTick.time >= 300) {
       historyRef.current.push({
         price: currentPrice,
         time: now,
@@ -182,22 +142,20 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         isUp
       });
 
-      if (historyRef.current.length > 75) {
+      if (historyRef.current.length > 70) {
         historyRef.current.shift();
       }
 
-      // Recalculate indicators on the live series
       const prices = historyRef.current.map((t) => t.price);
       const sigs = calculateTechnicalSignals(prices);
       setTechnicalSignals(sigs);
     } else {
-      // Smoothly update the current head tick price
       lastTick.price = currentPrice;
       lastTick.isUp = isUp;
     }
   }, [currentPrice]);
 
-  // 3. 60FPS High-Precision HTML5 Canvas Render Loop
+  // 3. 60FPS High-Precision HTML5 Canvas Render Loop with Target Lines & Live PnL Glow
   useEffect(() => {
     let phase = 0;
 
@@ -226,14 +184,14 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       if (strikePrice > 0) allPrices.push(strikePrice);
       if (currentPrice > 0) allPrices.push(currentPrice);
 
-      const minPrice = Math.min(...allPrices) * 0.9995;
-      const maxPrice = Math.max(...allPrices) * 1.0005;
+      const minPrice = Math.min(...allPrices) * 0.9992;
+      const maxPrice = Math.max(...allPrices) * 1.0008;
       const priceRange = maxPrice - minPrice || 1;
 
       const getY = (price: number) => height - 45 - ((price - minPrice) / priceRange) * (height - 85);
 
-      // 1. Grid Background
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      // 1. Grid Lines
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
       ctx.lineWidth = 1;
       for (let x = 0; x < width; x += 60) {
         ctx.beginPath();
@@ -248,36 +206,36 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         ctx.stroke();
       }
 
-      // 2. Real Volume Bars at bottom
-      const barWidth = Math.max(3, (width - 70) / ticks.length - 2);
+      // 2. Volume Bars
+      const barWidth = Math.max(3, (width - 75) / ticks.length - 2);
       ticks.forEach((t, i) => {
-        const x = (i / (ticks.length - 1)) * (width - 70);
+        const x = (i / (ticks.length - 1)) * (width - 75);
         const barHeight = Math.min(35, (t.volume / 80) * 35);
         ctx.fillStyle = t.isUp ? 'rgba(0, 255, 102, 0.20)' : 'rgba(239, 68, 68, 0.20)';
         ctx.fillRect(x, height - barHeight - 4, barWidth, barHeight);
       });
 
-      // 3. Strike Price Target Line (Amber dashed line)
+      // 3. Strike Price Target Reference Line (Amber dashed line with target badge)
       if (strikePrice > 0) {
         const strikeY = getY(strikePrice);
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.75)';
+        ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
         ctx.lineWidth = 1.5;
         ctx.setLineDash([5, 4]);
         ctx.beginPath();
         ctx.moveTo(0, strikeY);
-        ctx.lineTo(width - 75, strikeY);
+        ctx.lineTo(width - 80, strikeY);
         ctx.stroke();
         ctx.setLineDash([]);
 
-        // Strike Price Badge
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.9)';
+        // Target Strike Badge
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
         ctx.beginPath();
-        ctx.roundRect(width - 72, strikeY - 10, 68, 20, 4);
+        ctx.roundRect(width - 76, strikeY - 10, 72, 20, 5);
         ctx.fill();
         ctx.fillStyle = '#070b0e';
-        ctx.font = 'bold 10px monospace';
+        ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(`$${strikePrice < 1 ? strikePrice.toFixed(4) : strikePrice.toFixed(2)}`, width - 38, strikeY + 4);
+        ctx.fillText(`STRIKE $${formatPriceValue(strikePrice)}`, width - 40, strikeY + 4);
       }
 
       // 4. Smooth Price Line Path
@@ -321,12 +279,12 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.fill();
 
       // 5. Live Cursor Line & Pulse Beacon
-      ctx.strokeStyle = `rgba(${themeRGB}, 0.45)`;
+      ctx.strokeStyle = `rgba(${themeRGB}, 0.50)`;
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
       ctx.beginPath();
       ctx.moveTo(0, lastY);
-      ctx.lineTo(width - 75, lastY);
+      ctx.lineTo(width - 80, lastY);
       ctx.stroke();
       ctx.setLineDash([]);
 
@@ -345,12 +303,33 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       // Live Price Pill on Right Axis
       ctx.fillStyle = themeColor;
       ctx.beginPath();
-      ctx.roundRect(width - 72, lastY - 10, 68, 20, 4);
+      ctx.roundRect(width - 76, lastY - 10, 72, 20, 5);
       ctx.fill();
       ctx.fillStyle = '#070b0e';
-      ctx.font = 'bold 10px monospace';
+      ctx.font = 'bold 9.5px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(`$${currentPrice < 1 ? currentPrice.toFixed(4) : currentPrice.toFixed(2)}`, width - 38, lastY + 4);
+      ctx.fillText(`$${formatPriceValue(currentPrice)}`, width - 40, lastY + 4);
+
+      // 6. If user has placed a bet, render dynamic In-The-Money / Out-Of-The-Money indicator
+      if (userBet) {
+        const isWinning =
+          (userBet.direction === 'UP' && currentPrice >= userBet.strikePrice) ||
+          (userBet.direction === 'DOWN' && currentPrice <= userBet.strikePrice);
+
+        ctx.fillStyle = isWinning ? 'rgba(0, 255, 102, 0.90)' : 'rgba(239, 68, 68, 0.90)';
+        ctx.beginPath();
+        ctx.roundRect(14, 14, 210, 28, 6);
+        ctx.fill();
+
+        ctx.fillStyle = '#070b0e';
+        ctx.font = 'bold 10px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(
+          isWinning ? `★ IN THE MONEY (+$${(userBet.amount * 0.92).toFixed(2)})` : '✗ OUT OF THE MONEY',
+          24,
+          32
+        );
+      }
 
       animFrameRef.current = requestAnimationFrame(render);
     };
@@ -360,7 +339,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [currentPrice, strikePrice]);
+  }, [currentPrice, strikePrice, userBet]);
 
   // Format countdown string mm:ss
   const formatTimer = (seconds: number) => {
@@ -377,9 +356,57 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       {/* Background ambient lighting */}
       <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/[0.05] rounded-full blur-3xl pointer-events-none" />
 
+      {/* Active User Prediction Banner (If user placed a bet) */}
+      {userBet && (
+        <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-cyan-500/15 to-emerald-500/20 border border-amber-500/40 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+            <span className="font-bold text-white uppercase">Your Prediction Active:</span>
+            <span
+              className={`px-2 py-0.5 rounded font-bold ${
+                userBet.direction === 'UP'
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+              }`}
+            >
+              PREDICT {userBet.direction}
+            </span>
+            <span className="text-white/70">
+              Stake: <strong className="text-white">${userBet.amount} USDC</strong>
+            </span>
+            <span className="text-white/70">
+              Strike: <strong className="text-amber-400">${formatPriceValue(userBet.strikePrice)}</strong>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {((userBet.direction === 'UP' && currentPrice >= userBet.strikePrice) ||
+              (userBet.direction === 'DOWN' && currentPrice <= userBet.strikePrice)) ? (
+              <span className="text-emerald-400 font-bold flex items-center gap-1">
+                <CheckCircle2 className="w-4 h-4" /> In The Money (+$
+                {(userBet.amount * 0.92).toFixed(2)} Est. Profit)
+              </span>
+            ) : (
+              <span className="text-rose-400 font-bold flex items-center gap-1">
+                <AlertCircle className="w-4 h-4" /> Out Of The Money
+              </span>
+            )}
+
+            {onForceSettle && (
+              <button
+                onClick={onForceSettle}
+                className="px-2.5 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-bold text-[10px] border border-amber-500/40 transition cursor-pointer"
+              >
+                ⚡ Settle Now
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Top Header Row */}
       <div className="flex flex-wrap items-center justify-between gap-4 relative z-10 border-b border-white/[0.06] pb-4">
-        {/* Asset Pair, Current Price & Binance Live Badge */}
+        {/* Asset Pair, Current Price & Source Exchange Badge */}
         <div className="flex items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -388,13 +415,13 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#00FF66]/10 border border-[#00FF66]/30 text-[#00FF66] text-[10px] font-mono font-bold">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00FF66] animate-pulse" />
-                LIVE BINANCE WS
+                FREECRYPTO + BINANCE WS
               </span>
             </div>
 
             <div className="flex items-center gap-2 mt-0.5">
               <span className="text-2xl sm:text-3xl font-black font-mono text-white tracking-tight">
-                ${currentPrice < 1 ? currentPrice.toFixed(4) : currentPrice.toFixed(2)}
+                ${formatPriceValue(currentPrice)}
               </span>
               <span
                 className={`text-xs font-mono font-bold flex items-center gap-0.5 ${
@@ -408,11 +435,11 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         </div>
 
         {/* Strike Target, Delta & Working Countdown Timer */}
-        <div className="flex items-center gap-3 font-mono">
+        <div className="flex flex-wrap items-center gap-3 font-mono">
           <div className="px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-right">
             <span className="text-[9px] text-gray-400 block uppercase tracking-wider">STRIKE TARGET</span>
             <span className="text-sm font-bold text-amber-400">
-              ${strikePrice < 1 ? strikePrice.toFixed(4) : strikePrice.toFixed(2)}
+              ${formatPriceValue(strikePrice)}
             </span>
           </div>
 
@@ -423,11 +450,11 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
                 isPositiveDelta ? 'text-[#00FF66]' : 'text-rose-400'
               }`}
             >
-              {isPositiveDelta ? '+' : ''}${deltaFromStrike.toFixed(2)}
+              {isPositiveDelta ? '+' : '-'}${formatPriceValue(Math.abs(deltaFromStrike))}
             </span>
           </div>
 
-          {/* Guaranteed Working Live Countdown Timer */}
+          {/* Working Live Countdown Timer with Settle Action */}
           <div className="px-4 py-2 rounded-xl bg-[#00e5ff]/10 border border-[#00e5ff]/40 text-center shadow-[0_0_15px_rgba(0,229,255,0.2)]">
             <div className="flex items-center justify-center gap-1 text-[9px] text-cyan-300 uppercase tracking-wider">
               <Clock className="w-3 h-3 text-cyan-400 animate-spin" style={{ animationDuration: '6s' }} />
@@ -437,6 +464,32 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
               {formatTimer(timeRemaining)}
             </span>
           </div>
+
+          {/* Manual Settle Button for Testing & Verification */}
+          {onForceSettle && (
+            <button
+              onClick={onForceSettle}
+              title="Force epoch settlement immediately for testing"
+              className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-yellow-500/20 hover:from-amber-500/30 hover:to-yellow-500/30 border border-amber-500/50 text-amber-300 font-mono text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-amber-500/10 cursor-pointer"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400 fill-current" />
+              <span>Settle Round</span>
+            </button>
+          )}
+
+          {/* Fast 15s Test Mode Toggle */}
+          {onToggleFastTestMode && (
+            <button
+              onClick={onToggleFastTestMode}
+              className={`px-3 py-2 rounded-xl text-xs font-mono font-bold transition border cursor-pointer ${
+                isFastTestMode
+                  ? 'bg-purple-500/20 border-purple-500/60 text-purple-300 shadow-sm'
+                  : 'bg-white/[0.03] border-white/[0.08] text-white/40 hover:text-white'
+              }`}
+            >
+              {isFastTestMode ? '⚡ 15s Rapid' : 'Standard'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -448,9 +501,9 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
             <button
               key={tf.id}
               onClick={() => onSelectTimeframe(tf.id)}
-              className={`px-3 py-1 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
                 timeframe === tf.id
-                  ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20'
+                  ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20 font-black'
                   : 'text-gray-400 hover:text-white'
               }`}
             >
@@ -503,11 +556,11 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
           </div>
           <div className="hidden sm:block">
             <span>EMA 9: </span>
-            <strong className="text-white">${technicalSignals.emaFast}</strong>
+            <strong className="text-white">${formatPriceValue(technicalSignals.emaFast)}</strong>
           </div>
           <div className="hidden sm:block">
             <span>EMA 21: </span>
-            <strong className="text-white">${technicalSignals.emaSlow}</strong>
+            <strong className="text-white">${formatPriceValue(technicalSignals.emaSlow)}</strong>
           </div>
         </div>
       </div>

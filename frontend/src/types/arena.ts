@@ -59,3 +59,11 @@ export interface PredictionRound {
   startTime: number;
   endTime: number;
 }
+
+export interface UserBet {
+  roundId: number;
+  direction: 'UP' | 'DOWN';
+  amount: number;
+  strikePrice: number;
+  timestamp: number;
+}
