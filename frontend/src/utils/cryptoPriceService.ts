@@ -202,60 +202,128 @@ export async function fetchLiveMarketPrices(): Promise<Record<string, TickerData
  * - '1h': 30 points, step = 120 seconds (total 1 hour)
  * - '1d': 24 points, step = 3600 seconds (total 24 hours)
  */
-export function generateTimeframeKlines(
+export interface CandleBar {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  isUp: boolean;
+}
+
+export interface MACDPoint {
+  macd: number;
+  signal: number;
+  hist: number;
+}
+
+/**
+ * Generate timeframe-calibrated historical Japanese Candlesticks (OHLC) for an asset.
+ */
+export function generateTimeframeCandles(
   basePrice: number,
   timeframe: '5m' | '15m' | '30m' | '1h' | '1d',
-  pointsCount: number = 40
-): KlinePoint[] {
+  candleCount: number = 42
+): CandleBar[] {
   const now = Date.now();
   let stepMs = 10 * 1000;
-  let volatility = 0.0008; // 0.08% per tick for 5m
+  let volatility = 0.0012; // 0.12% per candle for 5m
 
   if (timeframe === '15m') {
     stepMs = 30 * 1000;
-    volatility = 0.0014;
+    volatility = 0.0022;
   } else if (timeframe === '30m') {
     stepMs = 60 * 1000;
-    volatility = 0.0022;
+    volatility = 0.0035;
   } else if (timeframe === '1h') {
     stepMs = 120 * 1000;
-    volatility = 0.0035;
+    volatility = 0.0055;
   } else if (timeframe === '1d') {
     stepMs = 3600 * 1000;
-    volatility = 0.0085;
+    volatility = 0.014;
   }
 
-  const klines: KlinePoint[] = [];
-  let current = basePrice;
+  // Generate synthetic smooth price trend with oscillations
+  const candles: CandleBar[] = [];
+  let currentOpen = basePrice * (1 - (volatility * 4));
 
-  // Build points backwards from (now - stepMs) to (now - pointsCount * stepMs)
-  // so the last point lands near current price
-  const deltas: number[] = [];
-  for (let i = 0; i < pointsCount; i++) {
-    // Semi-random walk with mean reversion
+  for (let i = candleCount - 1; i >= 0; i--) {
+    const candleTime = now - i * stepMs;
+    const wave = Math.sin((i / candleCount) * Math.PI * 2.5) * (volatility * basePrice);
     const noise = (Math.random() - 0.49) * volatility * basePrice;
-    const wave = Math.sin((i / pointsCount) * Math.PI * 3) * (volatility * 0.7 * basePrice);
-    deltas.push(noise + wave);
-  }
+    
+    // Close is open + movement
+    const movement = (i === 0) ? (basePrice - currentOpen) : (wave * 0.4 + noise);
+    const close = Math.max(0.000001, currentOpen + movement);
+    
+    // High and Low wicks
+    const maxOC = Math.max(currentOpen, close);
+    const minOC = Math.min(currentOpen, close);
+    const wickTop = Math.random() * (volatility * 0.7 * basePrice);
+    const wickBottom = Math.random() * (volatility * 0.7 * basePrice);
+    const high = maxOC + wickTop;
+    const low = Math.max(0.000001, minOC - wickBottom);
+    
+    const isUp = close >= currentOpen;
 
-  // Calculate cumulative prices backwards
-  let p = basePrice;
-  const rawPrices: number[] = [basePrice];
-  for (let i = deltas.length - 1; i >= 0; i--) {
-    p = p - deltas[i];
-    rawPrices.unshift(p);
-  }
-
-  for (let i = 0; i < rawPrices.length; i++) {
-    const ptPrice = Math.max(0.000001, rawPrices[i]);
-    const prevPrice = i > 0 ? rawPrices[i - 1] : ptPrice;
-    klines.push({
-      time: now - (rawPrices.length - 1 - i) * stepMs,
-      price: ptPrice,
-      volume: Math.random() * 40 + 10,
-      isUp: ptPrice >= prevPrice,
+    candles.push({
+      time: candleTime,
+      open: currentOpen,
+      high,
+      low,
+      close,
+      volume: Math.floor(Math.random() * 80 + 30),
+      isUp
     });
+
+    currentOpen = close;
   }
 
-  return klines;
+  // Ensure last candle closes exactly at current basePrice
+  if (candles.length > 0) {
+    const last = candles[candles.length - 1];
+    last.close = basePrice;
+    last.high = Math.max(last.high, basePrice);
+    last.low = Math.min(last.low, basePrice);
+    last.isUp = last.close >= last.open;
+  }
+
+  return candles;
+}
+
+/**
+ * Calculate full MACD (12, 26, 9) series for candlestick data.
+ */
+export function calculateMACDSeries(candles: CandleBar[]): MACDPoint[] {
+  const closes = candles.map((c) => c.close);
+  const n = closes.length;
+  if (n === 0) return [];
+
+  // EMA helper
+  const calcEMAArray = (values: number[], period: number): number[] => {
+    const k = 2 / (period + 1);
+    const ema: number[] = new Array(values.length);
+    ema[0] = values[0];
+    for (let i = 1; i < values.length; i++) {
+      ema[i] = values[i] * k + ema[i - 1] * (1 - k);
+    }
+    return ema;
+  };
+
+  const emaFast = calcEMAArray(closes, 12);
+  const emaSlow = calcEMAArray(closes, 26);
+
+  const macdLine: number[] = new Array(n);
+  for (let i = 0; i < n; i++) {
+    macdLine[i] = emaFast[i] - emaSlow[i];
+  }
+
+  const signalLine = calcEMAArray(macdLine, 9);
+
+  return macdLine.map((m, i) => ({
+    macd: m,
+    signal: signalLine[i],
+    hist: m - signalLine[i],
+  }));
 }
