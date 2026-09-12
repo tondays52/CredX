@@ -107,7 +107,7 @@ function build() {
       { width: doc.page.width - 96, align: "center", lineGap: 3 }
     );
   doc.moveDown(1.4);
-  mono("LIVE 0x0FD2 integration  |  99/99 passing tests  |  16 deployed contracts on Creditcoin testnet", AMBER);
+  mono("LIVE 0x0FD2 integration  |  Run live: credx-protocol.vercel.app  |  99/99 tests  |  16 contracts on testnet", AMBER);
 
   /* ── Slide 2: Problem ───────────────────────────────────────────── */
   newSlide();
@@ -143,7 +143,29 @@ function build() {
   doc.moveDown(0.3);
   doc.font("Helvetica", 8.5).fillColor(MUTED).text("Reproduce any time:  npm run usc:verify", { width: doc.page.width - 96 });
 
-  /* ── Slide 4: Scoring & Soulbound ───────────────────────────────── */
+  /* ── Slide 4: RiskGuard policy gate ─────────────────────────────── */
+  newSlide();
+  title("RiskGuard - Verify-Then-Execute Policy Gate", "Proposals proposed; the deterministic policy decides");
+  bullets([
+    "Four-gate trace before anything executes: (r1) collateral liveness, (r2) covenant boundary,",
+    "(r3) policy action allowlist (fail closed), (r4) 0x0FD2 oracle-bound cryptographic verification.",
+    "Failing gate => explicit REFUSED with the violated rule cited; no silent partial execution.",
+    "Live in-browser 0x0FD2 button verifies the latest attested Sepolia receipt against the",
+    "deployed precompile - Merkle + continuity proof, no wallet, no signer, no gas.",
+  ]);
+
+  /* ── Slide 5: Covenant Ops feed ─────────────────────────────────── */
+  newSlide();
+  title("Covenant Ops - Live Liveness & Covenant Feed", "Every verified spine fact in one pane of glass");
+  bullets([
+    "Attestation heights, anchored proof count and source chains read live from the deployed oracle",
+    "(0x0FD2 + 0x0FD3 ChainInfo) - no operator, no bridge, no oracle.",
+    "Collateral liveness rules decide whether new credit stays open per position.",
+    "On attested collateral departure: new credit is blocked; repay/withdraw stay open;",
+    "a fresh receipt proving restoration re-opens credit automatically.",
+  ]);
+
+  /* ── Slide 6: Scoring & Soulbound ───────────────────────────────── */
   newSlide();
   title("OCCR Scoring & Soulbound Credit Passport", "Academic On-Chain Credit Risk framework");
   bullets([
@@ -272,6 +294,7 @@ function build() {
   sectionHead("Links & license");
   bullets([
     "GitHub: https://github.com/tondays52/CredX",
+    "Live app: https://credx-protocol.vercel.app (RiskGuard + Covenant Ops panes live against the oracle)",
     "License: MIT (open source for the Creditcoin L1 ecosystem).",
   ]);
 

@@ -97,7 +97,7 @@ const TerminalPage: React.FC = () => {
     rwa: { live: dataSource === 'chain', note: 'Treasury deposits/withdraws and the invoice marketplace hit live contracts when connected; PoR reserve panel stays illustrative.' },
     node: { live: false, note: 'Virtual node telemetry is local to your browser (no CTC is actually shared or earned).' },
     sbt: { live: dataSource === 'chain', note: 'Mint/refresh the real ERC-5192 soulbound token when connected.' },
-    lending: { live: dataSource === 'chain', note: 'Credit Facility borrow/repay hit the undercollateralized lending pool; Proofs & Attest submissions write to CredXHub. Demo verify is simulated without a transaction.' },
+    lending: { live: dataSource === 'chain', note: 'Credit Facility borrow/repay hit the undercollateralized lending pool; Proofs & Attest submissions write to CredXHub. RiskGuard and Covenant Ops add a verify-then-execute policy gate plus live oracle telemetry (0x0FD2/0x0FD3) with honest SIMULATED evaluation labels.' },
   };
 
   const activeStatus = tabStatus[activeTab];

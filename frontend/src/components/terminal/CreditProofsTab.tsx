@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import LendingTab from './LendingTab';
 import ProofVerifierTab from './ProofVerifierTab';
+import RiskGuardView from './RiskGuardView';
+import CovenantOpsFeed from './CovenantOpsFeed';
 import SimulationBadge from '../common/SimulationBadge';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
-import { Landmark, FileCheck, ShieldCheck } from 'lucide-react';
+import { Landmark, FileCheck, ShieldCheck, ShieldHalf, Activity } from 'lucide-react';
 
-type CreditProofsSection = 'credit' | 'proofs';
+type CreditProofsSection = 'credit' | 'proofs' | 'risk' | 'ops';
 
 const CreditProofsTab: React.FC = () => {
   const { isConnected } = useWeb3();
@@ -16,6 +18,8 @@ const CreditProofsTab: React.FC = () => {
   const sections: { id: CreditProofsSection; label: string; icon: React.FC<{ className?: string }>; desc: string }[] = [
     { id: 'credit', label: 'Credit Facility', icon: Landmark, desc: 'Undercollateralized OCCR borrowing — borrow, settle and inspect covenants against the live pool.' },
     { id: 'proofs', label: 'Proofs & Attest', icon: FileCheck, desc: 'Submit cross-chain Merkle/continuity receipts to CredXHub and recompute your on-chain CTS.' },
+    { id: 'risk', label: 'RiskGuard Gate', icon: ShieldHalf, desc: 'Verify-then-execute policy engine — the agent proposes, the deterministic contract decides after 0x0FD2 verification.' },
+    { id: 'ops', label: 'Covenant Ops', icon: Activity, desc: 'Live oracle telemetry and collateral-liveness/covenant feed — new credit closes the instant an attested breach is proven.' },
   ];
 
   return (
@@ -69,7 +73,10 @@ const CreditProofsTab: React.FC = () => {
       </div>
 
       {/* Active sector */}
-      {section === 'credit' ? <LendingTab /> : <ProofVerifierTab />}
+      {section === 'credit' && <LendingTab />}
+      {section === 'proofs' && <ProofVerifierTab />}
+      {section === 'risk' && <RiskGuardView />}
+      {section === 'ops' && <CovenantOpsFeed />}
     </div>
   );
 };
