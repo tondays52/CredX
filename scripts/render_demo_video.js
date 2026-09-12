@@ -46,7 +46,9 @@ const sceneSpecs = [
   ["s11-riskguard.png", "RiskGuard Gate - verify-then-execute: the agent proposes, the deterministic policy decides", 11, true],
   ["s12-covenant-ops.png", "Covenant Ops - live collateral-liveness feed from the deployed oracle", 11, false],
   ["s13-purpose-bound.png", "Purpose-Bound RWA Vault - funds locked to a declared purpose until attestation unlocks tranches", 11, true],
-  ["s14-usage-meters.png", "Usage Meters - attested increments, fail-closed caps, on-chain debt settlement", 11, false],
+  ["s14-usage-meters.png", "Usage Meters + Prepaid Credits - prepaid consumed first, overdraw fails closed", 11, false],
+  ["s15-verified-escrow.png", "Verified Escrow - pays the seller only on an attested receipt; replay-guarded, deadline-refund", 12, true],
+  ["s16-evidence-registry.png", "Evidence Registry - ProofAnchored / EscrowReleased / UsageRecorded / PrepaidConsumed", 12, false],
   ["s9-blockscout-anchor.png", "On-chain: proof anchored on 0x0FD2 - Blockscout Creditcoin testnet", 12, true],
   ["s10-blockscout-oracle.png", "BlockProverAttestationOracle 0x4d11...C671 wraps the Creditcoin precompiles", 10, false],
 ];

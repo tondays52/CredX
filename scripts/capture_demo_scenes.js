@@ -175,6 +175,27 @@ async function main() {
     await new Promise((r) => setTimeout(r, 4500));
     await screenshot(page, "s14-usage-meters");
 
+    /* S15 — Verified Escrow */
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("Verified Escrow"));
+      if (b) b.click();
+    });
+    await waitText(page, "escrow jobs — read live from the deployed vault", 30000);
+    try { await waitText(page, "RELEASED", 15000); } catch (_) {}
+    await new Promise((r) => setTimeout(r, 4500));
+    await screenshot(page, "s15-verified-escrow");
+
+    /* S16 — Evidence Registry */
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("Evidence Registry"));
+      if (b) b.click();
+    });
+    await waitText(page, "Evidence Registry", 30000);
+    await new Promise((r) => setTimeout(r, 4500));
+    await screenshot(page, "s16-evidence-registry");
+
     /* S13 — Blockscout: on-chain anchor tx (real proof of 0x0FD2) */
     const bs = await browser.newPage();
     bs.setDefaultTimeout(40000);
