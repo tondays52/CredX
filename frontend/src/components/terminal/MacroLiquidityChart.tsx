@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationBadge } from '../common/SimulationBadge';
+import { RAPIDAPI_BINANCE_KEY } from '../../config/contracts';
 import {
   TrendingUp,
   Activity,
@@ -139,13 +140,14 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
       historicalData.current = data;
       setLivePrice(basePrice);
 
-      // Attempt live fetch from RapidAPI Binance
+      // Attempt live fetch from RapidAPI Binance (skipped when VITE_RAPIDAPI_KEY is unset)
       const apiInterval = timeframe === '15m' ? '15m' : timeframe === '1H' ? '1h' : '1d';
       const fetchApi = async () => {
         try {
+          if (!RAPIDAPI_BINANCE_KEY) return;
           const res = await fetch(`https://binance43.p.rapidapi.com/klines?symbol=${symbol === 'CTC' ? 'BTC' : symbol}USDT&interval=${apiInterval}&limit=60`, {
             headers: {
-              'x-rapidapi-key': 'c34dd121c6msh652d28963ce5afcp13a348jsn69374cdb192d',
+              'x-rapidapi-key': RAPIDAPI_BINANCE_KEY,
               'x-rapidapi-host': 'binance43.p.rapidapi.com',
             },
           });

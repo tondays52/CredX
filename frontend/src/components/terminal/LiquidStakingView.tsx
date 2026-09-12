@@ -1637,7 +1637,7 @@ export const LiquidStakingView: React.FC = () => {
                       const val = parseInt(e.target.value);
                       const milestones = [1, 3, 6, 12];
                       const closest = milestones.reduce((prev, curr) =>
-                        Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev
+                        Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev, milestones[0]
                       );
                       setInvestmentMonths(closest);
                     }}

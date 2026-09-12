@@ -31,6 +31,22 @@ function serveFile(res, targetPath) {
   fs.createReadStream(targetPath).pipe(res);
 }
 
+function resolveSafePath(reqPath) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(reqPath);
+  } catch (_) {
+    return null;
+  }
+  const normalized = path.normalize(decoded).replace(/^[/\\]+/, '');
+  const target = path.join(PUBLIC_DIR, normalized);
+  const rel = path.relative(PUBLIC_DIR, target);
+  if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
+    return null;
+  }
+  return target;
+}
+
 const server = http.createServer((req, res) => {
   let reqPath = req.url.split('?')[0];
 
@@ -45,10 +61,10 @@ const server = http.createServer((req, res) => {
     return serveFile(res, path.join(PUBLIC_DIR, 'arena.html'));
   }
 
-  let filePath = path.join(PUBLIC_DIR, reqPath);
-  
+  const filePath = resolveSafePath(reqPath);
+
   // Prevent directory traversal
-  if (!filePath.startsWith(PUBLIC_DIR)) {
+  if (!filePath) {
     res.writeHead(403, { 'Content-Type': 'text/plain' });
     res.end('403 Forbidden');
     return;

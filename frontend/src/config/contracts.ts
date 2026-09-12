@@ -13,6 +13,13 @@ export const CREDITCOIN_BLOCKSCOUT = 'https://creditcoin-testnet.blockscout.com'
  */
 export const GOOGLE_MAPS_API_KEY: string = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
 
+/**
+ * RapidAPI (Binance43) key for live candle fetches. NEVER hard-code in source —
+ * set VITE_RAPIDAPI_KEY (frontend/.env). When empty the live fetch is skipped
+ * and the chart uses its local price path.
+ */
+export const RAPIDAPI_BINANCE_KEY: string = (import.meta.env.VITE_RAPIDAPI_KEY as string) || '';
+
 export const CONTRACTS = {
   attestationVerifier: '0x34aA30efE2226ffC2E55607017FbA2F07e62b279',
   creditScoreEngine: '0xA31697bBd4900f8FA62015A51dA3c58972E96BB6',
