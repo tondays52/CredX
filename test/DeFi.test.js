@@ -60,10 +60,11 @@ describe("Advanced DeFi Modules: Flash Loans & Yield Vault", function () {
     await mockToken.mint(await flashLoan.getAddress(), ethers.parseEther("100000"));
     await rewardToken.mint(await yieldVault.getAddress(), ethers.parseEther("10000000"));
 
-    // Give user1 a high score (Super-Prime: > 780)
+    // Give user1 a high score (Super-Prime: >= 780)
+    // Value cap: max $500k/proof, $1M/day. 15 × $60k = $900k (under cap).
     for (let i = 0; i < 15; i++) {
         const proof = await buildMockEventProof(1, "tx-defi-" + user1.address + i);
-        await credXHub.connect(user1).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("200000"));
+        await credXHub.connect(user1).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("60000"));
     }
   });
 

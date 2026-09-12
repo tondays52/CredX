@@ -50,6 +50,13 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useWeb3 } from '../../context/Web3Context';
+import {
+  fetchCUSDBalance,
+  fetchYieldVaultState,
+  vaultStake,
+  vaultUnstake,
+  vaultClaimRewards,
+} from '../../services/credXService';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 export interface VaultAsset {
@@ -104,7 +111,17 @@ export interface AutopilotAgent {
 export const YieldVaultsView: React.FC = () => {
   const { showToast, playSound } = useToast();
   const { boostScore } = useProtocol();
-  const { balanceCTC } = useWeb3();
+  const { balanceCTC, address, isConnected } = useWeb3();
+
+  const [vaultState, setVaultState] = useState<Awaited<ReturnType<typeof fetchYieldVaultState>>>(null);
+  const [walletCUSDBalance, setWalletCUSDBalance] = useState(0);
+  const [stakingAction, setStakingAction] = useState<'stake' | 'unstake' | 'claim' | null>(null);
+
+  const stakingTokenSymbol = vaultState?.stakingToken.symbol ?? 'cUSD';
+  const rewardTokenSymbol = vaultState?.rewardToken.symbol ?? 'CTC';
+  const realTotalStaked = vaultState ? vaultState.totalStaked : null;
+  const realStakedByUser = vaultState ? vaultState.stakedByUser : null;
+  const realClaimable = vaultState ? vaultState.approxClaimable : null;
 
   // Navigation Tabs
   const [activeTab, setActiveTab] = useState<'catalog' | 'analytics' | 'sectors' | 'intent'>('catalog');
@@ -565,7 +582,7 @@ export const YieldVaultsView: React.FC = () => {
     }
   ]);
 
-  // Withdrawal Requests Log
+  // Withdrawal / staking activity log (real txns only)
   const [withdrawalRequests, setWithdrawalRequests] = useState<Array<{
     id: string;
     amount: string;
@@ -573,24 +590,7 @@ export const YieldVaultsView: React.FC = () => {
     status: string;
     time: string;
     txHash: string;
-  }>>([
-    {
-      id: 'wr-1',
-      amount: '181.339969',
-      token: 'USDC',
-      status: 'Success',
-      time: '14m ago',
-      txHash: '0x8f2a...390c'
-    },
-    {
-      id: 'wr-2',
-      amount: '500.000000',
-      token: 'CTC',
-      status: 'Success',
-      time: '1h ago',
-      txHash: '0x3c91...71bd'
-    }
-  ]);
+  }>>([]);
 
   // Selected Vault Object
   const selectedVault = useMemo(() => {
@@ -629,6 +629,33 @@ export const YieldVaultsView: React.FC = () => {
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Live ReputationYieldVault read + wallet cUSD balance
+  useEffect(() => {
+    let cancelled = false;
+    if (!isConnected || !address) {
+      setVaultState(null);
+      setWalletCUSDBalance(0);
+      return;
+    }
+    fetchYieldVaultState(address)
+      .then((state) => {
+        if (!cancelled) setVaultState(state);
+      })
+      .catch(() => {
+        if (!cancelled) setVaultState(null);
+      });
+    fetchCUSDBalance(address)
+      .then((bal) => {
+        if (!cancelled) setWalletCUSDBalance(bal);
+      })
+      .catch(() => {
+        if (!cancelled) setWalletCUSDBalance(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isConnected, address]);
 
   // Filtered Vaults for Catalog
   const filteredVaults = useMemo(() => {
@@ -760,7 +787,7 @@ export const YieldVaultsView: React.FC = () => {
       apy: 18.6,
       allocationPct: 15,
       riskRating: 'Low',
-      description: 'Overcollateralized real-world enterprise trade finance credit loans verified on Creditcoin L1.',
+      description: 'Overcollateralized real-world enterprise trade finance credit strategy (static illustrative allocation).',
       color: '#f59e0b'
     },
     {
@@ -1325,87 +1352,115 @@ export const YieldVaultsView: React.FC = () => {
     return () => cancelAnimationFrame(animId);
   }, [activeTab, drawAnalyticsCharts]);
 
-  // ─── Real-Time Deposit & Withdraw Handlers ──────────────────────────────────
-  const handleExecuteDeposit = () => {
+  // ─── Real-Time Deposit (Stake), Withdraw (Unstake) & Claim Handlers ───────
+  const refreshVaultState = async () => {
+    if (!address) return;
+    try {
+      const state = await fetchYieldVaultState(address);
+      if (state) setVaultState(state);
+    } catch {
+      // keep last known state
+    }
+  };
+
+  const handleExecuteDeposit = async () => {
+    if (!isConnected || !address) {
+      showToast('Connect Wallet', 'Connect your wallet to stake into the deployed ReputationYieldVault.', 'error');
+      return;
+    }
     const amountNum = parseFloat(depositAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
       showToast('Invalid Amount', 'Please enter a valid deposit amount.', 'error');
       return;
     }
-
-    if (amountNum > selectedVault.walletBalance) {
-      showToast('Insufficient Balance', `You only have ${selectedVault.walletBalance} ${selectedVault.symbol} in your wallet.`, 'error');
+    if (walletCUSDBalance > 0 && amountNum > walletCUSDBalance) {
+      showToast('Insufficient Balance', `You only have ${walletCUSDBalance.toLocaleString()} ${stakingTokenSymbol} in your wallet.`, 'error');
       return;
     }
-
-    setVaults((prev) =>
-      prev.map((v) => {
-        if (v.id === selectedVault.id) {
-          return {
-            ...v,
-            walletBalance: v.walletBalance - amountNum,
-            myPosition: v.myPosition + amountNum,
-            tvlNumeric: v.tvlNumeric + amountNum * v.priceUSD,
-            tvlString: `$${((v.tvlNumeric + amountNum * v.priceUSD) / 1000).toFixed(2)}K`
-          };
-        }
-        return v;
-      })
-    );
-
-    playSound('fanfare');
-    boostScore(30, 'CredX Vault Liquidity Allocation');
-
-    showToast(
-      'Deposit Successful',
-      `Allocated ${amountNum} ${selectedVault.symbol} to ${selectedVault.name} (+30 CTS Points). Auto-compounding active!`,
-      'success'
-    );
+    setStakingAction('stake');
+    try {
+      const hash = await vaultStake(amountNum);
+      playSound('fanfare');
+      boostScore(30, 'CredX Vault Liquidity Allocation');
+      showToast('Stake Submitted', `Staked ${amountNum} ${stakingTokenSymbol} into ReputationYieldVault. Tx: ${hash.slice(0, 12)}…`, 'success');
+      setWithdrawalRequests((prev) => [
+        {
+          id: `wr-${Date.now()}`,
+          amount: amountNum.toFixed(4),
+          token: stakingTokenSymbol,
+          status: 'Staked',
+          time: 'Just now',
+          txHash: `${hash.slice(0, 10)}…`
+        },
+        ...prev
+      ]);
+      await refreshVaultState();
+    } catch (err: any) {
+      showToast('Stake Failed', err.reason || err.message || 'Transaction reverted.', 'error');
+    } finally {
+      setStakingAction(null);
+    }
   };
 
-  const handleExecuteWithdraw = () => {
+  const handleExecuteWithdraw = async () => {
+    if (!isConnected || !address) {
+      showToast('Connect Wallet', 'Connect your wallet to unstake from the deployed ReputationYieldVault.', 'error');
+      return;
+    }
     const amountNum = parseFloat(withdrawAmount);
     if (isNaN(amountNum) || amountNum <= 0) {
       showToast('Invalid Amount', 'Please enter a valid withdraw amount.', 'error');
       return;
     }
-
-    if (amountNum > selectedVault.myPosition) {
-      showToast('Exceeds Position', `You only have ${selectedVault.myPosition} ${selectedVault.symbol} deposited.`, 'error');
+    if (vaultState && amountNum > vaultState.stakedByUser) {
+      showToast('Exceeds Position', `You only have ${vaultState.stakedByUser.toLocaleString()} ${stakingTokenSymbol} staked.`, 'error');
       return;
     }
+    setStakingAction('unstake');
+    try {
+      const hash = await vaultUnstake(amountNum);
+      playSound('success');
+      showToast('Unstake Submitted', `Withdrew ${amountNum} ${stakingTokenSymbol} back to your connected wallet. Tx: ${hash.slice(0, 12)}…`, 'success');
+      setWithdrawalRequests((prev) => [
+        {
+          id: `wr-${Date.now()}`,
+          amount: amountNum.toFixed(4),
+          token: stakingTokenSymbol,
+          status: 'Unstaked',
+          time: 'Just now',
+          txHash: `${hash.slice(0, 10)}…`
+        },
+        ...prev
+      ]);
+      await refreshVaultState();
+    } catch (err: any) {
+      showToast('Unstake Failed', err.reason || err.message || 'Transaction reverted.', 'error');
+    } finally {
+      setStakingAction(null);
+    }
+  };
 
-    setVaults((prev) =>
-      prev.map((v) => {
-        if (v.id === selectedVault.id) {
-          return {
-            ...v,
-            walletBalance: v.walletBalance + amountNum,
-            myPosition: v.myPosition - amountNum,
-            tvlNumeric: Math.max(0, v.tvlNumeric - amountNum * v.priceUSD),
-            tvlString: `$${(Math.max(0, v.tvlNumeric - amountNum * v.priceUSD) / 1000).toFixed(2)}K`
-          };
-        }
-        return v;
-      })
-    );
-
-    const newReq = {
-      id: `wr-${Date.now()}`,
-      amount: amountNum.toFixed(4),
-      token: selectedVault.symbol,
-      status: 'Success',
-      time: 'Just now',
-      txHash: `0x${Math.random().toString(16).slice(2, 10)}...`
-    };
-    setWithdrawalRequests((prev) => [newReq, ...prev]);
-
-    playSound('success');
-    showToast(
-      'Withdrawal Processed',
-      `Withdrew ${amountNum} ${selectedVault.symbol} back to your connected wallet.`,
-      'info'
-    );
+  const handleClaimRewards = async () => {
+    if (!isConnected || !address) {
+      showToast('Connect Wallet', 'Connect your wallet to claim rewards from the deployed ReputationYieldVault.', 'error');
+      return;
+    }
+    if (vaultState && vaultState.approxClaimable <= 0) {
+      showToast('No Rewards', 'No claimable rewards in the ReputationYieldVault right now.', 'info');
+      return;
+    }
+    setStakingAction('claim');
+    try {
+      const hash = await vaultClaimRewards();
+      playSound('fanfare');
+      boostScore(25, 'CredX Vault Reward Harvest');
+      showToast('Rewards Claimed', `${realClaimable?.toFixed(4)} ${rewardTokenSymbol} claimed to your wallet. Tx: ${hash.slice(0, 12)}…`, 'success');
+      await refreshVaultState();
+    } catch (err: any) {
+      showToast('Claim Failed', err.reason || err.message || 'Transaction reverted.', 'error');
+    } finally {
+      setStakingAction(null);
+    }
   };
 
   // ─── Intent Solver Real-time Execution Simulation ─────────────────────────
@@ -1477,7 +1532,7 @@ export const YieldVaultsView: React.FC = () => {
         {
           id: `exec-${Date.now()}`,
           time: now.toTimeString().split(' ')[0],
-          msg: `[SETTLED] Executed route for ${targetApy}% Target APY via Solver #1. ZK-STARK Proof verified on Creditcoin L1.`,
+          msg: `[SETTLED] Executed route for ${targetApy}% Target APY via Solver #1 (local solver simulation — no ZK proof was generated or verified).`,
           type: 'success'
         },
         ...prev
@@ -1534,23 +1589,32 @@ export const YieldVaultsView: React.FC = () => {
 
             <div className="grid grid-cols-3 gap-3 font-mono">
               <div className="p-3 rounded-2xl bg-black/50 border border-cyan-500/20">
-                <span className="text-[9px] text-slate-400 block uppercase">Total Deposited</span>
-                <span className="text-lg font-black text-white">${userTotalDepositedUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                <span className="text-[9px] text-slate-400 block uppercase">Your Stake</span>
+                <span className="text-lg font-black text-white">
+                  {vaultState ? realStakedByUser?.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                  <span className="text-xs text-cyan-300 font-normal"> {stakingTokenSymbol}</span>
+                </span>
                 <span className="text-[9px] text-cyan-400 block">
-                  {vaults.filter((v) => v.myPosition > 0).length} active vaults
+                  {vaultState ? 'Live on-chain' : isConnected ? 'Read unavailable' : 'Connect wallet'}
                 </span>
               </div>
 
               <div className="p-3 rounded-2xl bg-black/50 border border-cyan-500/20">
-                <span className="text-[9px] text-slate-400 block uppercase">Est. Yield</span>
-                <span className="text-lg font-black text-emerald-400">+${monthlyEstYieldUSD.toFixed(2)}</span>
-                <span className="text-[9px] text-emerald-400/80 block">per month</span>
+                <span className="text-[9px] text-slate-400 block uppercase">Claimable Rewards</span>
+                <span className="text-lg font-black text-emerald-400">
+                  {vaultState ? `+${realClaimable?.toFixed(4)}` : '—'}
+                  <span className="text-xs text-emerald-400/70 font-normal"> {rewardTokenSymbol}</span>
+                </span>
+                <span className="text-[9px] text-slate-500 block">ReputationYieldVault</span>
               </div>
 
               <div className="p-3 rounded-2xl bg-black/50 border border-cyan-500/20">
-                <span className="text-[9px] text-slate-400 block uppercase">Est. Avg. APY</span>
-                <span className="text-lg font-black text-cyan-300">{weightedAvgApy.toFixed(2)}%</span>
-                <span className="text-[9px] text-slate-500 block">weighted</span>
+                <span className="text-[9px] text-slate-400 block uppercase">Wallet Balance</span>
+                <span className="text-lg font-black text-cyan-300">
+                  {isConnected ? walletCUSDBalance.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                  <span className="text-xs text-white/40 font-normal"> cUSD</span>
+                </span>
+                <span className="text-[9px] text-slate-500 block">read from cUSD</span>
               </div>
             </div>
           </div>
@@ -1564,15 +1628,20 @@ export const YieldVaultsView: React.FC = () => {
 
             <div className="grid grid-cols-3 gap-3 font-mono">
               <div className="p-3 rounded-2xl bg-black/50 border border-purple-500/20">
-                <span className="text-[9px] text-slate-400 block uppercase">Total TVL</span>
-                <span className="text-lg font-black text-white">${(totalTVLNumeric / 1000).toFixed(2)}K</span>
-                <span className="text-[9px] text-purple-300 block">Across 16 vaults</span>
+                <span className="text-[9px] text-slate-400 block uppercase">Total Staked / TVL</span>
+                <span className="text-lg font-black text-white">
+                  {vaultState ? realTotalStaked?.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                  <span className="text-xs text-purple-300 font-normal"> {stakingTokenSymbol}</span>
+                </span>
+                <span className="text-[9px] text-purple-300 block">Reputation Yield Vault</span>
               </div>
 
               <div className="p-3 rounded-2xl bg-black/50 border border-purple-500/20">
-                <span className="text-[9px] text-slate-400 block uppercase">Verified Pairs</span>
-                <span className="text-lg font-black text-purple-300">16 Assets</span>
-                <span className="text-[9px] text-slate-500 block">On-chain L1 & bridges</span>
+                <span className="text-[9px] text-slate-400 block uppercase">Last Rewards Block</span>
+                <span className="text-lg font-black text-purple-300">
+                  {vaultState ? vaultState.lastRewardBlock.toLocaleString() : '—'}
+                </span>
+                <span className="text-[9px] text-slate-500 block">rewardPerTokenStored</span>
               </div>
 
               <div className="p-3 rounded-2xl bg-black/50 border border-emerald-500/20">
@@ -1582,7 +1651,7 @@ export const YieldVaultsView: React.FC = () => {
                     <span key={dot} className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
                   ))}
                 </div>
-                <span className="text-[9px] text-emerald-300 block pt-0.5">Tier-1 Insured</span>
+                <span className="text-[9px] text-emerald-300 block pt-0.5">{vaultState ? 'On-chain live' : 'Not connected'}</span>
               </div>
             </div>
           </div>
@@ -1913,7 +1982,17 @@ export const YieldVaultsView: React.FC = () => {
                           </td>
 
                           <td className="py-3.5 px-4 text-right text-slate-300">
-                            {vault.walletBalance > 0 ? (
+                            {vault.id === 'ctc-cusd' && vaultState ? (
+                              <span>
+                                {walletCUSDBalance > 0 || isConnected
+                                  ? walletCUSDBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                                  : '—'}{' '}
+                                {stakingTokenSymbol}
+                                {vaultState && isConnected && (
+                                  <span className="text-[8px] text-emerald-400 block">live on-chain</span>
+                                )}
+                              </span>
+                            ) : vault.walletBalance > 0 ? (
                               <span>{vault.walletBalance.toLocaleString()} {vault.symbol}</span>
                             ) : (
                               <span className="text-slate-600">&mdash;</span>
@@ -1921,7 +2000,15 @@ export const YieldVaultsView: React.FC = () => {
                           </td>
 
                           <td className="py-3.5 px-4 text-right">
-                            {vault.myPosition > 0 ? (
+                            {vault.id === 'ctc-cusd' && vaultState ? (
+                              (vaultState.stakedByUser > 0 ? (
+                                <span className="font-bold text-cyan-300">
+                                  {realStakedByUser?.toLocaleString(undefined, { maximumFractionDigits: 2 })} {stakingTokenSymbol}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600">&mdash;</span>
+                              ))
+                            ) : vault.myPosition > 0 ? (
                               <span className="font-bold text-cyan-300">{vault.myPosition.toLocaleString()} {vault.symbol}</span>
                             ) : (
                               <span className="text-slate-600">&mdash;</span>
@@ -1933,7 +2020,13 @@ export const YieldVaultsView: React.FC = () => {
                           </td>
 
                           <td className="py-3.5 px-4 text-right font-bold text-white">
-                            {vault.tvlString}
+                            {vault.id === 'ctc-cusd' && vaultState ? (
+                              <span className="text-emerald-400">
+                                {realTotalStaked?.toLocaleString(undefined, { maximumFractionDigits: 2 })} {stakingTokenSymbol}
+                              </span>
+                            ) : (
+                              <span>{vault.tvlString}</span>
+                            )}
                           </td>
 
                           <td className="py-3.5 px-4 text-center">
@@ -1974,7 +2067,9 @@ export const YieldVaultsView: React.FC = () => {
             {/* Right: Live Interactive Deposit / Withdraw Ticket (xl:col-span-4) */}
             <div className="xl:col-span-4 rounded-3xl p-6 bg-[#0a0515] border border-cyan-500/30 shadow-2xl space-y-5">
               <div className="p-4 rounded-2xl bg-black/50 border border-cyan-500/20 space-y-2">
-                <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest block font-bold">Selected CredX Vault</span>
+                <span className="text-[10px] font-mono text-cyan-400 uppercase tracking-widest block font-bold">
+                  {vaultState ? 'On-chain ReputationYieldVault' : 'Select CredX Vault'}
+                </span>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div
@@ -2003,7 +2098,7 @@ export const YieldVaultsView: React.FC = () => {
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Deposit Assets
+                  Stake (Deposit)
                 </button>
                 <button
                   onClick={() => setActionTab('withdraw')}
@@ -2013,18 +2108,22 @@ export const YieldVaultsView: React.FC = () => {
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Withdraw Assets
+                  Unstake (Withdraw)
                 </button>
               </div>
 
               <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/20 space-y-2 font-mono">
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>{actionTab === 'deposit' ? 'Amount to Deposit' : 'Amount to Withdraw'}</span>
+                  <span>{actionTab === 'deposit' ? 'Amount to Stake' : 'Amount to Unstake'}</span>
                   <span>
                     {actionTab === 'deposit' ? (
-                      <>Wallet: <strong className="text-white">{selectedVault.walletBalance.toLocaleString()} {selectedVault.symbol}</strong></>
+                      <>Wallet: <strong className="text-white">
+                        {isConnected ? walletCUSDBalance.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'} cUSD
+                      </strong></>
                     ) : (
-                      <>Deposited: <strong className="text-cyan-300">{selectedVault.myPosition.toLocaleString()} {selectedVault.symbol}</strong></>
+                      <>Staked: <strong className="text-cyan-300">
+                        {realStakedByUser?.toLocaleString(undefined, { maximumFractionDigits: 2 }) ?? '—'} {stakingTokenSymbol}
+                      </strong></>
                     )}
                   </span>
                 </div>
@@ -2040,7 +2139,7 @@ export const YieldVaultsView: React.FC = () => {
                     placeholder="0.0"
                     className="w-full bg-transparent text-2xl font-bold text-cyan-300 outline-none"
                   />
-                  <span className="text-xs text-slate-400 font-bold">{selectedVault.symbol}</span>
+                  <span className="text-xs text-slate-400 font-bold">{actionTab === 'deposit' ? 'cUSD' : stakingTokenSymbol}</span>
                 </div>
 
                 <div className="flex items-center gap-1.5 pt-1 text-[10px]">
@@ -2048,7 +2147,9 @@ export const YieldVaultsView: React.FC = () => {
                     <button
                       key={pct}
                       onClick={() => {
-                        const maxVal = actionTab === 'deposit' ? selectedVault.walletBalance : selectedVault.myPosition;
+                        const maxVal = actionTab === 'deposit'
+                          ? (isConnected ? walletCUSDBalance : 0)
+                          : (realStakedByUser ?? 0);
                         const calculated = ((maxVal * pct) / 100).toFixed(2);
                         if (actionTab === 'deposit') setDepositAmount(calculated);
                         else setWithdrawAmount(calculated);
@@ -2067,26 +2168,40 @@ export const YieldVaultsView: React.FC = () => {
                   <span className="text-white font-bold">Auto-Restake continuous</span>
                 </div>
                 <div className="flex justify-between">
-                  <span>Estimated 1-Year Yield:</span>
-                  <span className="text-emerald-400 font-bold">
-                    +{(parseFloat(depositAmount || '0') * (selectedVault.apy / 100)).toFixed(2)} {selectedVault.symbol}
-                  </span>
-                </div>
-                <div className="flex justify-between">
                   <span>Epoch Compound Ticks:</span>
                   <span className="text-cyan-300 font-mono">Next tick in {compoundCountdown}s</span>
                 </div>
               </div>
 
               <button
+                disabled={stakingAction !== null}
                 onClick={actionTab === 'deposit' ? handleExecuteDeposit : handleExecuteWithdraw}
-                className="w-full py-4 rounded-2xl font-bold font-mono text-sm bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 shadow-xl shadow-cyan-500/25 transition cursor-pointer"
+                className="w-full py-4 rounded-2xl font-bold font-mono text-sm bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 shadow-xl shadow-cyan-500/25 transition cursor-pointer disabled:opacity-50"
               >
-                {actionTab === 'deposit' ? `Confirm Deposit (${selectedVault.symbol})` : `Confirm Withdrawal (${selectedVault.symbol})`}
+                {stakingAction === 'stake'
+                  ? 'Staking…'
+                  : stakingAction === 'unstake'
+                  ? 'Unstaking…'
+                  : actionTab === 'deposit'
+                  ? `Confirm Stake (${stakingTokenSymbol})`
+                  : `Confirm Unstake (${stakingTokenSymbol})`}
+              </button>
+
+              <button
+                disabled={stakingAction !== null || !isConnected}
+                onClick={handleClaimRewards}
+                className="w-full py-3 rounded-2xl font-bold font-mono text-xs bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 transition cursor-pointer disabled:opacity-50"
+              >
+                {stakingAction === 'claim'
+                  ? 'Claiming…'
+                  : `Claim Rewards (${realClaimable != null ? realClaimable.toFixed(4) : '—'} ${rewardTokenSymbol})`}
               </button>
 
               <div className="pt-3 border-t border-white/10 space-y-2 font-mono">
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">Latest withdrawal requests</span>
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Staking activity log</span>
+                {withdrawalRequests.length === 0 && (
+                  <span className="text-[10px] text-slate-500 italic block">No staking activity yet — connect a wallet and stake into ReputationYieldVault.</span>
+                )}
                 {withdrawalRequests.map((req) => (
                   <div
                     key={req.id}
@@ -2099,7 +2214,7 @@ export const YieldVaultsView: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-white">{req.amount} {req.token}</span>
-                      <ExternalLink className="w-3.5 h-3.5 text-slate-400 hover:text-white cursor-pointer" />
+                      <span className="text-[9px] text-slate-500 font-mono">{req.txHash}</span>
                     </div>
                   </div>
                 ))}

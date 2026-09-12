@@ -3,6 +3,7 @@ pragma solidity 0.8.24;
 import {IAttestationVerifier} from "../interfaces/IAttestationVerifier.sol";
 import {ICredXHub, ActionType, VerifiedAttestationRecord} from "../interfaces/ICredXHub.sol";
 import {CreditScoreEngine} from "./CreditScoreEngine.sol";
+import {AttestcoinConstants} from "../libraries/AttestcoinConstants.sol";
 
 /**
  * @title CredXHub
@@ -37,8 +38,12 @@ contract CredXHub is ICredXHub {
     // Track which ActionTypes a borrower has used (bitmap for gas efficiency)
     mapping(address borrower => uint8 actionBitmap) public borrowerActionBitmap;
 
-    // Track which chains a borrower has been attested from (bitmap)
-    mapping(address borrower => uint256 chainBitmap) public borrowerChainBitmap;
+    // Track which chains a borrower has been attested from (unbounded set, no bitmap collisions)
+    mapping(address borrower => mapping(uint256 sourceChainId => bool used)) public borrowerChains;
+
+    // Per-borrower daily verified value, keyed by day = block.timestamp / 86400
+    // Guards against the "inflate your volume with a single $100M botnet proof" exploit.
+    mapping(address borrower => mapping(uint256 day => uint256 valueUSD)) public dailyVerifiedValueUSD;
 
     // Cryptographic Replay Protection: keccak256(sourceChainId, txHash, logIndex) => bool
     mapping(bytes32 proofHash => bool isProcessed) public processedAttestations;
@@ -115,6 +120,12 @@ contract CredXHub is ICredXHub {
     error InvalidBoostAmount();
     error InvalidDuration();
     error InsufficientDelegatorScore();
+    error ValueExceedsPerProofCap();
+    error ValueExceedsPerDayCap();
+    error ExistingDelegationActive();
+
+    uint256 public constant MAX_REPORTED_VALUE_PER_PROOF = 500_000e18; // $500,000
+    uint256 public constant MAX_REPORTED_VALUE_PER_DAY = 1_000_000e18; // $1,000,000
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
@@ -202,6 +213,7 @@ contract CredXHub is ICredXHub {
         if (len != actionTypes.length || len != reportedValuesUSD.length) revert ArrayLengthMismatch();
 
         uint256 totalBatchValueUSD = 0;
+        uint256 processedCount = 0;
 
         for (uint256 i = 0; i < len; i++) {
             if (reportedValuesUSD[i] == 0) revert InvalidAmount();
@@ -220,6 +232,7 @@ contract CredXHub is ICredXHub {
 
             processedAttestations[replayKey] = true;
             totalBatchValueUSD += reportedValuesUSD[i];
+            processedCount += 1;
 
             _updateBorrowerProfile(msg.sender, proofs[i], actionTypes[i], reportedValuesUSD[i], result, replayKey);
         }
@@ -227,7 +240,7 @@ contract CredXHub is ICredXHub {
         BorrowerProfile memory profile = borrowerProfiles[msg.sender];
         finalScore = profile.creditScore;
 
-        emit BatchProofsSubmitted(msg.sender, len, totalBatchValueUSD, finalScore);
+        emit BatchProofsSubmitted(msg.sender, processedCount, totalBatchValueUSD, finalScore);
 
         return finalScore;
     }
@@ -253,6 +266,12 @@ contract CredXHub is ICredXHub {
         if (delegatorScore < 700) revert InsufficientDelegatorScore();
 
         uint256 expiryBlock = block.number + (durationDays * BLOCKS_PER_DAY);
+
+        CreditDelegation memory existing = delegatedBoosts[beneficiary];
+        if (existing.isActive && existing.expiry > block.number && existing.delegator != msg.sender) {
+            revert ExistingDelegationActive();
+        }
+
         delegatedBoosts[beneficiary] = CreditDelegation({
             delegator: msg.sender,
             boostAmount: boostAmount,
@@ -261,6 +280,24 @@ contract CredXHub is ICredXHub {
         });
 
         emit CreditDelegated(msg.sender, beneficiary, boostAmount, expiryBlock);
+    }
+
+    /**
+     * @notice Revoke an active credit delegation before its expiry.
+     * @dev Only the delegator who granted the boost (or the beneficiary after expiry) may revoke.
+     */
+    function revokeCreditDelegation(address beneficiary) external {
+        CreditDelegation memory delegation = delegatedBoosts[beneficiary];
+        if (!delegation.isActive) {
+            return;
+        }
+        bool isDelegator = delegation.delegator == msg.sender;
+        bool isExpired = delegation.expiry <= block.number;
+        bool isBeneficiaryAfterExpiry = (beneficiary == msg.sender) && isExpired;
+        if (!isDelegator && !isBeneficiaryAfterExpiry) revert OnlyOwner();
+
+        emit CreditDelegated(beneficiary, address(0), 0, block.number);
+        delete delegatedBoosts[beneficiary];
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -276,6 +313,12 @@ contract CredXHub is ICredXHub {
     ) private {
         if (borrower == address(0)) revert ZeroAddress();
 
+        // Value caps: prevent a single bulk proof (or a same-day botnet) from inflating volume.
+        if (reportedValueUSD > MAX_REPORTED_VALUE_PER_PROOF) revert ValueExceedsPerProofCap();
+        uint256 day = block.timestamp / 86400;
+        if (dailyVerifiedValueUSD[borrower][day] + reportedValueUSD > MAX_REPORTED_VALUE_PER_DAY) revert ValueExceedsPerDayCap();
+        dailyVerifiedValueUSD[borrower][day] += reportedValueUSD;
+
         profile.totalVerifiedVolumeUSD += reportedValueUSD;
         profile.totalAttestationsCount += 1;
         profile.lastAttestationTimestamp = block.number;
@@ -290,9 +333,8 @@ contract CredXHub is ICredXHub {
             profile.protocolDiversityCount += 1;
         }
 
-        uint256 chainBit = 1 << (sourceChainId % 256);
-        if ((borrowerChainBitmap[borrower] & chainBit) == 0) {
-            borrowerChainBitmap[borrower] |= chainBit;
+        if (!borrowerChains[borrower][sourceChainId]) {
+            borrowerChains[borrower][sourceChainId] = true;
             profile.chainDiversityCount += 1;
         }
 
@@ -412,5 +454,12 @@ contract CredXHub is ICredXHub {
     function getBorrowerHistory(address borrower) external view returns (VerifiedAttestationRecord[] memory) {
         if (borrower == address(0)) revert ZeroAddress();
         return _borrowerHistory[borrower];
+    }
+
+    /**
+     * @notice Canonical Creditcoin Attestcoin / BlockProver precompile address used by real integrations.
+     */
+    function getAttestcoinPrecompile() external pure returns (address) {
+        return AttestcoinConstants.PRECOMPILE_ADDRESS;
     }
 }

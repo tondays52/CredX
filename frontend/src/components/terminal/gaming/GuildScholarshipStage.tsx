@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import GlassCard from '../../common/GlassCard';
+import SimulationBadge from '../../common/SimulationBadge';
 import { useToast } from '../../../context/ToastContext';
 import { useProtocol } from '../../../context/ProtocolContext';
 import {
@@ -45,7 +46,7 @@ export const GuildScholarshipStage: React.FC = () => {
   const { score } = useProtocol();
   const { addToast } = useToast();
 
-  const userScore = score || 785;
+  const userScore = score;
   const isEligibleForScholarship = userScore >= 700;
 
   // Audio system state
@@ -520,6 +521,9 @@ export const GuildScholarshipStage: React.FC = () => {
                   Guild Staked Armory Vault
                 </span>
                 <h3 className="text-base font-bold text-white mt-0.5">Zero-Collateral Equipment Pool</h3>
+                <div className="mt-1.5">
+                  <SimulationBadge label="SIMULATED SCHOLARSHIP" note="Guild scholarship vault is a local simulation — there is no deployed scholarship contract on testnet." />
+                </div>
               </div>
 
               {/* Category Filter Pills */}

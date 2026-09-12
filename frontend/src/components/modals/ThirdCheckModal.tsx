@@ -150,9 +150,9 @@ export const ThirdCheckModal: React.FC<ThirdCheckModalProps> = ({ isOpen, onClos
                 PASSED
               </span>
             </div>
-            <div className="font-bold text-white text-xs">Creditcoin 0x0FD2 Precompile</div>
+            <div className="font-bold text-white text-xs">Creditcoin Consensus (Attested Headers)</div>
             <p className="text-[10px] text-white/50">
-              Validates raw Merkle Patricia Trie path against the attested Ethereum block header signed by validators.
+              Validates raw Merkle Patricia Trie path against an Ethereum block header attested by Creditcoin validators (in this demo the header state is checked via the CredXHub harness; the live 0x0FD2 precompile path is demonstrated in the USC panel / <code className="font-mono">npm run usc:verify</code>).
             </p>
           </div>
 

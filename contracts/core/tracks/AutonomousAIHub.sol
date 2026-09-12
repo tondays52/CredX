@@ -13,6 +13,14 @@ import {IAttestationVerifier} from "../../interfaces/IAttestationVerifier.sol";
  *         cross-chain state proofs (USC / Attestcoin) to autonomously inform risk decisions, 
  *         settle verifiable compute tasks, and trigger on-chain undercollateralized loans for AI agents
  *         WITHOUT centralized oracle operators.
+ *
+ *         Security hardening over the original:
+ *           - risk parameters change via BOUNDED DELTAS (a single verified signal cannot
+ *             reset volatility/default-rate to any absolute value)
+ *           - an agent's reputation can only be boosted using proofs submitted BY THAT AGENT
+ *             (or the protocol owner in recovery scenarios)
+ *           - AI agent loans are secured by reputation-based collateral, have a fixed term,
+ *             and are liquidatable when overdue — they are no longer unsecured pool grants.
  */
 contract AutonomousAIHub is ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -37,6 +45,10 @@ contract AutonomousAIHub is ReentrancyGuard {
     error TaskAlreadyExists();
     error TaskDoesNotExist();
     error TaskAlreadySettled();
+    error UnauthorizedReputationBoost();
+    error LoanNotOverdue();
+    error AmountExceedsMaxLoan();
+    error OnlyOwner();
 
     // ═══════════════════════════════════════════════════════════════════════
     //  State & Interfaces
@@ -45,6 +57,14 @@ contract AutonomousAIHub is ReentrancyGuard {
     ICredXHub public immutable CREDX_HUB;
     IAttestationVerifier public immutable ATTESTATION_VERIFIER;
     IERC20 public immutable SETTLEMENT_TOKEN;
+
+    uint256 public constant BPS_DIVISOR = 10000;
+    uint256 public constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
+    uint256 public constant MAX_SINGLE_RISK_DELTA_BPS = 5000; // a single proof can move a param by at most 50%
+    uint256 public constant MAX_AGENT_LOAN_AMOUNT_DEFAULT = 100_000 * 10**18;
+
+    address public owner;
+    uint256 public maxAgentLoanAmount;
 
     // Volatility Index: 0 to 10000 (bps)
     uint256 public marketVolatilityIndex;
@@ -60,6 +80,8 @@ contract AutonomousAIHub is ReentrancyGuard {
         uint256 reputationScore;       // 300 to 850
         uint256 totalVerifiedProfitUSD;
         uint256 activeLoanAmount;
+        uint256 collateralAmount;
+        uint256 dueBlock;
         uint256 totalLoansRepaid;
         bool isRegistered;
     }
@@ -89,8 +111,10 @@ contract AutonomousAIHub is ReentrancyGuard {
 
     event AIAgentRegistered(address indexed agent);
     event AIAgentEvaluated(address indexed agent, uint256 addedProfitUSD, uint256 newReputationScore);
-    event AgentLoanDispatched(address indexed agent, uint256 amount);
+    event AgentLoanDispatched(address indexed agent, uint256 amount, uint256 collateral);
     event AgentLoanRepaid(address indexed agent, uint256 amount);
+    event AgentLoanLiquidated(address indexed agent, uint256 forfeitedCollateral);
+    event MaxAgentLoanAmountUpdated(uint256 oldAmount, uint256 newAmount);
 
     event ComputeEscrowDeposited(bytes32 indexed taskId, address indexed requester, address indexed gpuProvider, uint256 amount);
     event ComputeTaskSettled(bytes32 indexed taskId, address indexed gpuProvider, uint256 escrowAmount, bytes32 txHash);
@@ -112,9 +136,17 @@ contract AutonomousAIHub is ReentrancyGuard {
         ATTESTATION_VERIFIER = IAttestationVerifier(_attestationVerifier);
         SETTLEMENT_TOKEN = IERC20(_settlementToken);
 
+        owner = msg.sender;
+        maxAgentLoanAmount = MAX_AGENT_LOAN_AMOUNT_DEFAULT;
         marketVolatilityIndex = 1000; // 10% base volatility
         globalDefaultRateBps = 200;   // 2% base default rate
         lastRiskUpdateBlock = block.number;
+    }
+
+    function setMaxAgentLoanAmount(uint256 _amount) external {
+        if (msg.sender != owner) revert OnlyOwner();
+        emit MaxAgentLoanAmountUpdated(maxAgentLoanAmount, _amount);
+        maxAgentLoanAmount = _amount;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -124,6 +156,8 @@ contract AutonomousAIHub is ReentrancyGuard {
     /**
      * @notice Ingests a cryptographically verified cross-chain transaction receipt (e.g. from Ethereum/Base/Arbitrum)
      *         to autonomously adjust market volatility and protocol risk parameters without a centralized oracle.
+     * @dev The deltas are bounded and accumulate from genesis baselines, so one verified signal
+     *      can never drive risk parameters straight to an extreme absolute value.
      */
     function processCrossChainRiskSignal(
         IAttestationVerifier.EventProof calldata proof,
@@ -142,12 +176,20 @@ contract AutonomousAIHub is ReentrancyGuard {
 
         processedProofs[proof.sourceChainId][proof.txHash] = true;
 
-        // Autonomously update risk parameters based on the verified signal
-        if (volatilityIndexDelta > 0) {
-            marketVolatilityIndex = volatilityIndexDelta > 10000 ? 10000 : volatilityIndexDelta;
+        // Autonomously update risk parameters based on the verified signal — bounded deltas only.
+        if (volatilityIndexDelta > MAX_SINGLE_RISK_DELTA_BPS) {
+            volatilityIndexDelta = MAX_SINGLE_RISK_DELTA_BPS;
         }
-        if (defaultRateDeltaBps > 0) {
-            globalDefaultRateBps = defaultRateDeltaBps > 10000 ? 10000 : defaultRateDeltaBps;
+        if (defaultRateDeltaBps > MAX_SINGLE_RISK_DELTA_BPS) {
+            defaultRateDeltaBps = MAX_SINGLE_RISK_DELTA_BPS;
+        }
+        marketVolatilityIndex += volatilityIndexDelta;
+        if (marketVolatilityIndex > 10000) {
+            marketVolatilityIndex = 10000;
+        }
+        globalDefaultRateBps += defaultRateDeltaBps;
+        if (globalDefaultRateBps > 10000) {
+            globalDefaultRateBps = 10000;
         }
         lastRiskUpdateBlock = block.number;
 
@@ -190,6 +232,8 @@ contract AutonomousAIHub is ReentrancyGuard {
             reputationScore: 300, // Initial base score
             totalVerifiedProfitUSD: 0,
             activeLoanAmount: 0,
+            collateralAmount: 0,
+            dueBlock: 0,
             totalLoansRepaid: 0,
             isRegistered: true
         });
@@ -199,6 +243,8 @@ contract AutonomousAIHub is ReentrancyGuard {
 
     /**
      * @notice Evaluates cryptographically verified cross-chain trading/profit proofs to boost the AI agent's score.
+     * @dev Only the agent itself may submit proofs about its own profit history (proofs are bound to the
+     *      submitting agent via msg.sender), preventing a third party from pumping someone's reputation.
      */
     function evaluateAgentPerformanceProof(
         address agent,
@@ -207,6 +253,12 @@ contract AutonomousAIHub is ReentrancyGuard {
     ) external nonReentrant returns (uint256 newScore) {
         if (agent == address(0)) {
             revert ZeroAddress();
+        }
+        if (msg.sender != agent && msg.sender != owner) {
+            revert UnauthorizedReputationBoost();
+        }
+        if (profitAmountUSD == 0) {
+            revert ZeroAmount();
         }
         if (!aiAgents[agent].isRegistered) {
             revert AgentNotRegistered();
@@ -239,7 +291,28 @@ contract AutonomousAIHub is ReentrancyGuard {
     }
 
     /**
-     * @notice Autonomously dispatches an undercollateralized micro-loan to an AI agent if its score >= 700.
+     * @notice Returns the collateral ratio required (basis points) for a given reputation score.
+     */
+    function getCollateralRatioForReputation(uint256 reputationScore) public pure returns (uint256 collateralRatioBps) {
+        if (reputationScore >= 780) return 7000;   // Super-Prime: 70% collateral (30% under-collateralized)
+        if (reputationScore >= 700) return 8500;   // Prime: 85%
+        if (reputationScore >= 650) return 9500;   // Near-Prime: 95%
+        return 15000;                               // Below: fully overcollateralized
+    }
+
+    /**
+     * @notice Announces the collateral an agent would need to post for a loan.
+     */
+    function getRequiredCollateral(address agent, uint256 amount) external view returns (uint256) {
+        if (!aiAgents[agent].isRegistered) return 0;
+        uint256 ratioBps = getCollateralRatioForReputation(aiAgents[agent].reputationScore);
+        return (amount * ratioBps) / BPS_DIVISOR;
+    }
+
+    /**
+     * @notice Autonomously dispatches a reputation-secured micro-loan to an AI agent if its score >= 700.
+     * @dev Collateral is posted in the settlement token and returned in full on repayment; it is forfeited
+     *      if the loan is liquidated after its fixed term.
      */
     function triggerAutonomousAgentLoan(uint256 amount) external nonReentrant {
         if (amount == 0) {
@@ -257,18 +330,28 @@ contract AutonomousAIHub is ReentrancyGuard {
         if (profile.reputationScore < 700) {
             revert ScoreBelowThreshold();
         }
+        if (amount > maxAgentLoanAmount) {
+            revert AmountExceedsMaxLoan();
+        }
         if (SETTLEMENT_TOKEN.balanceOf(address(this)) < amount) {
             revert InsufficientLiquidity();
         }
 
+        uint256 requiredCollateral = (amount * getCollateralRatioForReputation(profile.reputationScore)) / BPS_DIVISOR;
+        if (requiredCollateral > 0) {
+            SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), requiredCollateral);
+        }
+
+        profile.collateralAmount = requiredCollateral;
+        profile.dueBlock = block.number + LOAN_DURATION_BLOCKS;
         profile.activeLoanAmount = amount;
         SETTLEMENT_TOKEN.safeTransfer(msg.sender, amount);
 
-        emit AgentLoanDispatched(msg.sender, amount);
+        emit AgentLoanDispatched(msg.sender, amount, requiredCollateral);
     }
 
     /**
-     * @notice Repays an active AI agent loan, boosting reliability and updating metrics.
+     * @notice Repays an active AI agent loan in full, refunding the posted collateral and boosting reliability.
      */
     function repayAgentLoan(uint256 amount) external nonReentrant {
         AIAgentProfile storage profile = aiAgents[msg.sender];
@@ -282,17 +365,59 @@ contract AutonomousAIHub is ReentrancyGuard {
             revert InsufficientRepayment();
         }
 
-        SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
+        uint256 loanPrincipal = profile.activeLoanAmount;
+        SETTLEMENT_TOKEN.safeTransferFrom(msg.sender, address(this), loanPrincipal);
 
         profile.activeLoanAmount = 0;
-        profile.totalLoansRepaid += amount;
+        profile.totalLoansRepaid += loanPrincipal;
+
+        uint256 collateralToRefund = profile.collateralAmount;
+        profile.collateralAmount = 0;
+        profile.dueBlock = 0;
+        if (collateralToRefund > 0) {
+            SETTLEMENT_TOKEN.safeTransfer(msg.sender, collateralToRefund);
+        }
 
         // Reward reliability with +20 points boost
         if (profile.reputationScore + 20 <= 850) {
             profile.reputationScore += 20;
         }
 
-        emit AgentLoanRepaid(msg.sender, amount);
+        emit AgentLoanRepaid(msg.sender, loanPrincipal);
+    }
+
+    /**
+     * @notice Liquidates an overdue AI agent loan, seizing the collateral posted against it.
+     * @dev The remaining principal is absorbed by the pool (a realized loss for lenders);
+     *      the agent's reputation drops 100 points (floor 300).
+     */
+    function liquidateAgentLoan(address agent) external nonReentrant {
+        if (agent == address(0)) {
+            revert ZeroAddress();
+        }
+        AIAgentProfile storage profile = aiAgents[agent];
+        if (!profile.isRegistered) {
+            revert AgentNotRegistered();
+        }
+        if (profile.activeLoanAmount == 0) {
+            revert NoActiveLoan();
+        }
+        if (block.number <= profile.dueBlock) {
+            revert LoanNotOverdue();
+        }
+
+        profile.activeLoanAmount = 0;
+        uint256 forfeitedCollateral = profile.collateralAmount;
+        profile.collateralAmount = 0;
+        profile.dueBlock = 0;
+
+        if (profile.reputationScore >= 400) {
+            profile.reputationScore -= 100;
+        } else {
+            profile.reputationScore = 300;
+        }
+
+        emit AgentLoanLiquidated(agent, forfeitedCollateral);
     }
 
     // ═══════════════════════════════════════════════════════════════════════

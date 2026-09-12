@@ -4,12 +4,18 @@ pragma solidity 0.8.24;
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ReputationYieldVault
  * @notice A staking vault where yield farming rewards are multiplied based on cross-chain credit score.
+ *
+ *         Uses a global rewardPerToken-style accumulator (as used by Synthetix's StakingRewards),
+ *         so rewards are distributed proportionally to each staker's share of the pool and a
+ *         staker can never accrue rewards for shares they did not hold. The credit-score
+ *         multiplier is applied on top of each user's pro-rata share at harvesting time.
  */
-contract ReputationYieldVault {
+contract ReputationYieldVault is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     error ZeroAddress();
@@ -21,16 +27,16 @@ contract ReputationYieldVault {
     IERC20 public immutable STAKING_TOKEN;
     IERC20 public immutable REWARD_TOKEN;
 
-    // A simplified reward rate for demonstration (e.g., 100 reward tokens per block per staker share)
-    uint256 public constant BASE_REWARD_RATE = 100;
+    // A simplified reward rate: reward tokens distributed per block per (full unit of) staked token.
+    uint256 public constant REWARD_RATE_PER_BLOCK = 100;
+    uint256 public constant PRECISION = 1e18;
 
-    struct StakerInfo {
-        uint256 balance;
-        uint256 lastUpdateBlock;
-        uint256 accumulatedRewards;
-    }
+    uint256 public totalStaked;
+    uint256 public rewardPerTokenStored;
+    uint256 public lastRewardBlock;
 
-    mapping(address user => StakerInfo info) public stakers;
+    mapping(address user => uint256 balance) public stakers;
+    mapping(address user => uint256 debt) public rewardDebt;
 
     event Staked(address indexed user, uint256 amount);
     event Unstaked(address indexed user, uint256 amount);
@@ -43,67 +49,80 @@ contract ReputationYieldVault {
         CREDX_HUB = ICredXHub(_credXHub);
         STAKING_TOKEN = IERC20(_stakingToken);
         REWARD_TOKEN = IERC20(_rewardToken);
+        lastRewardBlock = block.number;
     }
 
-    function _updateRewards(address user) internal {
-        StakerInfo storage info = stakers[user];
-        if (info.balance > 0 && info.lastUpdateBlock < block.number) {
-            uint256 blocks = block.number - info.lastUpdateBlock;
-            
-            // Get user's current score to calculate multiplier dynamically
-            (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(user);
-            uint256 multiplier = 10; // 1.0x
-
-            if (creditScore >= 780) {
-                multiplier = 20; // 2.0x
-            } else if (creditScore >= 650) {
-                multiplier = 15; // 1.5x
-            }
-
-            uint256 rewardForPeriod = (info.balance * blocks * BASE_REWARD_RATE * multiplier) / 10;
-            info.accumulatedRewards += rewardForPeriod;
+    /**
+     * @dev Accrues rewards for the blocks elapsed since the last interaction, based on the
+     *      CURRENT totalStaked (i.e. shares that actually were held during those blocks).
+     */
+    modifier updateRewards() {
+        if (block.number > lastRewardBlock && totalStaked > 0) {
+            uint256 deltaBlocks = block.number - lastRewardBlock;
+            rewardPerTokenStored += (deltaBlocks * REWARD_RATE_PER_BLOCK * PRECISION) / totalStaked;
         }
-        info.lastUpdateBlock = block.number;
+        lastRewardBlock = block.number;
+        _;
     }
 
-    function stake(uint256 amount) external {
+    function _getMultiplier(address user) internal view returns (uint256) {
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(user);
+        if (creditScore >= 780) {
+            return 20; // 2.0x
+        } else if (creditScore >= 650) {
+            return 15; // 1.5x
+        }
+        return 10; // 1.0x
+    }
+
+    /**
+     * @dev Sends the caller any currently claimable rewards and resyncs their reward debt.
+     */
+    function _harvest(address user) internal {
+        uint256 pending = (stakers[user] * (rewardPerTokenStored - rewardDebt[user])) / PRECISION;
+        uint256 multiplier = _getMultiplier(user);
+        pending = (pending * multiplier) / 10;
+        rewardDebt[user] = rewardPerTokenStored;
+        if (pending > 0) {
+            REWARD_TOKEN.safeTransfer(user, pending);
+            emit RewardsClaimed(user, pending, multiplier);
+        }
+    }
+
+    function stake(uint256 amount) external nonReentrant updateRewards {
         if (amount == 0) revert InvalidAmount();
-        _updateRewards(msg.sender);
-        
+
+        _harvest(msg.sender);
+
         STAKING_TOKEN.safeTransferFrom(msg.sender, address(this), amount);
-        stakers[msg.sender].balance += amount;
-        
+        stakers[msg.sender] += amount;
+        totalStaked += amount;
+
         emit Staked(msg.sender, amount);
     }
 
-    function unstake(uint256 amount) external {
+    function unstake(uint256 amount) external nonReentrant updateRewards {
         if (amount == 0) revert InvalidAmount();
-        if (stakers[msg.sender].balance < amount) revert InsufficientBalance();
-        
-        _updateRewards(msg.sender);
-        
-        stakers[msg.sender].balance -= amount;
+        if (stakers[msg.sender] < amount) revert InsufficientBalance();
+
+        _harvest(msg.sender);
+
+        stakers[msg.sender] -= amount;
+        totalStaked -= amount;
         STAKING_TOKEN.safeTransfer(msg.sender, amount);
-        
+
         emit Unstaked(msg.sender, amount);
     }
 
-    function claimRewards() external {
-        _updateRewards(msg.sender);
-        
-        uint256 reward = stakers[msg.sender].accumulatedRewards;
+    function claimRewards() external nonReentrant updateRewards {
+        uint256 reward = (stakers[msg.sender] * (rewardPerTokenStored - rewardDebt[msg.sender])) / PRECISION;
+        uint256 multiplier = _getMultiplier(msg.sender);
+        reward = (reward * multiplier) / 10;
+        rewardDebt[msg.sender] = rewardPerTokenStored;
+
         if (reward == 0) revert NoRewards();
-        
-        stakers[msg.sender].accumulatedRewards = 0;
-        
-        // In a real scenario, this would mint or transfer from a reserve
-        // We simulate by just transferring (requires vault to be funded with rewardTokens)
+
         REWARD_TOKEN.safeTransfer(msg.sender, reward);
-        
-        // Log the multiplier for transparency based on current score
-        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
-        uint256 multiplier = creditScore >= 780 ? 20 : (creditScore >= 650 ? 15 : 10);
-        
         emit RewardsClaimed(msg.sender, reward, multiplier);
     }
 }

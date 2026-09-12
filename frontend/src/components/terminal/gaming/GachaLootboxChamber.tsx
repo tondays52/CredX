@@ -1,7 +1,10 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import GlassCard from '../../common/GlassCard';
+import SimulationBadge from '../../common/SimulationBadge';
 import { useToast } from '../../../context/ToastContext';
 import { useProtocol } from '../../../context/ProtocolContext';
+import { useWeb3 } from '../../../context/Web3Context';
+import { fetchGamingState, openLootbox } from '../../../services/credXService';
 import {
   Sparkles,
   Gift,
@@ -38,11 +41,15 @@ interface DroppedItem {
   hash: string;
 }
 
+type GamingState = NonNullable<Awaited<ReturnType<typeof fetchGamingState>>>;
+const LOOTBOX_COOLDOWN_BLOCKS = 1;
+
 export const GachaLootboxChamber: React.FC = () => {
   const { score } = useProtocol();
+  const { isConnected, address } = useWeb3();
   const { addToast } = useToast();
 
-  const userScore = score || 785;
+  const userScore = score;
   const isSuperPrime = userScore >= 750;
   const minScoreRequired = 500;
   const isEligible = userScore >= minScoreRequired;
@@ -153,10 +160,42 @@ export const GachaLootboxChamber: React.FC = () => {
     }
   ]);
 
+  const [gameState, setGameState] = useState<GamingState | null>(null);
+
+  const refreshGamingState = useCallback(async () => {
+    if (!address) {
+      setGameState(null);
+      return false;
+    }
+    const s = await fetchGamingState(address);
+    setGameState(s);
+    return !!s;
+  }, [address]);
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setGameState(null);
+      return;
+    }
+    void refreshGamingState();
+  }, [isConnected, address, refreshGamingState]);
+
+  const lootboxCooldownBlocks = gameState && gameState.lastLootboxBlock > 0
+    ? Math.min(LOOTBOX_COOLDOWN_BLOCKS, Math.max(0, LOOTBOX_COOLDOWN_BLOCKS - (gameState.currentBlock - gameState.lastLootboxBlock)))
+    : 0;
+
   // Handle Unboxing with On-Chain Entropy
-  const handleOpenLootbox = (count: 1 | 3 = 1) => {
+  const handleOpenLootbox = async (count: 1 | 3 = 1) => {
     if (!isEligible) {
       addToast('error', 'Score Too Low', `Minimum Creditcoin Trust Score of ${minScoreRequired} required to open lootboxes.`);
+      return;
+    }
+    if (!isConnected || !address) {
+      addToast('info', 'Connect a Wallet', 'Connect your wallet to call openLootbox() on GamingEcosystemHub.');
+      return;
+    }
+    if (lootboxCooldownBlocks > 0) {
+      addToast('info', 'Cooldown Active', `Lootbox is in cooldown for ${lootboxCooldownBlocks} more block(s).`);
       return;
     }
 
@@ -165,17 +204,19 @@ export const GachaLootboxChamber: React.FC = () => {
     setRevealedItems([]);
     playGachaSound('spin');
 
-    addToast('info', 'Creditcoin VRF Seed Submitted', `Requesting verifiable entropy seed for ${count}x lootbox draw...`);
+    addToast('info', 'Creditcoin VRF Seed Submitted', `Submitting openLootbox() for ${count}x lootbox draw...`);
 
-    setTimeout(() => {
+    try {
+      const hashes: string[] = [];
+      for (let i = 0; i < count; i++) {
+        hashes.push(await openLootbox());
+      }
+
       const results: DroppedItem[] = [];
       let highestRarity: 'COMMON' | 'RARE' | 'LEGENDARY' = 'COMMON';
       let lastEntropy = 0;
 
       for (let i = 0; i < count; i++) {
-        const currentNonce = nonce + i + 1;
-        // Replicates GamingEcosystemHub.sol:
-        // uint256 rand = uint256(keccak256(abi.encodePacked(entropySeed, msg.sender, _lootboxNonce))) % 100;
         const rand = Math.floor(Math.random() * 100);
         lastEntropy = rand;
 
@@ -223,8 +264,9 @@ export const GachaLootboxChamber: React.FC = () => {
           }
         }
 
+        const itemHash = hashes[i % hashes.length];
         const item: DroppedItem = {
-          id: `NFT-VRF-${Math.floor(1000 + Math.random() * 8999)}`,
+          id: `NFT-${itemHash.slice(0, 6)}`,
           name,
           rarity,
           attack: atk,
@@ -233,7 +275,7 @@ export const GachaLootboxChamber: React.FC = () => {
           valueUSD: valUSD,
           icon,
           mintedAt: 'Just now',
-          hash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`
+          hash: `${itemHash.slice(0, 6)}...${itemHash.slice(-4)}`
         };
         results.push(item);
       }
@@ -246,12 +288,21 @@ export const GachaLootboxChamber: React.FC = () => {
       setLastCalculatedEntropy(lastEntropy);
       setIsOpening(false);
 
+      await refreshGamingState();
       addToast(
         'success',
-        `VRF Unboxed: ${highestRarity} Drop!`,
-        `Successfully minted ${results.length} NFT item(s) on Creditcoin L1!`
+        `Lootbox Unboxed: ${highestRarity} Drop!`,
+        `openLootbox() confirmed — ${results.length} NFT(s) minted. Tx ${hashes[0].slice(0, 12)}…`
       );
-    }, 1300);
+    } catch (err: any) {
+      setRevealedItems([]);
+      setIsOpening(false);
+      addToast(
+        'error',
+        'Lootbox Open Failed',
+        err?.reason || err?.message || 'Transaction rejected — the hub may not hold the game-item minter role yet.'
+      );
+    }
   };
 
   return (
@@ -466,6 +517,10 @@ export const GachaLootboxChamber: React.FC = () => {
                 {isOpening && openingCount === 3 ? 'Summoning Bundle...' : 'Multi-Summon 3x (70 GAME)'}
               </button>
             </div>
+
+            <p className="text-[10px] font-mono text-white/40">
+              Note: the deployed hub mints via mock tokens owned by the deployer — openLootbox() may revert with OnlyOwner until the hub is granted the minter role. Reverts surface honestly in the toast.
+            </p>
           </GlassCard>
         </div>
 
@@ -477,7 +532,7 @@ export const GachaLootboxChamber: React.FC = () => {
               <span className="text-[10px] uppercase text-cyan-400 font-bold flex items-center gap-1.5">
                 <Cpu className="w-3.5 h-3.5" /> VRF Verifiable Entropy Inspector
               </span>
-              <span className="text-[10px] text-emerald-400 font-bold">0x0FD2 Attested</span>
+              <span className="text-[10px] text-amber-400 font-bold">Local RNG (no VRF on-chain)</span>
             </div>
 
             <div className="space-y-2 text-[11px]">
@@ -499,6 +554,10 @@ export const GachaLootboxChamber: React.FC = () => {
                   <span className="font-bold text-xs">{lastCalculatedEntropy} / 100</span>
                 </div>
               )}
+              <div className="flex justify-between text-white/70">
+                <span className="text-white/40">Lootbox Cooldown:</span>
+                <span className="text-white font-bold">{gameState ? (lootboxCooldownBlocks > 0 ? `${lootboxCooldownBlocks} block(s)` : 'Ready') : '--'}</span>
+              </div>
             </div>
           </GlassCard>
 
@@ -506,9 +565,12 @@ export const GachaLootboxChamber: React.FC = () => {
           <GlassCard className="p-5 border-white/[0.08] space-y-3 bg-slate-950/60 font-mono text-xs">
             <div className="flex items-center justify-between">
               <span className="text-white/40 text-[10px] uppercase">
-                Acquired NFT Equipment Stash ({mintedItemsHistory.length})
+                Acquired NFT Equipment Stash ({gameState ? gameState.nftCount : '--'})
               </span>
-              <span className="text-[10px] text-amber-400 font-bold">ERC-721 Validated</span>
+              <span className="flex items-center gap-1.5">
+                <SimulationBadge label="SIM ITEM GALLERY" note="Item details are a local simulation — the live read exposes only the owned NFT count (ERC-721 balanceOf)." />
+                <span className="text-[10px] text-amber-400 font-bold">ERC-721 Validated</span>
+              </span>
             </div>
 
             <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">

@@ -95,7 +95,7 @@ contract CreditScoreEngine {
         uint256 protocolDiversity,
         uint256 chainDiversity,
         uint256 weightedActionScore
-    ) public pure returns (uint256 score) {
+    ) public view returns (uint256 score) {
         if (attestationsCount == 0) {
             return MIN_SCORE;
         }
@@ -118,7 +118,7 @@ contract CreditScoreEngine {
         return calculatedScore;
     }
 
-    function _calculateVolumeBonus(uint256 totalVerifiedVolumeUSD) internal pure returns (uint256) {
+    function _calculateVolumeBonus(uint256 totalVerifiedVolumeUSD) internal view returns (uint256) {
         uint256 volumeInUSDUnits = totalVerifiedVolumeUSD / 10**18;
         if (volumeInUSDUnits >= 100_000) return 200;
         if (volumeInUSDUnits >= 50_000) return 160;
@@ -127,7 +127,7 @@ contract CreditScoreEngine {
         return (volumeInUSDUnits * 50) / 1000;
     }
 
-    function _calculateDiversityBonus(uint256 protocolDiversity, uint256 chainDiversity) internal pure returns (uint256 bonus) {
+    function _calculateDiversityBonus(uint256 protocolDiversity, uint256 chainDiversity) internal view returns (uint256 bonus) {
         if (protocolDiversity >= 5) bonus += 80;
         else if (protocolDiversity >= 3) bonus += 50;
         else if (protocolDiversity >= 2) bonus += 25;
@@ -136,21 +136,25 @@ contract CreditScoreEngine {
         else if (chainDiversity >= 2) bonus += 20;
     }
 
-    function _calculateFrequencyBonus(uint256 attestationsCount) internal pure returns (uint256) {
+    function _calculateFrequencyBonus(uint256 attestationsCount) internal view returns (uint256) {
         if (attestationsCount >= 15) return 80;
         if (attestationsCount >= 10) return 60;
         if (attestationsCount >= 5) return 40;
         return attestationsCount * 8;
     }
 
-    function _calculateRecencyBonus(uint256 lastAttestationTimestamp) internal pure returns (uint256) {
-        if (lastAttestationTimestamp != 0) {
-            return 50;
-        }
-        return 0;
+    function _calculateRecencyBonus(uint256 lastAttestationTimestamp) internal view returns (uint256) {
+        if (lastAttestationTimestamp == 0) return 0;
+
+        // Recency decays linearly from +50 to +0 over ~30 days (216,000 blocks at 12s/block),
+        // so an ancient attestation history stops contributing a full bonus.
+        uint256 elapsedBlocks = block.number - lastAttestationTimestamp;
+        uint256 decayWindow = 216_000;
+        if (elapsedBlocks >= decayWindow) return 0;
+        return 50 - (elapsedBlocks * 50) / decayWindow;
     }
 
-    function _calculateActionBonus(uint256 weightedActionScore) internal pure returns (uint256) {
+    function _calculateActionBonus(uint256 weightedActionScore) internal view returns (uint256) {
         uint256 normalizedActionBonus = weightedActionScore / 10**18;
         if (normalizedActionBonus >= 50) return 80;
         if (normalizedActionBonus >= 20) return 50;
@@ -166,7 +170,7 @@ contract CreditScoreEngine {
         uint256 attestationsCount,
         uint256 lastAttestationTimestamp,
         bool isMainnetSource
-    ) public pure returns (uint256 score) {
+    ) public view returns (uint256 score) {
         return computeScoreMultiFactor(
             totalVerifiedVolumeUSD,
             attestationsCount,

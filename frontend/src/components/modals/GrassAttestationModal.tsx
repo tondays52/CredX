@@ -35,7 +35,7 @@ export const GrassAttestationModal: React.FC<GrassAttestationModalProps> = ({ is
       isOpen={isOpen}
       onClose={onClose}
       title="Grass.io Bandwidth Attestation"
-      subtitle="Creditcoin Attestcoin Protocol (USC Precompile 0x0FD2)"
+      subtitle="Creditcoin Attestcoin Protocol (USC Precompile 0x0FD2) — local simulation, no wallet tx"
       maxWidth="max-w-xl"
       icon={<div className="w-8 h-8 rounded-xl bg-[#ABF600]/20 border border-[#ABF600]/40 flex items-center justify-center text-[#ABF600] font-bold"><Wifi className="w-4 h-4" /></div>}
     >
@@ -99,8 +99,8 @@ export const GrassAttestationModal: React.FC<GrassAttestationModalProps> = ({ is
             <div className="text-[11px] text-white/70 flex items-center gap-2">
               {step === 1 && '📦 1. Encoding RLP packet routing receipts from Grass L2...'}
               {step === 2 && '🔐 2. Computing Merkle Patricia Trie root & state inclusion...'}
-              {step === 3 && '⚡ 3. Executing Creditcoin IAttestationVerifier at 0x0FD2...'}
-              {step === 4 && '🎯 4. Verified! Recalculating Creditcoin Trust Score (CTS)...'}
+              {step === 3 && '⚡ 3. Simulated precompile 0x0FD2 call (local — no on-chain execution)...'}
+              {step === 4 && '🎯 4. Simulated verification complete! Updating local Creditcoin Trust Score (CTS)...'}
             </div>
           </div>
         )}

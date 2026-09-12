@@ -87,9 +87,28 @@
           <span class="stat-icon">🛡️</span>
           <span class="stat-label">Credit Score</span>
         </div>
-        <span class="stat-value text-gold" id="scoreValue">794 CTS</span>
-        <span class="stat-hint text-gold font-bold">Super-Prime Tier</span>
+        <span class="stat-value text-gold" id="scoreValue">Unavailable</span>
+        <span class="stat-hint text-gold font-bold" id="scoreHint">Read-only on-chain view</span>
       </div>
+    </div>
+
+    <!-- Read-only wallet address for on-chain score lookup -->
+    <div class="address-row">
+      <input id="walletAddress" type="text" spellcheck="false"
+        value="0x9afB4FAd95d9fEa67615911Ce1fA4C9f13FA8f07" />
+      <button id="loadScoreBtn" class="btn btn-secondary">Load Score</button>
+    </div>
+
+    <!-- Signature relay proof hash (used by the signed Sync path) -->
+    <div class="address-row">
+      <input id="proofHash" type="text" spellcheck="false"
+        value="0x0fd2e93b194a28f80456cbb8a912a781d4a076c8" />
+    </div>
+
+    <!-- MetaMask relay status / connect -->
+    <div class="mm-row">
+      <span class="mm-status" id="mmStatus">MetaMask relay: scanning…</span>
+      <button id="mmConnectBtn" class="btn btn-secondary hidden">Connect Wallet</button>
     </div>
 
     <!-- Action Buttons -->

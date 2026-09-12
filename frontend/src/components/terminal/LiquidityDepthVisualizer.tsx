@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SimulationBadge } from '../common/SimulationBadge';
 import {
   Activity,
   Layers,
@@ -326,6 +327,18 @@ export const LiquidityDepthVisualizer: React.FC<LiquidityDepthVisualizerProps> =
 
   return (
     <div className="space-y-4 font-sans select-none text-slate-200">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED DEPTH CHART"
+          note="Order-book depth bins are procedurally generated locally — no live CLOB or AMM depth is read from Creditcoin."
+        />
+        <span className="font-mono">
+          Visualizer only: liquidity bins are procedurally generated around the current market price.
+          No on-chain order book exists on testnet.
+        </span>
+      </div>
+
       {/* Top Header with Metrics & Zoom Controls */}
       <div className="p-3.5 rounded-2xl bg-[#0b0e14] border border-[#1e2329] flex flex-wrap items-center justify-between gap-3 shadow-xl">
         <div className="flex items-center gap-3">

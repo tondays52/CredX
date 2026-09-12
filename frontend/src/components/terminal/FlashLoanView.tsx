@@ -31,6 +31,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useWeb3 } from '../../context/Web3Context';
+import { SimulationBadge } from '../common/SimulationBadge';
 import posthog, { isPostHogEnabled } from '../../posthog';
 import FlashLoanModal from '../modals/FlashLoanModal';
 
@@ -748,6 +749,19 @@ export const FlashLoanView: React.FC = () => {
 
   return (
     <div className="space-y-6 font-sans select-none text-slate-200">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED FLASH-LOAN UI"
+          note="ReputationFlashLoan.sol is deployed, but this UI runs simulated opportunities and receiver flows locally without submitting transactions."
+        />
+        <span className="font-mono">
+          Opportunties, PnL and the atomic pipeline visuals are local simulations. The on-chain
+          ReputationFlashLoan contract exists on testnet but is exercised only by the credit-aware
+          demo in other panels — this UI does not submit wallet transactions.
+        </span>
+      </div>
+
       {/* ═══════════════════════════════════════════════════════════════
           1. Institutional Header & Live Metric KPI Hub
          ═══════════════════════════════════════════════════════════════ */}
@@ -762,8 +776,8 @@ export const FlashLoanView: React.FC = () => {
                 <ShieldCheck className="w-3 h-3 text-cyan-400" />
                 CREDX ENTERPRISE DEFI &bull; SUPER-PRIME PROTOCOL
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 font-mono text-[10px] font-bold">
-                PRECOMPILE 0x0FD2 NATIVE
+              <span className="px-2.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-400/25 text-amber-200 font-mono text-[10px] font-bold">
+                LOCAL SIMULATION (REAL txs via ReputationFlashLoan.sol elsewhere)
               </span>
             </div>
             <h2 className="text-2xl lg:text-3xl font-black text-white tracking-tight flex items-center gap-2.5">

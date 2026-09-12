@@ -1,8 +1,17 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useToast } from '../../context/ToastContext';
 import posthog, { isPostHogEnabled } from '../../posthog';
+import SimulationBadge from '../common/SimulationBadge';
+import {
+  fetchAMMState,
+  addAMMLiquidity,
+  removeAMMLiquidity,
+  swapViaAMM,
+  fetchCUSDBalance,
+  txHashShort,
+} from '../../services/credXService';
 import {
   ArrowLeftRight,
   TrendingUp,
@@ -37,7 +46,17 @@ export interface SwapToken {
   supply: string;
   holders: string;
   category: string;
+  address?: string;
 }
+
+interface TokenMeta {
+  address: string;
+  symbol: string;
+  decimals: number;
+  name: string;
+}
+
+type AMMState = NonNullable<Awaited<ReturnType<typeof fetchAMMState>>>;
 
 const AVAILABLE_TOKENS: Record<string, SwapToken> = {
   CTC: {
@@ -187,51 +206,8 @@ interface TransactionItem {
   time: string;
 }
 
-const INITIAL_TRANSACTIONS: TransactionItem[] = [
-  {
-    id: 'tx-1',
-    type: 'Swap',
-    details: '17,160.02 CTC → 35,692.84 cUSD',
-    txHash: '0x42a8...81d1',
-    status: 'Pending',
-    time: '2s ago'
-  },
-  {
-    id: 'tx-2',
-    type: 'Swap',
-    details: '500.00 CTC → 1,040.00 cUSD',
-    txHash: '0x7e12...b940',
-    status: 'Confirmed',
-    time: '18s ago'
-  },
-  {
-    id: 'tx-3',
-    type: 'Add Liquidity',
-    details: '1,200.00 CTC + 2,496.00 cUSD',
-    txHash: '0x94f1...5c23',
-    status: 'Confirmed',
-    time: '42s ago'
-  },
-  {
-    id: 'tx-4',
-    type: 'Remove Liquidity',
-    details: '4.27 stCTC + 8.88 cUSD',
-    txHash: '0x1c8b...3a19',
-    status: 'Failed',
-    time: '1m ago'
-  },
-  {
-    id: 'tx-5',
-    type: 'Swap',
-    details: '2,500.00 cUSD → 1,157.40 stCTC',
-    txHash: '0x629c...fe82',
-    status: 'Confirmed',
-    time: '2m ago'
-  }
-];
-
 export const DexAmmView: React.FC = () => {
-  const { isConnected, balanceCTC, openConnectModal } = useWeb3();
+  const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
   const { boostScore } = useProtocol();
   const { showToast, playSound } = useToast();
 
@@ -260,16 +236,109 @@ export const DexAmmView: React.FC = () => {
   });
 
   // Recent Transactions Stream
-  const [transactions, setTransactions] = useState<TransactionItem[]>(INITIAL_TRANSACTIONS);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
 
   // Canvas Refs
   const chartCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const sentimentCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  const [ammState, setAmmState] = useState<AMMState | null>(null);
+  const [poolLoading, setPoolLoading] = useState<boolean>(false);
+  const [cusdBalance, setCusdBalance] = useState<number>(0);
+  const [depositAmt0, setDepositAmt0] = useState<string>('');
+  const [depositAmt1, setDepositAmt1] = useState<string>('');
+  const [withdrawAmt, setWithdrawAmt] = useState<string>('');
+  const [poolBusy, setPoolBusy] = useState<'deposit' | 'withdraw' | null>(null);
+
+  const poolLive = ammState !== null;
+
+  const refreshPoolState = useCallback(async () => {
+    if (!isConnected || !address) {
+      setAmmState(null);
+      setCusdBalance(0);
+      return;
+    }
+    setPoolLoading(true);
+    try {
+      const s = await fetchAMMState(address);
+      setAmmState(s);
+      if (s) {
+        setFromToken((prev) => (prev === s.token0.symbol || prev === s.token1.symbol ? prev : s.token0.symbol));
+        setToToken((prev) => (prev === s.token0.symbol || prev === s.token1.symbol ? prev : s.token1.symbol));
+      }
+    } catch {
+      setAmmState(null);
+    } finally {
+      setPoolLoading(false);
+    }
+  }, [isConnected, address]);
+
+  useEffect(() => {
+    void refreshPoolState();
+  }, [refreshPoolState]);
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setCusdBalance(0);
+      return;
+    }
+    let cancelled = false;
+    fetchCUSDBalance(address)
+      .then((bal) => { if (!cancelled) setCusdBalance(bal); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isConnected, address]);
+
+  const poolTokens = useMemo<SwapToken[]>(() => {
+    if (!ammState) return [];
+    const synth = (meta: TokenMeta, index: number): SwapToken => {
+      const known = AVAILABLE_TOKENS[meta.symbol];
+      if (known) return { ...known, address: meta.address, decimals: meta.decimals };
+      const other = index === 0 ? ammState.token1 : ammState.token0;
+      const otherKnown = AVAILABLE_TOKENS[other.symbol];
+      let priceUSD = 0;
+      if (otherKnown && ammState.reserve0 > 0) {
+        priceUSD = index === 0
+          ? (otherKnown.priceUSD * ammState.reserve1) / ammState.reserve0
+          : (otherKnown.priceUSD * ammState.reserve0) / ammState.reserve1;
+      }
+      return {
+        symbol: meta.symbol,
+        name: meta.name || meta.symbol,
+        priceUSD,
+        balance: 0,
+        decimals: meta.decimals,
+        iconBg: index === 0 ? '#042f2e' : '#083344',
+        iconText: meta.symbol.slice(0, 3),
+        color: index === 0 ? '#00f2fe' : '#38bdf8',
+        satsRate: 0,
+        change24h: 0,
+        volume24h: '—',
+        marketCap: '—',
+        supply: '—',
+        holders: '—',
+        category: 'AMM Pool Asset',
+        address: meta.address,
+      };
+    };
+    return [synth(ammState.token0, 0), synth(ammState.token1, 1)];
+  }, [ammState]);
+
+  const swapTokenLookup = useMemo(() => {
+    const map: Record<string, SwapToken> = { ...AVAILABLE_TOKENS };
+    poolTokens.forEach((t) => { map[t.symbol] = t; });
+    return map;
+  }, [poolTokens]);
+
+  const swapTokenKeys = useMemo(() => {
+    if (ammState) return poolTokens.map((t) => t.symbol);
+    return Object.keys(AVAILABLE_TOKENS);
+  }, [ammState, poolTokens]);
+
   // Active Token Objects
   const activeToken = AVAILABLE_TOKENS[selectedTokenKey] || AVAILABLE_TOKENS.CTC;
-  const fromTokenObj = AVAILABLE_TOKENS[fromToken] || AVAILABLE_TOKENS.CTC;
-  const toTokenObj = AVAILABLE_TOKENS[toToken] || AVAILABLE_TOKENS.cUSD;
+  const fromTokenObj = swapTokenLookup[fromToken] || AVAILABLE_TOKENS.CTC;
+  const toTokenObj = swapTokenLookup[toToken] || AVAILABLE_TOKENS.cUSD;
 
   // Real-time Live Price Tick Simulation
   const [liveTick, setLiveTick] = useState<number>(0);
@@ -281,11 +350,62 @@ export const DexAmmView: React.FC = () => {
   }, []);
 
   // Compute Swap Exchange Rates
+  const poolQuote = useMemo(() => {
+    if (!ammState) return null;
+    if (fromTokenObj.symbol === ammState.token0.symbol && toTokenObj.symbol === ammState.token1.symbol) {
+      return { rate: ammState.quote0To1, real: true };
+    }
+    if (fromTokenObj.symbol === ammState.token1.symbol && toTokenObj.symbol === ammState.token0.symbol) {
+      return { rate: ammState.quote1To0, real: true };
+    }
+    return null;
+  }, [ammState, fromTokenObj, toTokenObj]);
+
+  const pToken0Usd = useMemo(() => {
+    if (!ammState) return null;
+    const k0 = AVAILABLE_TOKENS[ammState.token0.symbol];
+    if (k0) return k0.priceUSD;
+    const k1 = AVAILABLE_TOKENS[ammState.token1.symbol];
+    if (k1 && ammState.reserve0 > 0) return (k1.priceUSD * ammState.reserve1) / ammState.reserve0;
+    return null;
+  }, [ammState]);
+
+  const pToken1Usd = useMemo(() => {
+    if (!ammState) return null;
+    const k1 = AVAILABLE_TOKENS[ammState.token1.symbol];
+    if (k1) return k1.priceUSD;
+    if (pToken0Usd != null && ammState.reserve1 > 0) return (pToken0Usd * ammState.reserve0) / ammState.reserve1;
+    return null;
+  }, [ammState, pToken0Usd]);
+
+  const poolTvl = useMemo(() => {
+    if (!ammState || pToken0Usd == null || pToken1Usd == null) return null;
+    return ammState.reserve0 * pToken0Usd + ammState.reserve1 * pToken1Usd;
+  }, [ammState, pToken0Usd, pToken1Usd]);
+
+  const reserve0Pct = useMemo(() => {
+    if (!ammState || poolTvl == null || pToken0Usd == null) return null;
+    return (ammState.reserve0 * pToken0Usd) / poolTvl;
+  }, [ammState, poolTvl, pToken0Usd]);
+
+  const lpSharePct = useMemo(() => {
+    if (!ammState || ammState.lpTotalSupply <= 0) return null;
+    return (ammState.lpBalance / ammState.lpTotalSupply) * 100;
+  }, [ammState]);
+
   const rateFromTo = fromTokenObj.priceUSD / toTokenObj.priceUSD;
+  const swapRate = poolQuote ? poolQuote.rate : rateFromTo;
   const fromAmtNum = parseFloat(fromAmount) || 0;
-  const estimatedReceive = (fromAmtNum * rateFromTo * (1 - 0.0005)).toFixed(toTokenObj.priceUSD < 1 ? 6 : 4);
+  const estimatedReceive = (fromAmtNum * swapRate * (poolQuote ? 1 : 1 - 0.0005)).toFixed(toTokenObj.priceUSD < 1 ? 6 : 4);
   const userWalletCTC = balanceCTC > 0 ? balanceCTC : 10000;
-  const fromBalance = fromToken === 'CTC' ? userWalletCTC : fromTokenObj.balance;
+  const fromBalance = useMemo(() => {
+    if (ammState) {
+      if (fromTokenObj.symbol === 'cUSD') return cusdBalance;
+      if (fromTokenObj.symbol === 'CTC') return balanceCTC > 0 ? balanceCTC : 0;
+      return 0;
+    }
+    return fromToken === 'CTC' ? userWalletCTC : fromTokenObj.balance;
+  }, [ammState, fromToken, fromTokenObj, cusdBalance, balanceCTC, userWalletCTC]);
 
   // Handle Max Button
   const handleMaxPay = () => {
@@ -300,9 +420,19 @@ export const DexAmmView: React.FC = () => {
   };
 
   // Execute Swap
-  const handleExecuteSwap = () => {
+  const handleExecuteSwap = async () => {
     if (!isConnected && openConnectModal) {
       openConnectModal();
+      return;
+    }
+
+    if (!isConnected || !address) {
+      showToast('Connect a Wallet', 'Connect a wallet to execute swaps on Creditcoin Testnet.', 'error');
+      return;
+    }
+
+    if (!ammState) {
+      showToast('Pool Unavailable', 'Could not read the live ReputationAMM pool. Try reconnecting your wallet.', 'error');
       return;
     }
 
@@ -316,24 +446,28 @@ export const DexAmmView: React.FC = () => {
       return;
     }
 
+    const tokenIn = poolTokens.find((t) => t.symbol === fromToken);
+    if (!tokenIn?.address) {
+      showToast('Unsupported Pair', `${fromToken} is not a token in the live ReputationAMM pool.`, 'error');
+      return;
+    }
+
     setIsSwapping(true);
     playSound('click');
 
-    setTimeout(() => {
-      setIsSwapping(false);
-      boostScore(25, 'DEX Liquidity Swap');
-      playSound('fanfare');
-
-      // Add to recent transactions
+    try {
+      const hash = await swapViaAMM(fromAmtNum, tokenIn.address, address);
       const newTx: TransactionItem = {
         id: `tx-${Date.now()}`,
         type: 'Swap',
         details: `${fromAmtNum.toLocaleString()} ${fromToken} → ${estimatedReceive} ${toToken}`,
-        txHash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`,
+        txHash: txHashShort(hash),
         status: 'Confirmed',
         time: 'Just now'
       };
       setTransactions((prev) => [newTx, ...prev.slice(0, 4)]);
+      boostScore(25, 'DEX Liquidity Swap');
+      playSound('fanfare');
 
       if (isPostHogEnabled) {
         posthog.capture('swap_executed', {
@@ -344,13 +478,130 @@ export const DexAmmView: React.FC = () => {
         });
       }
 
+      void refreshPoolState();
+
       showToast(
-        'Swap Executed Successfully (+25 CTS Points)',
-        `Swapped ${fromAmtNum} ${fromToken} for ${estimatedReceive} ${toToken} on Creditcoin L1 (0.05% Fee).`,
+        'Swap Executed on Creditcoin L1',
+        `Swapped ${fromAmtNum} ${fromToken} for ≈ ${estimatedReceive} ${toToken} — tx ${txHashShort(hash)}.`,
         'success',
         4500
       );
-    }, 1200);
+    } catch (err: any) {
+      showToast(
+        'Swap Failed',
+        err?.shortMessage || err?.message || 'Transaction rejected — the pool may have reverted your swap.',
+        'error',
+        5000
+      );
+    } finally {
+      setIsSwapping(false);
+    }
+  };
+
+  const handleAddLiquidity = async () => {
+    if (!isConnected && openConnectModal) {
+      openConnectModal();
+      return;
+    }
+
+    if (!isConnected || !address || !ammState) {
+      showToast('Connect a Wallet', 'Connect a wallet to add liquidity on Creditcoin Testnet.', 'error');
+      return;
+    }
+
+    const a0 = parseFloat(depositAmt0) || 0;
+    const a1 = parseFloat(depositAmt1) || 0;
+    if (a0 <= 0 || a1 <= 0) {
+      showToast('Invalid Amounts', 'Enter both token amounts to add liquidity.', 'error');
+      return;
+    }
+
+    setPoolBusy('deposit');
+    playSound('click');
+
+    try {
+      const hash = await addAMMLiquidity(a0, a1);
+      const newTx: TransactionItem = {
+        id: `tx-${Date.now()}`,
+        type: 'Add Liquidity',
+        details: `${a0.toLocaleString()} ${ammState.token0.symbol} + ${a1.toLocaleString()} ${ammState.token1.symbol}`,
+        txHash: txHashShort(hash),
+        status: 'Confirmed',
+        time: 'Just now'
+      };
+      setTransactions((prev) => [newTx, ...prev.slice(0, 4)]);
+      setDepositAmt0('');
+      setDepositAmt1('');
+      playSound('fanfare');
+      void refreshPoolState();
+      showToast(
+        'Liquidity Added',
+        `Deposited ${a0} ${ammState.token0.symbol} + ${a1} ${ammState.token1.symbol} — tx ${txHashShort(hash)}.`,
+        'success',
+        4500
+      );
+    } catch (err: any) {
+      showToast(
+        'Add Liquidity Failed',
+        err?.shortMessage || err?.message || 'Transaction rejected.',
+        'error',
+        5000
+      );
+    } finally {
+      setPoolBusy(null);
+    }
+  };
+
+  const handleRemoveLiquidity = async () => {
+    if (!isConnected && openConnectModal) {
+      openConnectModal();
+      return;
+    }
+
+    if (!isConnected || !address || !ammState) {
+      showToast('Connect a Wallet', 'Connect a wallet to remove liquidity on Creditcoin Testnet.', 'error');
+      return;
+    }
+
+    const lp = parseFloat(withdrawAmt) || 0;
+    if (lp <= 0) {
+      showToast('Invalid Amount', 'Enter LP tokens to withdraw.', 'error');
+      return;
+    }
+
+    setPoolBusy('withdraw');
+    playSound('click');
+
+    try {
+      const hash = await removeAMMLiquidity(lp);
+      const newTx: TransactionItem = {
+        id: `tx-${Date.now()}`,
+        type: 'Remove Liquidity',
+        details: `${lp.toLocaleString()} LP from ${ammState.token0.symbol}/${ammState.token1.symbol}`,
+        txHash: txHashShort(hash),
+        status: 'Confirmed',
+        time: 'Just now'
+      };
+      setTransactions((prev) => [newTx, ...prev.slice(0, 4)]);
+      setWithdrawAmt('');
+      playSound('fanfare');
+      void refreshPoolState();
+      showToast(
+        'Liquidity Removed',
+        `Withdrawn ${lp.toLocaleString()} LP — tx ${txHashShort(hash)}.`,
+        'success',
+        4500
+      );
+    } catch (err: any) {
+      showToast(
+        'Remove Liquidity Failed',
+        err?.shortMessage || err?.message || 'Transaction rejected.',
+        'error',
+        5000
+      );
+    } finally {
+      setPoolBusy(null);
+    }
   };
 
   // ─── Dual-Line Price Chart Canvas ──────────────────────────────────────────
@@ -620,7 +871,7 @@ export const DexAmmView: React.FC = () => {
             value={selectedTokenKey}
             onChange={(e) => {
               setSelectedTokenKey(e.target.value);
-              setFromToken(e.target.value);
+              setFromToken((prev) => (ammState ? prev : e.target.value));
             }}
             className="px-3.5 py-2 rounded-xl bg-[#031720] border border-cyan-500/40 text-cyan-300 font-bold font-mono text-xs outline-none cursor-pointer hover:border-cyan-400 transition shadow-inner"
           >
@@ -647,9 +898,7 @@ export const DexAmmView: React.FC = () => {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <BarChart2 className="w-3.5 h-3.5 text-cyan-400" /> Token Stats
               </span>
-              <span className="text-[11px] font-mono text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
-                Live Feed Sync
-              </span>
+              <SimulationBadge label="DEMO MARKET DATA" note="Illustrative token market metadata — no price oracle contract is read for these stats." />
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -715,7 +964,10 @@ export const DexAmmView: React.FC = () => {
           <div className="p-5 sm:p-6 rounded-3xl bg-[#020b0e] border border-cyan-500/20 shadow-2xl space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <span className="text-xs font-mono text-slate-400">Token Price</span>
+                <span className="text-xs font-mono text-slate-400 flex flex-wrap items-center gap-1.5">
+                  Token Price
+                  <SimulationBadge label="ILLUSTRATIVE CHART" note="Price candles are drawn from mocked data. Live pool stats and swap quotes come from the ReputationAMM contract." />
+                </span>
                 <div className="flex items-baseline gap-2 mt-0.5">
                   <span className="text-2xl font-black font-mono text-white">
                     ${activeToken.priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
@@ -771,6 +1023,7 @@ export const DexAmmView: React.FC = () => {
             <div className="md:col-span-5 p-5 rounded-3xl bg-[#020b0e] border border-cyan-500/20 shadow-xl space-y-3">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <Flame className="w-3.5 h-3.5 text-amber-400" /> Mentions & Velocity
+                <SimulationBadge label="SIMULATED" />
               </span>
 
               <div className="space-y-2.5 pt-1">
@@ -826,6 +1079,7 @@ export const DexAmmView: React.FC = () => {
             <div className="md:col-span-7 p-5 rounded-3xl bg-[#020b0e] border border-cyan-500/20 shadow-xl space-y-4">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-cyan-400" /> Social Sentiment & Nodes
+                <SimulationBadge label="SIMULATED" />
               </span>
 
               <div className="flex items-center justify-between gap-4">
@@ -917,9 +1171,16 @@ export const DexAmmView: React.FC = () => {
           <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-br from-[#031822] via-[#021016] to-[#010a0e] border border-cyan-500/30 shadow-2xl space-y-4">
             {/* Header with Slippage Settings Gear */}
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
+              <h3 className="text-base font-bold text-white flex items-center gap-2 flex-wrap">
                 <ArrowLeftRight className="w-4 h-4 text-cyan-400" />
                 Swap
+                {poolLive ? (
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE ON-CHAIN
+                  </span>
+                ) : (
+                  <SimulationBadge label={isConnected ? 'POOL UNREADABLE' : 'NOT CONNECTED'} note="Swap quotes are shown for illustration only until the ReputationAMM pool can be read with a connected wallet." />
+                )}
               </h3>
 
               <div className="relative">
@@ -969,7 +1230,7 @@ export const DexAmmView: React.FC = () => {
                     onChange={(e) => setFromToken(e.target.value)}
                     className="bg-[#031a24] text-white font-black font-mono text-xs px-2.5 py-1.5 rounded-xl border border-cyan-500/30 outline-none cursor-pointer"
                   >
-                    {Object.keys(AVAILABLE_TOKENS).map((t) => (
+                    {swapTokenKeys.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
@@ -1020,13 +1281,13 @@ export const DexAmmView: React.FC = () => {
                     onChange={(e) => setToToken(e.target.value)}
                     className="bg-[#031a24] text-white font-black font-mono text-xs px-2.5 py-1.5 rounded-xl border border-cyan-500/30 outline-none cursor-pointer"
                   >
-                    {Object.keys(AVAILABLE_TOKENS).map((t) => (
+                    {swapTokenKeys.map((t) => (
                       <option key={t} value={t}>{t}</option>
                     ))}
                   </select>
                 </div>
                 <span className="text-xs font-mono text-cyan-300">
-                  1 {fromToken} &asymp; {rateFromTo < 1 ? rateFromTo.toFixed(6) : rateFromTo.toFixed(4)} {toToken}
+                  1 {fromToken} &asymp; {swapRate < 1 ? swapRate.toFixed(6) : swapRate.toFixed(4)} {toToken}
                 </span>
               </div>
 
@@ -1091,7 +1352,7 @@ export const DexAmmView: React.FC = () => {
                   <div className="flex justify-between items-center">
                     <span>1 {fromToken} Rate:</span>
                     <span className="text-slate-200">
-                      (&asymp; {rateFromTo < 1 ? rateFromTo.toFixed(6) : rateFromTo.toFixed(4)} {toToken})
+                      (&asymp; {swapRate < 1 ? swapRate.toFixed(6) : swapRate.toFixed(4)} {toToken})
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
@@ -1117,7 +1378,7 @@ export const DexAmmView: React.FC = () => {
               <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-cyan-400" /> Transactions
               </span>
-              <span className="text-[10px] font-mono text-slate-400">On-Chain Stream</span>
+              <span className="text-[10px] font-mono text-slate-400">This Session</span>
             </div>
 
             <div className="space-y-2 overflow-x-auto">
@@ -1131,82 +1392,210 @@ export const DexAmmView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {transactions.map((tx) => (
-                    <tr key={tx.id} className="hover:bg-white/5 transition">
-                      <td className="py-2 text-slate-300 font-bold">{tx.type}</td>
-                      <td className="py-2 text-slate-400 max-w-[140px] truncate" title={tx.details}>
-                        {tx.details}
-                      </td>
-                      <td className="py-2">
-                        <span className="text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5">
-                          {tx.txHash}
-                          <ExternalLink className="w-2.5 h-2.5" />
-                        </span>
-                      </td>
-                      <td className="py-2 text-right">
-                        <span
-                          className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
-                            tx.status === 'Confirmed'
-                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                              : tx.status === 'Pending'
-                              ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse'
-                              : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                          }`}
-                        >
-                          {tx.status}
-                        </span>
+                  {transactions.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="py-3 text-center text-slate-500">
+                        No transactions this session — swap or adjust pool liquidity to record one.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    transactions.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-white/5 transition">
+                        <td className="py-2 text-slate-300 font-bold">{tx.type}</td>
+                        <td className="py-2 text-slate-400 max-w-[140px] truncate" title={tx.details}>
+                          {tx.details}
+                        </td>
+                        <td className="py-2">
+                          <span className="text-cyan-400 hover:underline cursor-pointer flex items-center gap-0.5">
+                            {tx.txHash}
+                            <ExternalLink className="w-2.5 h-2.5" />
+                          </span>
+                        </td>
+                        <td className="py-2 text-right">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                              tx.status === 'Confirmed'
+                                ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                : tx.status === 'Pending'
+                                ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30 animate-pulse'
+                                : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                            }`}
+                          >
+                            {tx.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
 
-          {/* Card 3: Pool Stats & Pool Composition Bar (Bitflow Reference) */}
+          {/* Card 3: Pool Stats & Pool Composition Bar (live ReputationAMM) */}
           <div className="p-5 rounded-3xl bg-[#020b0e] border border-cyan-500/20 shadow-2xl space-y-4">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-cyan-400" /> Pool Stats & Composition
-            </span>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-cyan-400" /> Pool Stats & Composition
+              </span>
+              {poolLive ? (
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold flex items-center gap-1 whitespace-nowrap">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> LIVE ON-CHAIN
+                </span>
+              ) : poolLoading ? (
+                <span className="text-[10px] font-mono text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> Syncing
+                </span>
+              ) : (
+                <SimulationBadge label="POOL OFFLINE" note="ReputationAMM could not be read — connect a wallet on Creditcoin testnet to load live reserves." className="whitespace-nowrap" />
+              )}
+            </div>
 
             {/* Price Triad */}
             <div className="grid grid-cols-3 gap-2">
               <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
                 <span className="text-[10px] text-slate-400 font-mono">{fromToken} Price</span>
-                <div className="text-xs font-black font-mono text-white">${fromTokenObj.priceUSD.toFixed(2)}</div>
-                <div className="text-[9px] font-mono text-emerald-400">↗ +5.21%</div>
+                <div className="text-xs font-black font-mono text-white">
+                  {poolLive && fromTokenObj.priceUSD > 0 ? `$${fromTokenObj.priceUSD.toFixed(2)}` : '—'}
+                </div>
+                <div className="text-[9px] font-mono text-emerald-400">{poolLive ? 'from AMM quote' : 'catalog price'}</div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
                 <span className="text-[10px] text-slate-400 font-mono">{toToken} Price</span>
-                <div className="text-xs font-black font-mono text-white">${toTokenObj.priceUSD.toFixed(2)}</div>
-                <div className="text-[9px] font-mono text-emerald-400">↗ +0.01%</div>
+                <div className="text-xs font-black font-mono text-white">
+                  {poolLive && toTokenObj.priceUSD > 0 ? `$${toTokenObj.priceUSD.toFixed(2)}` : '—'}
+                </div>
+                <div className="text-[9px] font-mono text-emerald-400">{poolLive ? 'from AMM quote' : 'catalog price'}</div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
-                <span className="text-[10px] text-slate-400 font-mono">24h Fee APY</span>
-                <div className="text-xs font-black font-mono text-teal-300">18.4%</div>
-                <div className="text-[9px] font-mono text-slate-400">AMM Invariant</div>
+                <span className="text-[10px] text-slate-400 font-mono">Pool TVL</span>
+                <div className="text-xs font-black font-mono text-teal-300">
+                  {poolTvl != null ? `$${poolTvl.toLocaleString('en-US', { maximumFractionDigits: 2 })}` : '—'}
+                </div>
+                <div className="text-[9px] font-mono text-slate-400">{poolLive ? 'reserve0 + reserve1' : 'reserves unread'}</div>
               </div>
             </div>
 
-            {/* Pool Composition Split Bar */}
-            <div className="space-y-2 pt-1">
-              <div className="flex justify-between text-[11px] font-mono">
-                <span className="text-slate-300 flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
-                  {fromToken}: <strong>26,029.01 (50.1%)</strong>
-                </span>
-                <span className="text-slate-300 flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
-                  {toToken}: <strong>25,882.01 (49.9%)</strong>
-                </span>
-              </div>
+            {/* Pool Composition Split Bar (real reserves) */}
+            {poolLive && ammState ? (
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between text-[11px] font-mono">
+                  <span className="text-slate-300 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-400" />
+                    {ammState.token0.symbol}: <strong>{ammState.reserve0.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong>
+                  </span>
+                  <span className="text-slate-300 flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                    {ammState.token1.symbol}: <strong>{ammState.reserve1.toLocaleString('en-US', { maximumFractionDigits: 2 })}</strong>
+                  </span>
+                </div>
 
-              <div className="w-full h-2.5 rounded-full bg-black/60 overflow-hidden flex border border-white/5">
-                <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500" style={{ width: '50.1%' }} />
-                <div className="h-full bg-gradient-to-r from-teal-400 to-teal-500" style={{ width: '49.9%' }} />
+                <div className="w-full h-2.5 rounded-full bg-black/60 overflow-hidden flex border border-white/5">
+                  {reserve0Pct != null && (
+                    <>
+                      <div className="h-full bg-gradient-to-r from-cyan-400 to-cyan-500 transition-all" style={{ width: `${(reserve0Pct * 100).toFixed(1)}%` }} />
+                      <div className="h-full bg-gradient-to-r from-teal-400 to-teal-500 transition-all" style={{ width: `${((1 - reserve0Pct) * 100).toFixed(1)}%` }} />
+                    </>
+                  )}
+                </div>
               </div>
+            ) : (
+              <div className="space-y-2 pt-1">
+                <div className="flex justify-between text-[11px] font-mono text-slate-500">
+                  <span>Reserves</span>
+                  <span>{isConnected ? 'pool read failed' : 'connect a wallet'}</span>
+                </div>
+                <div className="w-full h-2.5 rounded-full bg-black/60 border border-white/5" />
+              </div>
+            )}
+
+            {/* Your LP & Wallet Balances */}
+            {poolLive && ammState ? (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 font-mono">Your LP Tokens</span>
+                  <div className="text-xs font-black font-mono text-cyan-300">{ammState.lpBalance.toLocaleString('en-US', { maximumFractionDigits: 2 })} LP</div>
+                  <div className="text-[9px] font-mono text-emerald-400">{lpSharePct != null ? `${lpSharePct.toFixed(2)}% of pool` : 'LP share unread'}</div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 font-mono">cUSD Balance</span>
+                  <div className="text-xs font-black font-mono text-white">{cusdBalance.toLocaleString('en-US', { maximumFractionDigits: 4 })} cUSD</div>
+                  <div className="text-[9px] font-mono text-emerald-400">Wallet token balance</div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 font-mono">Your LP Tokens</span>
+                  <div className="text-xs font-black font-mono text-slate-500">—</div>
+                </div>
+                <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-0.5">
+                  <span className="text-[10px] text-slate-400 font-mono">cUSD Balance</span>
+                  <div className="text-xs font-black font-mono text-slate-500">—</div>
+                </div>
+              </div>
+            )}
+
+            {/* Add / Remove Liquidity controls (real writes) */}
+            <div className="space-y-2 border-t border-white/5 pt-3">
+              <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                <ArrowDownUp className="w-3 h-3 text-cyan-400" /> Add / Remove Liquidity
+              </span>
+              {poolLive && ammState ? (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <input
+                      type="number"
+                      value={depositAmt0}
+                      onChange={(e) => setDepositAmt0(e.target.value)}
+                      placeholder={`${ammState.token0.symbol} amount`}
+                      className="px-3 py-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-white font-mono text-xs outline-none placeholder:text-slate-600 min-w-0"
+                    />
+                    <input
+                      type="number"
+                      value={depositAmt1}
+                      onChange={(e) => setDepositAmt1(e.target.value)}
+                      placeholder={`${ammState.token1.symbol} amount`}
+                      className="px-3 py-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-white font-mono text-xs outline-none placeholder:text-slate-600 min-w-0"
+                    />
+                  </div>
+                  <button
+                    disabled={poolBusy === 'deposit'}
+                    onClick={handleAddLiquidity}
+                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-teal-400/20 to-cyan-400/20 border border-cyan-400/40 text-cyan-300 hover:border-cyan-300 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 font-bold text-xs"
+                  >
+                    {poolBusy === 'deposit' ? (
+                      <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Adding Liquidity...</>
+                    ) : (
+                      `Add ${ammState.token0.symbol} + ${ammState.token1.symbol}`
+                    )}
+                  </button>
+                  <input
+                    type="number"
+                    value={withdrawAmt}
+                    onChange={(e) => setWithdrawAmt(e.target.value)}
+                    placeholder="LP tokens to withdraw"
+                    className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-cyan-500/20 text-white font-mono text-xs outline-none placeholder:text-slate-600"
+                  />
+                  <button
+                    disabled={poolBusy === 'withdraw'}
+                    onClick={handleRemoveLiquidity}
+                    className="w-full py-2.5 rounded-xl bg-rose-500/10 border border-rose-400/40 text-rose-300 hover:border-rose-300 hover:bg-rose-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 font-bold text-xs"
+                  >
+                    {poolBusy === 'withdraw' ? (
+                      <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Removing Liquidity...</>
+                    ) : (
+                      'Remove Liquidity'
+                    )}
+                  </button>
+                </>
+              ) : (
+                <p className="text-[11px] font-mono text-slate-500">
+                  Connect a wallet to read the deployed ReputationAMM pool and add or remove liquidity on Creditcoin testnet.
+                </p>
+              )}
             </div>
           </div>
         </div>

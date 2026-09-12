@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Modal from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import { Network, Database, Copy, Check, Terminal, Play } from 'lucide-react';
+import { fetchBorrowerProfile } from '../../services/credXService';
 
 interface ComposableQueryModalProps {
   isOpen: boolean;
@@ -18,24 +19,17 @@ const ComposableQueryModal: React.FC<ComposableQueryModalProps> = ({ isOpen, onC
   const sampleSolidity = `// SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-interface ICredXHub {
-    // Queries on-chain Credit Trust Score (300-850) verified via 0x0FD2 Attestcoin precompile
-    function getBorrowerScore(address borrower) external view returns (uint256 score);
+import {ICredXHub} from "@credx/interfaces/ICredXHub.sol";
 
-    // Queries prime eligibility tier (SUBPRIME, STANDARD, NEAR_PRIME, PRIME, SUPER_PRIME)
-    function getCreditTier(address borrower) external view returns (uint8 tier);
+// Queries the on-chain Creditcoin Trust Score (300-850) profile
+// from the deployed CredXHub, then applies a protocol fee discount.
 
-    // Verifies whether a cross-chain Attestcoin proof nullifier has already been settled
-    function isProofSettled(bytes32 nullifierHash) external view returns (bool settled);
-}
-
-// 1-Line Integration in your external protocol / dApp:
 contract ExternalDeFiOrRWA {
     ICredXHub public constant CREDX = ICredXHub(0x729b2D8B630c4241d051c92D4FeB31412846eE18);
 
-    function executeVIPDiscount(address user) external view returns (bool eligible) {
-        // Super-Prime borrowers (CTS >= 780) unlock 0% protocol fees & undercollateralized terms
-        return CREDX.getBorrowerScore(user) >= 780;
+    function borrowFee(address borrower) external view returns (uint256 bps) {
+        (, , , uint256 maxCreditLineUSD, , ) = CREDX.getBorrowerProfile(borrower);
+        return maxCreditLineUSD >= 780e18 ? 0 : 25; // Super-Prime: 0 bps, else 0.25%
     }
 }`;
 
@@ -46,24 +40,42 @@ contract ExternalDeFiOrRWA {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleExecute = () => {
+  const handleExecute = async () => {
     setRunning(true);
-    addToast('info', 'Querying RPC', `Fetching on-chain 0x0FD2 composite score for ${targetAddress.slice(0, 8)}...`);
+    addToast('info', 'Querying RPC', `Reading CredXHub.getBorrowerProfile for ${targetAddress.slice(0, 8)}...`);
 
-    setTimeout(() => {
+    try {
+      const profile = await fetchBorrowerProfile(targetAddress);
+      if (!profile) {
+        setQueryOutput(JSON.stringify({
+          status: "OK (address not attested)",
+          target: targetAddress,
+          creditScore: 0,
+          verifiedVolumeUSD: 0,
+          attestations: 0,
+          maxCreditLineUSD: 0,
+          note: "No verified history found on Creditcoin testnet for this address."
+        }, null, 2));
+      } else {
+        setQueryOutput(JSON.stringify({
+          status: "FOUND",
+          target: targetAddress,
+          creditScore: profile.creditScore,
+          verifiedVolumeUSD: Math.round(profile.totalVerifiedVolumeUSD),
+          attestations: profile.totalAttestationsCount,
+          maxCreditLineUSD: Math.round(profile.maxCreditLineUSD),
+          mainnetActive: profile.isMainnetActive,
+          protocolDiversity: profile.protocolDiversityCount,
+          chainDiversity: profile.chainDiversityCount
+        }, null, 2));
+        addToast('success', 'Query Resolved', `Live profile loaded for ${targetAddress.slice(0, 8)}.`);
+      }
+    } catch (err) {
+      addToast('error', 'Query Failed', 'Could not read CredXHub profile from Creditcoin testnet RPC.');
+      setQueryOutput(null);
+    } finally {
       setRunning(false);
-      setQueryOutput(JSON.stringify({
-        status: "SUCCESS",
-        target: targetAddress,
-        creditScore: 794,
-        tier: "SOVEREIGN",
-        proofHash: "0x0fd2e93b194a28f80456cbb8a912a781",
-        settledLoans: 38,
-        defaultCount: 0,
-        oracleVerification: "VALIDATED"
-      }, null, 2));
-      addToast('success', 'Query Resolved', 'Retrieved verifiable zero-knowledge score from Creditcoin L1.');
-    }, 1200);
+    }
   };
 
   return (

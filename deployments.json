@@ -1,7 +1,7 @@
 {
   "network": "creditcoinTestnet",
   "chainId": "102031",
-  "timestamp": "2026-09-09T12:29:41.669Z",
+  "timestamp": "2026-09-12T17:22:01.041Z",
   "contracts": {
     "AttestationVerifier": "0x34aA30efE2226ffC2E55607017FbA2F07e62b279",
     "CreditScoreEngine": "0xA31697bBd4900f8FA62015A51dA3c58972E96BB6",
@@ -13,9 +13,22 @@
     "ReputationFlashLoan": "0x4962e6AdF6E59C60058d09b7cA4516dD2410d637",
     "ReputationYieldVault": "0x630943C1eD77b375d2Bb70647090F18a05490bc1",
     "RWATreasuryYieldFund": "0x2be1E6044ACEE8868b775a8C48C05f569d1Af80A",
-    "GamingEcosystemHub": "0xc9E671F2F07311384D08885Bf0B99E8F745B22Bb",
+    "GamingEcosystemHub": "0x8008c8885AA72a32198159360FFA43bc8De94D75",
     "DePINInfrastructureHub": "0x99b400D55dA3A9f9aDa967b1D60d9E3cBA2bB9Bc",
     "AutonomousAIHub": "0xEc1445818cF57507Ff46B8a72daa9F7A66B60a5D",
-    "ReputationArena": "0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5"
+    "ReputationArena": "0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5",
+    "RWAInvoiceFinancing": "0x05D41AE81c47078DcA0CFF4891A407F4D09E01aA",
+    "GameToken": "0x2536b84fe20BEbc890BBcd8FcCD5dcAdbd26F11E",
+    "GameNFT": "0xcEe244B0EBA321d4c1705692FD7d87998f3cf65d",
+    "BlockProverAttestationOracle": "0x4d11b60809724b0B67B28DA2f38438aE97f1C671"
+  },
+  "verifierMode": "mock-harness",
+  "notes": "AttestationVerifier on this deployment is the MockAttestationOracle (always-pass testnet harness standing in for the Creditcoin 0x0FD2 Attestcoin precompile). RWAInvoiceFinancing (0x05D41AE81c47078DcA0CFF4891A407F4D09E01aA) was added in a follow-up deploy.",
+  "attestcoin": {
+    "integration": "real-usc-blockprover",
+    "blockProverPrecompile": "0x0000000000000000000000000000000000000FD2",
+    "chainInfoPrecompile": "0x0000000000000000000000000000000000000FD3",
+    "notes": "Live Attestcoin Protocol integration: BlockProverAttestationOracle wraps Creditcoin's 0x0FD2 BlockProver precompile (verify / verifyAndEmit / TransactionVerified) and 0x0FD3 ChainInfo precompile. Source-chain txs (e.g. Ethereum Sepolia) are Merkle+continuity verified against Creditcoin attestations; see scripts/usc-verify-real.js and node_modules/@gluwa/usc-sdk.",
+    "deployedAt": "2026-09-12T18:13:33.750Z"
   }
 }

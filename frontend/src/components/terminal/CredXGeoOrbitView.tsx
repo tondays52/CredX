@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import GlassCard from '../common/GlassCard';
+import SimulationBadge from '../common/SimulationBadge';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -225,6 +226,19 @@ export const CredXGeoOrbitView: React.FC = () => {
 
   return (
     <div className="space-y-6 font-sans">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED GEOORBIT MESH"
+          note="RTK corrections, PoST attestations and station fixes are locally simulated — no GeoOrbit contract or GNSS attestation exists on testnet."
+        />
+        <span className="font-mono">
+          RTK fixes, base stations and Proof-of-Space-Time (PoST) attestations are locally simulated
+          telemetry; nothing is written to Creditcoin. Hardware/GNSS data, when provided, is displayed
+          but never attested on-chain.
+        </span>
+      </div>
+
       {/* Top Banner & High-Level Network Health Bar */}
       <GlassCard className="p-6 border-amber-500/30 bg-gradient-to-r from-amber-950/20 via-black to-cyan-950/30">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -234,8 +248,8 @@ export const CredXGeoOrbitView: React.FC = () => {
                 <Satellite className="w-3.5 h-3.5 animate-pulse" />
                 Decentralized RTK Space-Time Mesh · Port 2101
               </span>
-              <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-extrabold uppercase tracking-wider">
-                Proof of Space-Time (PoST) Live
+              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400 font-mono text-[10px] font-extrabold uppercase tracking-wider">
+                PoST Simulated (Local)
               </span>
             </div>
 
@@ -247,7 +261,7 @@ export const CredXGeoOrbitView: React.FC = () => {
             </h2>
 
             <p className="text-xs text-white/70 leading-relaxed">
-              Global real-time kinematic (RTK) differential correction network delivering centimeter-level positioning (1–2 cm) for autonomous drones, agricultural robots, and smart mobility. Triple-band continuous carrier locks create tamper-proof cryptographic proofs of space-time on Creditcoin L1.
+              Global real-time kinematic (RTK) differential correction network demonstration delivering centimeter-level positioning (1–2 cm) for autonomous drones, agricultural robots, and smart mobility. Triple-band carrier locks are modeled locally; on-chain PoST attestation is simulated in this panel.
             </p>
           </div>
 

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import GlassCard from '../common/GlassCard';
+import SimulationBadge from '../common/SimulationBadge';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useToast } from '../../context/ToastContext';
@@ -60,6 +61,18 @@ const VirtualNodeTab: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED TELEMETRY"
+          note="Virtual Node telemetry is simulated locally — the Chrome extension (chrome-extension/) reports real device specs, but no telemetry is attested on-chain."
+        />
+        <span className="font-mono">
+          Device fingerprint is real (this browser), but mined CTC, bandwidth points and telemetry rewards are
+          local simulations — nothing is attested on-chain by the extension yet.
+        </span>
+      </div>
+
       {/* Connected Wallet Money Banner */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/40 via-slate-900/60 to-blue-950/40 border border-cyan-500/20 backdrop-blur-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">

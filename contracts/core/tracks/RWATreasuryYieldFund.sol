@@ -37,6 +37,13 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
     // E.g., they get 2% more value back as a loyalty reward.
     uint256 public constant PREMIUM_BONUS_BPS = 200; // 2%
 
+    // The loyalty bonus only vests after the shares have been held for ~30 days (216,000 blocks
+    // at 12s/block). This prevents the deposit → instant-withdraw → 2% free-money loop.
+    uint256 public constant BONUS_VEST_BLOCKS = 216000;
+
+    // Tracks when each user last deposited, used to gate the premium loyalty bonus.
+    mapping(address user => uint256 blockNumber) public lastDepositBlock;
+
     event Deposit(address indexed user, uint256 stablecoinAmount, uint256 sharesMinted);
     event Withdraw(address indexed user, uint256 sharesBurned, uint256 stablecoinAmount, uint256 bonusAmount);
 
@@ -73,6 +80,7 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
 
         STABLECOIN.safeTransferFrom(msg.sender, address(this), stablecoinAmount);
         _mint(msg.sender, sharesToMint);
+        lastDepositBlock[msg.sender] = block.number;
 
         emit Deposit(msg.sender, stablecoinAmount, sharesToMint);
     }
@@ -94,8 +102,9 @@ contract RWATreasuryYieldFund is ERC20, ReentrancyGuard {
         uint256 baseStablecoinOut = (sharesAmount * navPrice) / (10 ** decimals);
 
         uint256 bonusAmount = 0;
-        if (creditScore >= PREMIUM_SCORE_THRESHOLD) {
-            // Give the user an extra X% as a loyalty/premium reward
+        if (creditScore >= PREMIUM_SCORE_THRESHOLD && block.number >= lastDepositBlock[msg.sender] + BONUS_VEST_BLOCKS) {
+            // Loyalty bonus has vested: reward long-term premium depositors without inflating
+            // the value of a same-block deposit → withdraw cycle.
             bonusAmount = (baseStablecoinOut * PREMIUM_BONUS_BPS) / 10000;
         }
 

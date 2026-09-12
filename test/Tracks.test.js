@@ -72,6 +72,20 @@ describe("BUIDL CTC 2026 Fall: Multi-Track Extension", function () {
       expect(invoice.isFunded).to.be.true;
       expect(invoice.funder).to.equal(user1.address);
     });
+
+    it("should let the business repay the full face value to end the invoice", async function () {
+      // user2 is the business of invoice 0, user1 the funder
+      const invoice = await rwaModule.invoices(0);
+      expect(invoice.isRepaid).to.be.false;
+
+      await mockToken.connect(user2).approve(await rwaModule.getAddress(), ethers.parseEther("10000"));
+      await expect(rwaModule.connect(user2).repayInvoice(0))
+        .to.emit(rwaModule, "InvoiceRepaid")
+        .withArgs(0, user2.address);
+
+      const repaid = await rwaModule.invoices(0);
+      expect(repaid.isRepaid).to.be.true;
+    });
   });
 
   describe("DePIN Track: Hardware Delegation Pool", function () {

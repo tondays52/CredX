@@ -7,8 +7,10 @@ import AITab from '../components/terminal/AITab';
 import RWATab from '../components/terminal/RWATab';
 import VirtualNodeTab from '../components/terminal/VirtualNodeTab';
 import SBTPassportTab from '../components/terminal/SBTPassportTab';
-import LendingTab from '../components/terminal/LendingTab';
-import ProofVerifierTab from '../components/terminal/ProofVerifierTab';
+import CreditProofsTab from '../components/terminal/CreditProofsTab';
+import SimulationBadge from '../components/common/SimulationBadge';
+import { useWeb3 } from '../context/Web3Context';
+import { useProtocol } from '../context/ProtocolContext';
 import {
   LayoutDashboard,
   Zap,
@@ -19,7 +21,6 @@ import {
   Cpu,
   Shield,
   Landmark,
-  FileCheck,
 } from 'lucide-react';
 
 type TerminalTab =
@@ -31,10 +32,12 @@ type TerminalTab =
   | 'rwa'
   | 'node'
   | 'sbt'
-  | 'lending'
-  | 'proof';
+  | 'lending';
 
 const TerminalPage: React.FC = () => {
+  const { isConnected } = useWeb3();
+  const { dataSource } = useProtocol();
+
   const getInitialTab = (): TerminalTab => {
     const hash = window.location.hash.toLowerCase();
     if (hash.includes('depin') || hash.includes('pulse') || hash.includes('nexus') || hash.includes('nodle')) {
@@ -46,7 +49,7 @@ const TerminalPage: React.FC = () => {
     if (hash.includes('rwa')) return 'rwa';
     if (hash.includes('lending')) return 'lending';
     if (hash.includes('sbt')) return 'sbt';
-    if (hash.includes('proof')) return 'proof';
+    if (hash.includes('proof')) return 'lending';
     return 'depin'; // Default directly to DePIN for focused experience
   };
 
@@ -64,7 +67,7 @@ const TerminalPage: React.FC = () => {
       else if (hash.includes('lending')) setActiveTab('lending');
       else if (hash.includes('sbt')) setActiveTab('sbt');
       else if (hash.includes('node')) setActiveTab('node');
-      else if (hash.includes('proof')) setActiveTab('proof');
+      else if (hash.includes('proof') || hash.includes('attest')) setActiveTab('lending');
       else if (hash.includes('overview')) setActiveTab('overview');
     };
     handleHash();
@@ -81,9 +84,23 @@ const TerminalPage: React.FC = () => {
     { id: 'rwa', label: 'RWA Treasuries', icon: Building2 },
     { id: 'node', label: 'Virtual Node', icon: Cpu },
     { id: 'sbt', label: 'SBT Passport', icon: Shield },
-    { id: 'lending', label: 'Credit Facility', icon: Landmark },
-    { id: 'proof', label: '0x0FD2 Proofs', icon: FileCheck },
+    { id: 'lending', label: 'Credit & Proofs', icon: Landmark },
   ];
+
+  // Source-of-truth status per tab: "live" panels talk to Creditcoin testnet.
+  const tabStatus: Record<TerminalTab, { live: boolean; note: string }> = {
+    overview: { live: dataSource === 'chain', note: 'Live credit profile + loans when a wallet is connected; demo preview otherwise.' },
+    defi: { live: dataSource === 'chain', note: 'AMM swaps/LP and yield-vault staking hit ReputationAMM + ReputationYieldVault when connected; perps, liquid staking and flash-loan receiver panels stay simulated.' },
+    depin: { live: dataSource === 'chain', note: 'Delegation, rewards and hardware loans hit DePINInfrastructureHub when connected; Pulse/Nexus/GeoOrbit telemetry is simulated (no on-chain attestation).' },
+    gaming: { live: dataSource === 'chain', note: 'WOOD/NFT balances, cooldowns and hub writes are live when connected (gather/lootbox still owner-gated on the current deployment); scholarship vault is simulated.' },
+    ai: { live: true, note: 'Live interactions with the deployed AutonomousAIHub on Creditcoin testnet.' },
+    rwa: { live: dataSource === 'chain', note: 'Treasury deposits/withdraws and the invoice marketplace hit live contracts when connected; PoR reserve panel stays illustrative.' },
+    node: { live: false, note: 'Virtual node telemetry is local to your browser (no CTC is actually shared or earned).' },
+    sbt: { live: dataSource === 'chain', note: 'Mint/refresh the real ERC-5192 soulbound token when connected.' },
+    lending: { live: dataSource === 'chain', note: 'Credit Facility borrow/repay hit the undercollateralized lending pool; Proofs & Attest submissions write to CredXHub. Demo verify is simulated without a transaction.' },
+  };
+
+  const activeStatus = tabStatus[activeTab];
 
   return (
     <div className="space-y-6 py-4">
@@ -94,6 +111,22 @@ const TerminalPage: React.FC = () => {
           <p className="text-xs text-white/50 mt-0.5">
             Creditcoin L1 multi-track decentralized risk engine & uncollateralized liquidity protocol
           </p>
+        </div>
+
+        {/* Honest data-source status for the active tab */}
+        <div className={`flex items-start gap-2.5 rounded-xl border px-3.5 py-2.5 text-xs ${
+          activeStatus.live
+            ? 'border-emerald-500/25 bg-emerald-500/[0.04]'
+            : 'border-amber-500/25 bg-amber-500/[0.04]'
+        }`}>
+          {activeStatus.live ? (
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold tracking-wider text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" /> LIVE ON-CHAIN
+            </span>
+          ) : (
+            <SimulationBadge />
+          )}
+          <span className="text-white/50 leading-relaxed">{activeStatus.note}</span>
         </div>
 
         {/* Scrollable Tab Navigation Bar */}
@@ -132,8 +165,7 @@ const TerminalPage: React.FC = () => {
         {activeTab === 'rwa' && <RWATab />}
         {activeTab === 'node' && <VirtualNodeTab />}
         {activeTab === 'sbt' && <SBTPassportTab />}
-        {activeTab === 'lending' && <LendingTab />}
-        {activeTab === 'proof' && <ProofVerifierTab />}
+        {activeTab === 'lending' && <CreditProofsTab />}
       </div>
     </div>
   );

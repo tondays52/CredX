@@ -10,6 +10,14 @@
   "background": {
     "service_worker": "background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
   "action": {
     "default_popup": "popup/popup.html",
     "default_title": "CredX Virtual Node"

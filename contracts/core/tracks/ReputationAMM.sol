@@ -38,6 +38,9 @@ contract ReputationAMM is ReentrancyGuard {
     uint256 public constant PRIME_FEE_BPS = 15;    // 0.15%
     uint256 public constant SUPER_PRIME_FEE_BPS = 5; // 0.05%
 
+    // Uniswap v2-style permanent burn to prevent the first-LP inflation attack
+    uint256 public constant MINIMUM_LIQUIDITY = 1000;
+
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Mint(address indexed sender, uint256 amount0, uint256 amount1);
     event Burn(address indexed sender, uint256 amount0, uint256 amount1);
@@ -97,7 +100,11 @@ contract ReputationAMM is ReentrancyGuard {
         TOKEN1.safeTransferFrom(msg.sender, address(this), amount1);
 
         if (totalSupply == 0) {
-            liquidity = _sqrt(amount0 * amount1);
+            liquidity = _sqrt(amount0 * amount1) - MINIMUM_LIQUIDITY;
+            // Permanently lock the first MINIMUM_LIQUIDITY shares so a single attacker
+            // cannot inflate the share price and rug subsequent liquidity providers.
+            // (Minted to a dead address rather than address(0) because _mint rejects zero.)
+            _mint(0x000000000000000000000000000000000000dEaD, MINIMUM_LIQUIDITY);
         } else {
             uint256 liq0 = (amount0 * totalSupply) / reserve0;
             uint256 liq1 = (amount1 * totalSupply) / reserve1;

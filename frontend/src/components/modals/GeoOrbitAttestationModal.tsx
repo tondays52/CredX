@@ -46,7 +46,7 @@ export const GeoOrbitAttestationModal: React.FC<GeoOrbitAttestationModalProps> =
       isOpen={isOpen}
       onClose={onClose}
       title="CredX GeoOrbit Space-Time Attestation"
-      subtitle="Decentralized RTK Proof of Space-Time (PoST) on Creditcoin L1 (0x0FD2)"
+      subtitle="Decentralized RTK Proof of Space-Time (PoST) — simulated on Creditcoin L1 (0x0FD2), no wallet tx"
       maxWidth="max-w-xl"
       icon={
         <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 font-bold">
@@ -132,7 +132,7 @@ export const GeoOrbitAttestationModal: React.FC<GeoOrbitAttestationModalProps> =
               {step === 1 && '1. Computing double-differenced carrier phase residual hash...'}
               {step === 2 && '2. Verifying RTCM 3.2 MSM7 RTK stream over NTRIP TCP port 2101...'}
               {step === 3 && '3. Generating Proof of Space-Time (PoST) signature...'}
-              {step === 4 && '4. Executing call to Creditcoin Precompile 0x0FD2 (+50 CTS)...'}
+              {step === 4 && '4. Simulated call to Creditcoin Precompile 0x0FD2 (local — no on-chain execution)...'}
             </p>
           </div>
         )}
@@ -146,7 +146,7 @@ export const GeoOrbitAttestationModal: React.FC<GeoOrbitAttestationModalProps> =
           {attesting ? (
             <>
               <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-              Anchoring Space-Time Proof to 0x0FD2...
+              Anchoring Space-Time Proof to 0x0FD2 (simulated)...
             </>
           ) : (
             <>

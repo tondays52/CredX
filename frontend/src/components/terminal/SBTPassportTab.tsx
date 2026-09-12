@@ -24,10 +24,12 @@ import {
   CheckCheck
 } from 'lucide-react';
 import SBTModal from '../modals/SBTModal';
+import SimulationBadge from '../common/SimulationBadge';
+import { fetchSBTAttestation } from '../../services/credXService';
 
 const SBTPassportTab: React.FC = () => {
   const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
-  const { score, tier, sbtMinted } = useProtocol();
+  const { score, tier, sbtMinted, sbtTokenId, sbtCommitment, activeLoans } = useProtocol();
   const { addToast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
 
@@ -45,8 +47,11 @@ const SBTPassportTab: React.FC = () => {
   // Biometric 3D Canvas
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const userWalletCTC = balanceCTC > 0 ? balanceCTC : 10000;
+  const userWalletCTC = isConnected && balanceCTC > 0 ? balanceCTC : 0;
   const userWalletUSD = userWalletCTC * 2.0;
+  const commitmentShort = sbtCommitment && !sbtCommitment.startsWith('0x0000000')
+    ? `${sbtCommitment.slice(0, 10)}...${sbtCommitment.slice(-6)}`
+    : '— (no attestation minted)';
 
   // 3D Mouse Movement Tracking
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -181,15 +186,27 @@ const SBTPassportTab: React.FC = () => {
     return () => cancelAnimationFrame(animId);
   }, []);
 
-  const handleVerifyOnChain = () => {
+  const handleVerifyOnChain = async () => {
     setVerifying(true);
-    addToast('info', 'Invoking Precompile 0x0FD2', 'Querying Creditcoin L1 cryptographic attestation engine...');
-
-    setTimeout(() => {
+    if (!isConnected || !address) {
+      addToast('info', 'Connect a Wallet', 'Read the real soulbound attestation from Creditcoin testnet, or keep it as a demo.');
       setVerifying(false);
-      setVerifiedOnChain(true);
-      addToast('success', 'Soulbound Attestation Verified', 'Merkle Root valid, ERC-5192 lock active on Creditcoin Block #4,192,804.');
-    }, 1400);
+      return;
+    }
+    try {
+      const att = await fetchSBTAttestation(address);
+      if (!att) {
+        setVerifiedOnChain(false);
+        addToast('info', 'No Attestation Found', 'This address has not minted a CredX soulbound attestation yet (Mint SBT above).');
+      } else {
+        setVerifiedOnChain(true);
+        addToast('success', 'Soulbound Attestation Verified', `Token #${att.tokenId} | tier ${att.tier} | minScore ${att.minimumScore} | valid: ${att.isValid}.`);
+      }
+    } catch {
+      addToast('error', 'Verify Failed', 'Could not read the SBT attestation from testnet RPC.');
+    } finally {
+      setVerifying(false);
+    }
   };
 
   return (
@@ -203,6 +220,7 @@ const SBTPassportTab: React.FC = () => {
           <div>
             <div className="text-[10px] uppercase font-mono text-indigo-400 tracking-wider flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Soulbound Identity Wallet
+              {!isConnected && <SimulationBadge label="DEMO BALANCE" note="Connect a wallet to read the real soulbound attestation state." />}
             </div>
             <div className="text-xl font-bold font-mono text-white flex items-center gap-2">
               {userWalletCTC.toLocaleString()} <span className="text-xs text-indigo-300 font-normal">CTC</span>
@@ -216,7 +234,7 @@ const SBTPassportTab: React.FC = () => {
             <span className="text-[10px] font-mono text-white/40 block">ERC-5192 Soulbound Status</span>
             <span className="text-xs font-mono font-bold text-emerald-400 flex items-center gap-1 justify-end">
               <Lock className="w-3 h-3" />
-              {sbtMinted ? 'Minted #4928-SBT' : 'Eligible for Sovereign Mint'}
+              {sbtMinted ? `Minted #${sbtTokenId}-SBT` : 'Eligible for Sovereign Mint'}
             </span>
           </div>
           <button
@@ -325,7 +343,7 @@ const SBTPassportTab: React.FC = () => {
                       <span className="text-xs text-white/60 font-sans font-bold">/ 1000 CTS</span>
                     </div>
                     <span className="text-[10px] font-mono text-emerald-400 font-bold">
-                      Tier: {tier} &bull; Top 2.4%
+                      Tier: {tier}
                     </span>
                   </div>
                 </div>
@@ -335,13 +353,13 @@ const SBTPassportTab: React.FC = () => {
                   <div>
                     <span className="text-[8px] text-white/40 uppercase block">Bound Address</span>
                     <span className="text-cyan-300 font-bold">
-                      {address ? `${address.slice(0, 8)}...${address.slice(-6)}` : '0x9afB...8f07'}
+                      {address ? `${address.slice(0, 8)}...${address.slice(-6)}` : 'not connected'}
                     </span>
                   </div>
 
                   <div>
                     <span className="text-[8px] text-white/40 uppercase block">Token ID</span>
-                    <span className="text-white font-bold">#4928-SBT</span>
+                    <span className="text-white font-bold">#{sbtTokenId}-SBT</span>
                   </div>
 
                   <div className="text-right">
@@ -363,7 +381,7 @@ const SBTPassportTab: React.FC = () => {
                   <span className="text-[10px] text-cyan-400 font-bold flex items-center gap-1">
                     <KeyRound className="w-3.5 h-3.5" /> CRYPTOGRAPHIC AUDIT PROOF
                   </span>
-                  <span className="text-[9px] text-white/50">PRECOMPILE: 0x0FD2</span>
+                  <span className="text-[9px] text-white/50">VERIFIER: MockAttestationOracle (testnet harness)</span>
                 </div>
 
                 <div className="grid grid-cols-12 gap-3 items-center py-2">
@@ -378,20 +396,23 @@ const SBTPassportTab: React.FC = () => {
                       <span className="text-white">CreditAttestationSBT.sol</span>
                     </div>
                     <div>
-                      <span className="text-white/40 block text-[8px]">SHA-256 MERKLE ROOT:</span>
-                      <span className="text-cyan-300 truncate block">0xa8f3b92c4e71...99e821</span>
+                      <span className="text-white/40 block text-[8px]">SBT COMMITMENT (on-chain state):</span>
+                      <span className="text-cyan-300 truncate block">{commitmentShort}</span>
                     </div>
                     <div>
-                      <span className="text-white/40 block text-[8px]">RLP ATTESTATION RECEIPT:</span>
-                      <span className="text-emerald-400">Block #4,192,804 (Finalized)</span>
+                      <span className="text-white/40 block text-[8px]">SOULBOUND STATUS:</span>
+                      <span className={sbtMinted ? 'text-emerald-400' : 'text-amber-400'}>
+                        {sbtMinted ? `Minted #${sbtTokenId}-SBT` : 'Not minted — eligible via CredXHub'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="pt-2 border-t border-white/[0.08] flex items-center justify-between text-[10px]">
                   <span className="text-white/40">Click card anywhere to flip back</span>
-                  <span className="text-cyan-400 font-bold flex items-center gap-1">
-                    <CheckCheck className="w-3.5 h-3.5" /> VALIDATED
+                  <span className={`font-bold flex items-center gap-1 ${verifiedOnChain ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    {verifiedOnChain ? 'VERIFIED (from testnet RPC)' : sbtMinted ? 'MINTED (verify on-chain)' : 'NOT VERIFIED'}
                   </span>
                 </div>
               </div>
@@ -414,7 +435,7 @@ const SBTPassportTab: React.FC = () => {
               className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Zap className="w-3.5 h-3.5 text-cyan-400 fill-current" />
-              {verifying ? 'Verifying Precompile...' : verifiedOnChain ? '✓ On-Chain Verified' : 'Verify via 0x0FD2'}
+              {verifying ? 'Verifying Attestation...' : verifiedOnChain ? '✓ On-Chain Verified' : 'Verify On-Chain'}
             </button>
           </div>
         </div>
@@ -454,7 +475,11 @@ const SBTPassportTab: React.FC = () => {
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   <div>
                     <div className="text-white font-medium">DeFi Reputational Solvency</div>
-                    <div className="text-[10px] text-white/40">38 settled loans across Aave & CredX without liquidation</div>
+                    <div className="text-[10px] text-white/40">
+                      {activeLoans.length > 0
+                        ? `${activeLoans.length} active on-chain position(s) on the OCCR pool, witnessed by CredXHub`
+                        : 'Repayment & solvency history committed in the SBT attestation'}
+                    </div>
                   </div>
                 </div>
                 <span className="text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 font-bold">
@@ -467,11 +492,11 @@ const SBTPassportTab: React.FC = () => {
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   <div>
                     <div className="text-white font-medium">Verified Edge Telemetry Worker</div>
-                    <div className="text-[10px] text-white/40">Hardware Concurrency & Edge WebSocket Latency (38ms)</div>
+                    <div className="text-[10px] text-white/40">Hardware concurrency & runtime latency probed locally in this browser</div>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 font-bold">
-                  ATTESTED
+                <span className="text-[10px] font-mono text-cyan-400 px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/30 font-bold">
+                  TELEMETRY
                 </span>
               </div>
 
@@ -480,11 +505,11 @@ const SBTPassportTab: React.FC = () => {
                   <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                   <div>
                     <div className="text-white font-medium">Zero-Knowledge Sybil Defense</div>
-                    <div className="text-[10px] text-white/40">ZK-SNARK proof of unique human biometric signature</div>
+                    <div className="text-[10px] text-white/40">ZK sybil-resistance is a roadmap design — no ZK circuit is anchored on-chain yet</div>
                   </div>
                 </div>
-                <span className="text-[10px] font-mono text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 font-bold">
-                  ATTESTED
+                <span className="text-[10px] font-mono text-amber-400 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 font-bold">
+                  DESIGN (demo)
                 </span>
               </div>
 

@@ -54,7 +54,7 @@ const InvoiceFactoringModal: React.FC<InvoiceFactoringModalProps> = ({
       addToast(
         'success',
         'Invoice Factored Successfully',
-        `Disbursed $${advanceAmount.toLocaleString()} advance. 0x0FD2 lien proof recorded on Creditcoin L1.`
+        `Disbursed $${advanceAmount.toLocaleString()} advance. Lien recorded (0x0FD2 attestation simulated in this demo modal).`
       );
       onClose();
     }, 1300);

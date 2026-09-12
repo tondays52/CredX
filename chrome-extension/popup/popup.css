@@ -283,6 +283,72 @@ body {
   cursor: not-allowed;
 }
 
+/* Read-only wallet address lookup */
+.address-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 12px 14px 0;
+}
+
+.address-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  outline: none;
+}
+
+.address-row input:focus {
+  border-color: rgba(6, 182, 212, 0.6);
+}
+
+.address-row .btn {
+  width: auto;
+  padding: 10px 12px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+/* MetaMask signature relay row */
+.mm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-color);
+}
+
+.mm-status {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.mm-status.live {
+  color: #34d399;
+}
+
+.mm-status.offline {
+  color: #f87171;
+}
+
+.mm-row .btn {
+  width: auto;
+  padding: 8px 12px;
+  font-size: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* Status Banner */
 .tx-status {
   padding: 8px 12px;

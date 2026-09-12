@@ -1,10 +1,11 @@
-# Workspace map — 25 file(s)
+# Workspace map — 20 file(s)
 
 A map, not a substitute for reading. Paths are workspace-relative. Use read_file (with
 start_line/end_line) or search_files on these paths instead of re-listing directories.
 
 chrome-extension/
   background.js
+  content.js
   manifest.json
 contracts/libraries/
   AttestcoinConstants.sol
@@ -30,23 +31,17 @@ frontend/src/
   main.tsx
   posthog.ts
   vite-env.d.ts
-scripts/
-  create_docx.js
-  deploy.js
-  generate_extension_icons.js
-  generateProof.js
-  serve.js
-  test-e2e.js
 (5 doc file(s) omitted)
 contracts/core/tracks/ — 12 more file(s) (use list_files to enumerate)
 extensions/quarto-journals/acm/ — 21 more file(s) (use list_files to enumerate)
 frontend/public/images/ — 28 more file(s) (use list_files to enumerate)
-frontend/src/utils/ — 7 more file(s) (use list_files to enumerate)
+frontend/src/utils/ — 9 more file(s) (use list_files to enumerate)
 contracts/interfaces/ — 7 more file(s) (use list_files to enumerate)
-contracts/mocks/ — 8 more file(s) (use list_files to enumerate)
-./ — 11 more file(s) (use list_files to enumerate)
+contracts/mocks/ — 9 more file(s) (use list_files to enumerate)
+./ — 12 more file(s) (use list_files to enumerate)
 frontend/ — 17 more file(s) (use list_files to enumerate)
-screenshots/ — 7 more file(s) (use list_files to enumerate)
-test/ — 8 more file(s) (use list_files to enumerate)
-(14 directories omitted)
+screenshots/ — 13 more file(s) (use list_files to enumerate)
+scripts/ — 8 more file(s) (use list_files to enumerate)
+test/ — 9 more file(s) (use list_files to enumerate)
+(17 directories omitted)
 (walk stopped early: depth cap reached — use list_files for anything not listed)

@@ -1,6 +1,7 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 const { buildMockEventProof } = require("../scripts/generateProof");
+const { mine } = require("@nomicfoundation/hardhat-toolbox/network-helpers");
 
 describe("RWA Track: Treasury Yield Fund", function () {
   let owner, primeUser, superPrimeUser, lowScoreUser;
@@ -61,10 +62,10 @@ describe("RWA Track: Treasury Yield Fund", function () {
         await credXHub.connect(primeUser).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("1000"));
     }
 
-    // Boost superPrimeUser to > 750
-    for (let i = 0; i < 20; i++) {
+    // Boost superPrimeUser to Score >= 750 (15 × $60k = $900k, under the $1M/day value cap)
+    for (let i = 0; i < 15; i++) {
         const proof = await buildMockEventProof(1, "tx-rwa2-" + superPrimeUser.address + i);
-        await credXHub.connect(superPrimeUser).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("200000"));
+        await credXHub.connect(superPrimeUser).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("60000"));
     }
   });
 
@@ -112,7 +113,11 @@ describe("RWA Track: Treasury Yield Fund", function () {
     const shares = await treasuryFund.balanceOf(superPrimeUser.address);
     expect(shares).to.equal(ethers.parseEther("1"));
 
-    // Withdraw right away (NAV still $110)
+    // Vest the loyalty bonus: it only accrues after shares have been held ~30 days
+    // (216,000 blocks), otherwise deposit→instant-withdraw would be a free 2% loop.
+    await mine(216000);
+
+    // Withdraw after vesting (NAV still $110)
     const balBefore = await stablecoin.balanceOf(superPrimeUser.address);
     await treasuryFund.connect(superPrimeUser).withdraw(shares);
     const balAfter = await stablecoin.balanceOf(superPrimeUser.address);

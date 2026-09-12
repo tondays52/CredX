@@ -189,7 +189,11 @@ function createDoc() {
           createHeader("3. Core Technical Architecture & Attestcoin Integration", HeadingLevel.HEADING_2),
           createBullet(
             "Native Attestcoin Precompile Integration",
-            "CredX directly verifies cross-chain transaction inclusion receipts against Creditcoin's native precompile (0x0FD2), guaranteeing trustless verification without centralized oracle middlemen."
+            "CredX verifies cross-chain transaction inclusion receipts against Creditcoin's Attestcoin / USC protocol. 0x0FD2 on Creditcoin is the BlockProver precompile (continuity & Merkle proof verification, with a companion 0x0fd3 ChainInfo precompile). The current testnet deployment uses an always-pass MockAttestationOracle harness standing in for the precompile so the full stack can be exercised end-to-end; activating the true 0x0FD2 path requires adopting the BlockProver proof interface (USC SDK) rather than this project's EventProof ABI, documented in ATTESTCOIN_INTEGRATION.md."
+          ),
+          createBullet(
+            "Deployment Hygiene & Verification",
+            "Every deployed contract address ships in deployments.json / frontend/contracts.json; fresh contracts are source-verified on Blockscout (creditcoin-testnet.blockscout.com). A GitHub Actions CI pipeline runs hardhat tests, TypeScript checks and the Vite build on every push."
           ),
           createBullet(
             "OCCR Multi-Factor Credit Scoring Engine (CreditScoreEngine.sol)",
@@ -215,7 +219,7 @@ function createDoc() {
           ),
           createBullet(
             "🏢 RWA Track",
-            "RWAInvoiceFinancing (corporate invoice factoring with reputation discounts) and RWATreasuryYieldFund (tokenized US Treasury yield fund 'tbUSD' with bonus yields)."
+            "RWATreasuryYieldFund (tokenized US Treasury yield fund 'tbUSD' with bonus yields) and RWAInvoiceFinancing (corporate invoice factoring with reputation discounts — businesses tokenize accounts receivable, funders earn the discount, repay and overdue-reclaim are handled on-chain) are both live on testnet."
           ),
           createBullet(
             "🎮 Gaming Track",
@@ -223,7 +227,7 @@ function createDoc() {
           ),
           createBullet(
             "📡 DePIN Track + Live Chrome Extension",
-            "Automated Staking Delegation based on node uptime proofs, Hardware Financing for infrastructure expansion, and a live CredX DePIN Chrome Extension for bandwidth staking and node monitoring."
+            "Automated Staking Delegation based on node uptime proofs, Hardware Financing for infrastructure expansion, and a live CredX DePIN Chrome Extension for bandwidth staking and node monitoring. The extension reads the real on-chain credit score, and can sign proof anchors via a MetaMask message relay (it never stores a private key)."
           ),
           createBullet(
             "🤖 AI & AgentFi Track (AutonomousAIHub.sol)",
@@ -245,7 +249,7 @@ function createDoc() {
           ),
           createBullet(
             "Streak-to-Reputation Bridge",
-            "Traders who achieve a 3-win streak can bridge their achievements on-chain to receive a permanent +25 point Creditcoin Trust Score (CTS) boost!"
+            "Traders who achieve a 3-win streak can sync their streak on-chain to the arena contract, recording a verifiable reputation-streak claim event (staking the streak into their on-chain reputation history)."
           ),
 
           // 6. Test Metrics
@@ -289,48 +293,78 @@ function createDoc() {
                 children: [
                   new TableCell({
                     children: [
-                      createParagraph("Core Protocol & OCCR Scoring Engine"),
+                      createParagraph("Core Protocol & OCCR Scoring Engine (test/CredX.test.js)"),
                     ],
                   }),
                   new TableCell({
-                    children: [createParagraph("✅ Passing (10/10 tests)")],
+                    children: [createParagraph("✅ Passing (26/26 tests)")],
                   }),
                 ],
               }),
               new TableRow({
                 children: [
                   new TableCell({
-                    children: [createParagraph("Soulbound Tokens (SBT) & Delegation")],
+                    children: [createParagraph("Security Hardening (test/Security.test.js)")],
                   }),
                   new TableCell({
-                    children: [createParagraph("✅ Passing (14/14 tests)")],
-                  }),
-                ],
-              }),
-              new TableRow({
-                children: [
-                  new TableCell({
-                    children: [createParagraph("Advanced DeFi Hubs (AMM, FlashLoan, Vault)")],
-                  }),
-                  new TableCell({
-                    children: [createParagraph("✅ Passing (7/7 tests)")],
+                    children: [createParagraph("✅ Passing (18/18 tests)")],
                   }),
                 ],
               }),
               new TableRow({
                 children: [
                   new TableCell({
-                    children: [createParagraph("DePIN Infrastructure & Gaming Ecosystem")],
+                    children: [createParagraph("Advanced DeFi Hubs — AMM, FlashLoan, Vault (test/DeFi.test.js)")],
                   }),
                   new TableCell({
-                    children: [createParagraph("✅ Passing (14/14 tests)")],
+                    children: [createParagraph("✅ Passing (5/5 tests)")],
                   }),
                 ],
               }),
               new TableRow({
                 children: [
                   new TableCell({
-                    children: [createParagraph("RWA Financing & Treasury Yield Fund")],
+                    children: [createParagraph("DePIN Infrastructure (test/DePIN.test.js)")],
+                  }),
+                  new TableCell({
+                    children: [createParagraph("✅ Passing (4/4 tests)")],
+                  }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [createParagraph("Gaming Ecosystem (test/Gaming.test.js)")],
+                  }),
+                  new TableCell({
+                    children: [createParagraph("✅ Passing (8/8 tests)")],
+                  }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [createParagraph("RWA Treasury Yield Fund (test/RWA.test.js)")],
+                  }),
+                  new TableCell({
+                    children: [createParagraph("✅ Passing (4/4 tests)")],
+                  }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [createParagraph("Autonomous AI Hub (test/AI.test.js)")],
+                  }),
+                  new TableCell({
+                    children: [createParagraph("✅ Passing (8/8 tests)")],
+                  }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [createParagraph("PredictBay Paper-Trading Arena (test/Arena.test.js)")],
                   }),
                   new TableCell({
                     children: [createParagraph("✅ Passing (6/6 tests)")],
@@ -340,10 +374,10 @@ function createDoc() {
               new TableRow({
                 children: [
                   new TableCell({
-                    children: [createParagraph("Autonomous AI Hub & PredictBay Arena")],
+                    children: [createParagraph("Multi-Track Extension (test/Tracks.test.js)")],
                   }),
                   new TableCell({
-                    children: [createParagraph("✅ Passing (18/18 tests)")],
+                    children: [createParagraph("✅ Passing (9/9 tests)")],
                   }),
                 ],
               }),
@@ -368,7 +402,7 @@ function createDoc() {
                       new Paragraph({
                         children: [
                           new TextRun({
-                            text: "🎉 69 / 69 Tests Passing (100%)",
+                            text: "🎉 88 / 88 Tests Passing (100%)",
                             bold: true,
                             color: "059669",
                           }),

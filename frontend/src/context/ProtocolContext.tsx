@@ -1,7 +1,21 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { CreditTier, OCCRFactor, LoanPosition, HardwareTelemetry } from '../types/protocol';
 import { useToast } from './ToastContext';
+import { useWeb3 } from './Web3Context';
 import posthog, { isPostHogEnabled } from '../posthog';
+import {
+  fetchBorrowerProfile,
+  fetchEngineRates,
+  fetchUserLoans,
+  fetchSBTAttestation,
+  borrowFromPool,
+  repayPoolLoan,
+  mintSBT as mintSBTTx,
+  submitProofBatch,
+  ProofSubmission,
+  bpsToApr,
+  scoreToTier,
+} from '../services/credXService';
 import {
   NexusBeacon,
   NexusGeoLocation,
@@ -25,6 +39,9 @@ import {
 } from '../utils/geoOrbitTelemetry';
 
 export interface ProtocolContextType {
+  dataSource: 'demo' | 'chain';
+  isLiveOnChain: boolean;
+  refreshFromChain: () => Promise<void>;
   score: number;
   creditScore: number;
   tier: CreditTier;
@@ -154,15 +171,64 @@ export interface ProtocolContextType {
 
 const ProtocolContext = createContext<ProtocolContextType | undefined>(undefined);
 
+/** Build the on-chain factor breakdown from a real CredXHub borrower profile. */
+function deriveFactors(profile: {
+  totalVerifiedVolumeUSD: number;
+  totalAttestationsCount: number;
+  protocolDiversityCount: number;
+  chainDiversityCount: number;
+  weightedActionScore: number;
+  lastAttestationTimestamp: number;
+}, score: number): OCCRFactor[] {
+  const daysSinceLastAttestation = profile.lastAttestationTimestamp > 0
+    ? Math.max(0, (Date.now() / 1000 - profile.lastAttestationTimestamp) / 86400)
+    : Number.MAX_SAFE_INTEGER;
+  const recencyOk = daysSinceLastAttestation <= 30;
+  return [
+    { id: '1', name: 'On-chain Loan Repayment History', description: `Weighted action score ${profile.weightedActionScore.toFixed(0)} verified on Creditcoin`, score: profile.weightedActionScore > 0 ? 200 : 0, max: 200, weight: 35, color: '#06b6d4' },
+    { id: '2', name: `Verified Volume ($${Math.round(profile.totalVerifiedVolumeUSD).toLocaleString()})`, description: 'Total USD value verified via Merkle/continuity proofs', score: Math.min(150, Math.round(profile.totalVerifiedVolumeUSD / 1500)), max: 150, weight: 25, color: '#a855f7' },
+    { id: '3', name: 'Multi-Protocol Diversity', description: `${profile.protocolDiversityCount} DeFi protocol types across ${profile.chainDiversityCount} source chains`, score: Math.min(120, (profile.protocolDiversityCount + profile.chainDiversityCount) * 40), max: 120, weight: 20, color: '#10b981' },
+    { id: '4', name: 'Attestation Frequency', description: `${profile.totalAttestationsCount} cryptographic state verifications`, score: Math.min(80, profile.totalAttestationsCount * 16), max: 80, weight: 10, color: '#3b82f6' },
+    { id: '5', name: 'Recency Bonus (<30d)', description: recencyOk ? `Last attestation ${Math.round(daysSinceLastAttestation)}d ago` : 'No attestation in the last 30 days', score: recencyOk ? 50 : 0, max: 50, weight: 10, color: '#f59e0b' },
+  ];
+}
+
+/** Map an on-chain pool loan to the UI LoanPosition shape. */
+function mapLoanToPosition(loan: {
+  loanId: string;
+  principalUSD: number;
+  collateralCTC: number;
+  borrowedAtBlock: number;
+  dueBlock: number;
+  interestRateBps: number;
+  isDefaulted: boolean;
+}): LoanPosition {
+  const dueAt = new Date(Date.now() + 15 * 86400000).toISOString().slice(0, 10);
+  return {
+    id: `${loan.loanId}`,
+    amount: loan.principalUSD,
+    collateral: `${loan.collateralCTC.toLocaleString(undefined, { maximumFractionDigits: 2 })} CTC`,
+    principalUSD: loan.principalUSD,
+    collateralCTC: loan.collateralCTC,
+    collateralRatio: '—',
+    interestRate: (loan.interestRateBps / 100).toFixed(2),
+    apr: bpsToApr(loan.interestRateBps),
+    dueDate: dueAt,
+    dueDays: 15,
+    status: loan.isDefaulted ? 'DEFAULTED' : 'ACTIVE',
+  };
+}
+
 export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [dataSource, setDataSource] = useState<'demo' | 'chain'>('demo');
   const [score, setScore] = useState<number>(794);
   const [tier, setTier] = useState<CreditTier>('Super-Prime');
-  const [verifiedVolumeUSD] = useState<number>(150000);
+  const [verifiedVolumeUSD, setVerifiedVolumeUSD] = useState<number>(150000);
   const [approvedLineUSD, setApprovedLineUSD] = useState<number>(225000);
-  const [collateralRatioBps] = useState<number>(7000); // 70.0%
-  const [borrowApr] = useState<string>('2.50%');
-  const [sbtTokenId] = useState<number>(4928);
-  const [sbtCommitment] = useState<string>('0x73549c1d64f55b95a821e289bf4490c8e109d73b22419ef8971a62948c12a84f');
+  const [collateralRatioBps, setCollateralRatioBps] = useState<number>(7000); // 70.0%
+  const [borrowApr, setBorrowApr] = useState<string>('2.50%');
+  const [sbtTokenId, setSbtTokenId] = useState<number>(4928);
+  const [sbtCommitment, setSbtCommitment] = useState<string>('0x73549c1d64f55b95a821e289bf4490c8e109d73b22419ef8971a62948c12a84f');
   const [sbtMinted, setSbtMinted] = useState<boolean>(true);
 
   const [occrFactors, setOccrFactors] = useState<OCCRFactor[]>([
@@ -204,6 +270,68 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [nodeBandwidthMB, setNodeBandwidthMB] = useState<number>(142.5);
 
   const { showToast, addToast, playSound } = useToast();
+  const { isConnected, address } = useWeb3();
+  const lastChainAddress = useRef<string>('');
+
+  // ───────────────────────────────────────────────────────────────────────
+  //  Real on-chain refresh: pulls the wallet's live CredXHub profile, the
+  //  derived engine rates, their SBT attestation and lending pool loans.
+  // ───────────────────────────────────────────────────────────────────────
+  const refreshFromChain = useCallback(async () => {
+    if (!isConnected || !address) {
+      setDataSource('demo');
+      return;
+    }
+    try {
+      const profile = await fetchBorrowerProfile(address);
+      if (!profile) {
+        setDataSource('demo');
+        return;
+      }
+      let approvedLine = profile.maxCreditLineUSD;
+      let ratioBps = profile.requiredCollateralRatioBps;
+      let apr = '—';
+      if (profile.creditScore >= 300) {
+        const rates = await fetchEngineRates(profile.creditScore);
+        if (approvedLine <= 0) approvedLine = rates.maxCreditLineUSD;
+        if (ratioBps <= 0) ratioBps = rates.collateralRatioBps;
+        apr = bpsToApr(rates.interestRateBps);
+      }
+      const [loans, sbt] = await Promise.all([
+        fetchUserLoans(address),
+        fetchSBTAttestation(address),
+      ]);
+
+      setScore(profile.creditScore);
+      setTier(scoreToTier(profile.creditScore) as CreditTier);
+      setVerifiedVolumeUSD(profile.totalVerifiedVolumeUSD);
+      setApprovedLineUSD(approvedLine);
+      setCollateralRatioBps(ratioBps);
+      setBorrowApr(apr);
+      setOccrFactors(deriveFactors(profile, profile.creditScore));
+      setActiveLoans(loans.map(mapLoanToPosition));
+      setSbtTokenId(sbt ? parseInt(sbt.tokenId, 10) : 0);
+      setSbtCommitment(sbt ? sbt.commitmentHash : '0x0000000000000000000000000000000000000000000000000000000000000000');
+      setSbtMinted(!!sbt);
+      setDataSource('chain');
+    } catch (err) {
+      console.warn('Could not refresh on-chain protocol state:', err);
+      setDataSource('demo');
+    }
+  }, [isConnected, address]);
+
+  // Load real state on connect / account switch; return to demo defaults on disconnect.
+  useEffect(() => {
+    if (isConnected && address && address !== lastChainAddress.current) {
+      lastChainAddress.current = address;
+      void refreshFromChain();
+      return;
+    }
+    if (!isConnected) {
+      lastChainAddress.current = '';
+      setDataSource('demo');
+    }
+  }, [isConnected, address, refreshFromChain]);
 
   // Detect real GPU via WebGL
   useEffect(() => {
@@ -363,6 +491,14 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [pulseConnected, runRealHardwareBenchmark]);
 
   const boostScore = useCallback((pts: number, reason: string) => {
+    if (dataSource === 'chain') {
+      addToast(
+        'info',
+        'CTV is On-Chain',
+        `Score changes require verified proofs — submit cross-chain evidence in the Proof Verifier (${reason}).`
+      );
+      return;
+    }
     setScore(prev => {
       const next = Math.min(850, prev + pts);
       if (next >= 780) setTier('Super-Prime');
@@ -371,8 +507,8 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       return next;
     });
     playSound('fanfare');
-    addToast('success', 'CTS Boost Received!', `+${pts} Points added to Creditcoin Trust Score (${reason})`);
-  }, [addToast, playSound]);
+    addToast('success', 'Demo Score Boost', `+${pts} simulated points (${reason}) — connect a wallet for real on-chain score.`);
+  }, [addToast, playSound, dataSource]);
 
   const claimPulseAllocation = useCallback((amountUSD?: number) => {
     if (pulseClaimableRewardUSD <= 0) {
@@ -383,7 +519,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     playSound('fanfare');
     setPulseClaimableRewardUSD(0);
     boostScore(15, 'CredX Pulse Epoch 0 Allocation Settled');
-    addToast('success', 'Allocation Claimed!', `Claimed $${claimedAmount} USDC to connected wallet via Creditcoin L1.`);
+    addToast('success', 'Allocation Claimed (Simulated)!', `Claimed $${claimedAmount} demo PULSE allocation to your local session (no real tokens moved).`);
   }, [pulseClaimableRewardUSD, playSound, boostScore, addToast]);
 
   const claimPulseTierBonus = useCallback(() => {
@@ -403,7 +539,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const syncPulseAttestation = useCallback(async () => {
     playSound('fanfare');
     boostScore(35, 'CredX Pulse Epoch 0 Verified Bandwidth & Quality Attestation');
-    addToast('success', 'Attestcoin Verification Complete', 'Merkle Patricia proof verified at 0x0FD2. +35 CTS added to Creditcoin Profile!');
+    addToast('info', 'Demo Pulse Attestation', 'Pulse bandwidth attestation is simulated locally — no on-chain proof was anchored. Use the Proof Verifier with a connected wallet for real verification.');
   }, [boostScore, playSound, addToast]);
 
   // CredX Nexus IoT Edge & Enterprise Fleet State (Phase 2)
@@ -561,7 +697,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     playSound('fanfare');
     setNexusUncommittedPackets(0);
     boostScore(25, 'CredX Nexus Physical Proof of Proximity (PoP) Batch');
-    addToast('success', 'Creditcoin Attestation Successful', 'Merkle Root attested at 0x0FD2. +25 CTS reputation points credited to your Soulbound Profile!');
+    addToast('info', 'Demo Nexus Attestation', 'IoT PoP batch is simulated locally — no Merkle root was attested on-chain. Connect a wallet to submit real proofs.');
   }, [playSound, boostScore, addToast]);
 
   const addNexusBeacon = useCallback((beacon: NexusBeacon) => {
@@ -667,13 +803,25 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setOrbitPoSTProofsCount(c => c + 1);
     boostScore(50, 'CredX GeoOrbit Dual-Frequency Space-Time Proof (PoST)');
     addToast(
-      'success',
-      'Space-Time Proof Anchored to 0x0FD2',
-      `Triple-band RINEX carrier observation attested on Creditcoin L1. +50 CTS Soulbound reputation points awarded!`
+      'info',
+      'Demo Space-Time Proof',
+      `RINEX carrier observation proof is simulated locally — nothing was anchored on Creditcoin L1. Connect a wallet for real attestation.`
     );
   }, [playSound, boostScore, addToast]);
 
   const borrow = useCallback((amountUSD: number, collateral: string) => {
+    if (dataSource === 'chain') {
+      void (async () => {
+        try {
+          const hash = await borrowFromPool(amountUSD);
+          addToast('success', 'Borrow Submitted', `Loan request ${amountUSD.toLocaleString()} cUSD — tx ${hash.slice(0, 8)}… sent.`);
+          await refreshFromChain();
+        } catch (err: any) {
+          addToast('error', 'Borrow Failed', err?.shortMessage || err?.message || 'Transaction rejected.');
+        }
+      })();
+      return;
+    }
     const newId = `LN-${Math.floor(1000 + Math.random() * 9000)}`;
     const newLoan: LoanPosition = {
       id: newId,
@@ -688,32 +836,60 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       status: 'ACTIVE'
     };
     setActiveLoans(prev => [newLoan, ...prev]);
+    addToast('info', 'Demo Borrow', `${amountUSD.toLocaleString()} cUSD loan simulated locally — connect a wallet to borrow on Creditcoin testnet.`);
     if (isPostHogEnabled) {
       posthog.capture('loan_originated', { amount_usd: amountUSD });
     }
     boostScore(5, 'New Under-Collateralized Loan Origination');
-  }, [boostScore]);
+  }, [boostScore, dataSource, refreshFromChain, addToast]);
 
   const originateLoan = useCallback((borrowUSD: number, collateralCTC: number) => {
     borrow(borrowUSD, `${collateralCTC} CTC`);
   }, [borrow]);
 
   const repay = useCallback((id: string | number) => {
+    if (dataSource === 'chain') {
+      const loan = activeLoans.find(l => l.id === String(id));
+      void (async () => {
+        try {
+          const hash = await repayPoolLoan(id, loan?.principalUSD ?? 0);
+          addToast('success', 'Repayment Sent', `Loan ${id} repaid — tx ${hash.slice(0, 8)}… confirmed.`);
+          await refreshFromChain();
+        } catch (err: any) {
+          addToast('error', 'Repayment Failed', err?.shortMessage || err?.message || 'Transaction rejected.');
+        }
+      })();
+      return;
+    }
     setActiveLoans(prev => prev.filter(l => l.id !== id));
+    addToast('info', 'Demo Repayment', 'Loan settlement simulated locally — connect a wallet to repay on-chain.');
     if (isPostHogEnabled) {
       posthog.capture('loan_repaid');
     }
     boostScore(15, 'On-Time Loan Settlement & Collateral Refund');
-  }, [boostScore]);
+  }, [boostScore, dataSource, activeLoans, refreshFromChain, addToast]);
 
   const repayLoan = useCallback((id: number) => {
     repay(id);
   }, [repay]);
 
   const mintSBT = useCallback(() => {
+    if (dataSource === 'chain') {
+      void (async () => {
+        try {
+          const hash = await mintSBTTx();
+          addToast('success', 'Attestation Minted', `SBT minted on-chain — tx ${hash.slice(0, 8)}… confirmed.`);
+          await refreshFromChain();
+        } catch (err: any) {
+          addToast('error', 'Mint Failed', err?.shortMessage || err?.message || 'Transaction rejected.');
+        }
+      })();
+      return;
+    }
     setSbtMinted(true);
+    addToast('info', 'Demo SBT', 'Passport state simulated locally — connect a wallet to mint the real ERC-5192 soulbound token.');
     boostScore(10, 'ERC-5192 Soulbound Passport Minted');
-  }, [boostScore]);
+  }, [boostScore, dataSource, refreshFromChain, addToast]);
 
   const toggleVirtualNode = useCallback(() => {
     const next = !virtualNodeActive;
@@ -757,6 +933,9 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   return (
     <ProtocolContext.Provider
       value={{
+        dataSource,
+        isLiveOnChain: dataSource === 'chain',
+        refreshFromChain,
         score,
         creditScore: score,
         tier,

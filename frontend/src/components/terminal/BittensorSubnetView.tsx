@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import GlassCard from '../common/GlassCard';
+import SimulationBadge from '../common/SimulationBadge';
 import { useToast } from '../../context/ToastContext';
 import {
   Brain,
@@ -158,8 +159,8 @@ export const BittensorSubnetView: React.FC<BittensorSubnetViewProps> = ({
       setIsAttesting(false);
       addToast(
         'success',
-        'Creditcoin L1 Proof Verified (0x0FD2)',
-        `Attested top-decile score on Subnet ${proof.netuid}. Unlocked +100 CTS bonus & $250k zero-collateral hardware lease line!`
+        'Simulated Attestation (local)',
+        `Generated a mock Merkle-ish proof for Subnet ${proof.netuid}. Nothing was sent to Creditcoin — 0x0FD2 attestation is simulated in this panel.`
       );
     }, 1200);
   };
@@ -175,6 +176,17 @@ export const BittensorSubnetView: React.FC<BittensorSubnetViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED TAO TELEMETRY"
+          note="Yuma consensus math runs locally on static subnet data — no Bittensor subnet attestation is submitted to Creditcoin."
+        />
+        <span className="font-mono">
+          Subnet directory is a static, Taostats-inspired dataset; Yuma-consensus and benchmark results
+          are computed locally in the browser. Nothing is attested on Creditcoin here.
+        </span>
+      </div>
       {/* ========================================================================= */}
       {/* BITTENSOR HERO HEADER & TELEMETRY                                         */}
       {/* ========================================================================= */}
@@ -681,9 +693,10 @@ export const BittensorSubnetView: React.FC<BittensorSubnetViewProps> = ({
                   </span>
                   <h3 className="text-xl font-bold text-white mt-1">
                     Attest Bittensor Subnet Score (0x0FD2)
+                    <span className="ml-2 align-middle"><SimulationBadge label="SIMULATED" note="This attestation flow is local-only: a mock proof is generated and no wallet transaction is submitted to Creditcoin." /></span>
                   </h3>
                   <p className="text-xs text-white/60 mt-1">
-                    Submit cryptographically verified Merkle proofs of your miner or validator ranking to Creditcoin L1 to unlock zero-collateral hardware financing lines.
+                    Submit cryptographically verified Merkle proofs of your miner or validator ranking to Creditcoin L1 (simulated in this panel; the real 0x0FD2 path is proven via <code className="text-purple-300 font-mono">npm run usc:verify</code>).
                   </p>
                 </div>
 

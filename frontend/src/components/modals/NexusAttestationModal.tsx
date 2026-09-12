@@ -43,7 +43,7 @@ export const NexusAttestationModal: React.FC<NexusAttestationModalProps> = ({ is
       isOpen={isOpen}
       onClose={onClose}
       title="CredX Nexus Proximity Attestation"
-      subtitle="Creditcoin Attestcoin Protocol (USC Precompile 0x0FD2)"
+      subtitle="Creditcoin Attestcoin Protocol (USC Precompile 0x0FD2) — local simulation, no wallet tx"
       maxWidth="max-w-xl"
       icon={
         <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-bold">
@@ -115,8 +115,8 @@ export const NexusAttestationModal: React.FC<NexusAttestationModalProps> = ({ is
             <div className="text-[11px] text-white/60">
               {step === 1 && '1. Computing SHA-256 Merkle leaves for witnessed BLE packets...'}
               {step === 2 && '2. Generating binary Merkle Root & RF path-loss integrity proof...'}
-              {step === 3 && '3. Submitting batch root to Creditcoin L1 precompile 0x0FD2...'}
-              {step === 4 && '4. Attestation finalized! Creditcoin Trust Score (CTS) updated.'}
+{step === 3 && '3. Simulated batch-root submission to Creditcoin L1 precompile 0x0FD2 (local — no on-chain execution)...'}
+                {step === 4 && '4. Simulated attestation complete! Local Creditcoin Trust Score (CTS) updated.'}
             </div>
           </div>
         )}

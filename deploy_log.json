@@ -1,0 +1,12 @@
+[
+  {
+    "contract": "BlockProverAttestationOracle",
+    "network": "creditcoinTestnet",
+    "chainId": "102031",
+    "address": "0x4d11b60809724b0B67B28DA2f38438aE97f1C671",
+    "blockProverPrecompile": "0x0000000000000000000000000000000000000FD2",
+    "chainInfoPrecompile": "0x0000000000000000000000000000000000000FD3",
+    "timestamp": "2026-09-12T18:13:33.983Z",
+    "txHash": "0xf28816b3d20967ae33c1350d11981e4d41b0ca7a1a055a330e3abe22ad387249"
+  }
+]

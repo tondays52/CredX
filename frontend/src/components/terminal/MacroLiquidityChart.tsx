@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SimulationBadge } from '../common/SimulationBadge';
 import {
   TrendingUp,
   Activity,
@@ -479,6 +480,17 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
 
   return (
     <div className="space-y-3 font-sans select-none">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="MACRO CHART"
+          note="Live price from Binance, but multi-cycle macro regime overlays are modeled/predicted locally."
+        />
+        <span className="font-mono">
+          Live market price via Binance; macro regime, liquidity and cycle overlays are locally modeled.
+        </span>
+      </div>
+
       {/* Top Header with Live Price & Controls */}
       <div className="p-3 rounded-2xl bg-black/70 border border-cyan-500/25 backdrop-blur-xl flex flex-wrap items-center justify-between gap-3">
         {/* Pair Title & Real-Time Price */}

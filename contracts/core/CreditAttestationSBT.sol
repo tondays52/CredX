@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
+
 import {ICredXHub} from "../interfaces/ICredXHub.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
 /**
  * @title CreditAttestationSBT
  * @notice Soulbound Token (SBT) that proves a borrower's credit tier on-chain
  *         without revealing their detailed transaction history.
  * 
- * @dev Implements ERC-721 metadata interface but prevents transfers (soulbound).
- *      Inspired by Vitalik Buterin's SBT proposal (2022) and selective disclosure research (2025).
+ * @dev A REAL ERC-721 (supports ERC165, implements balanceOf/ownerOf/Transfer events) with
+ *      transfers and approvals disabled (soulbound). Inspired by Vitalik Buterin's SBT
+ *      proposal (2022) and selective disclosure research (2025).
  *      
  *      Users can mint a non-transferable attestation proving:
  *        "This wallet has CTS >= [tier threshold] as of block [X]"
@@ -18,10 +21,7 @@ import {ICredXHub} from "../interfaces/ICredXHub.sol";
  *        - Regulatory-compliant selective disclosure (GDPR compatible)
  *        - Trust signaling without raw data exposure
  */
-contract CreditAttestationSBT {
-    string public name = "CredX Credit Attestation";
-    string public symbol = "CX-SBT";
-
+contract CreditAttestationSBT is ERC721 {
     ICredXHub public credXHub;
     address public owner;
 
@@ -59,7 +59,7 @@ contract CreditAttestationSBT {
     event AttestationRefreshed(uint256 indexed tokenId, CreditTier newTier, uint256 newMinimumScore);
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  Custom Errors (Gas Optimization & Strong Typing)
+    //  Custom Errors
     // ═══════════════════════════════════════════════════════════════════════
     error ZeroAddress();
     error OnlyOwner();
@@ -69,15 +69,12 @@ contract CreditAttestationSBT {
     error AlreadyRevoked();
     error NonTransferable();
 
-    // Minimal ERC-721 events for wallet compatibility
-    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
-
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
         _;
     }
 
-    constructor(address _credXHub) {
+    constructor(address _credXHub) ERC721("CredX Credit Attestation", "CX-SBT") {
         if (_credXHub == address(0)) revert ZeroAddress();
         owner = msg.sender;
         credXHub = ICredXHub(_credXHub);
@@ -85,7 +82,7 @@ contract CreditAttestationSBT {
 
     /**
      * @notice Mint a Soulbound Credit Attestation Token.
-     * @dev Proves "I have CTS >= [tier threshold]" without revealing exact score.
+     * @dev Proves "I have CTS >= [tier threshold]".
      */
     function mintAttestation() external returns (uint256 tokenId) {
         if (holderTokenId[msg.sender] != 0) revert AlreadyHoldsAttestation();
@@ -98,7 +95,7 @@ contract CreditAttestationSBT {
 
         tokenId = nextTokenId++;
 
-        // Privacy commitment: proves exact score without on-chain exposure, bound to canonical block height (immune to timestamp manipulation)
+        // Privacy commitment: proves exact score without on-chain exposure, bound to canonical block height
         bytes32 commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.number, tokenId));
 
         attestations[tokenId] = Attestation({
@@ -112,8 +109,9 @@ contract CreditAttestationSBT {
         });
         holderTokenId[msg.sender] = tokenId;
 
+        _mint(msg.sender, tokenId);
+
         emit AttestationMinted(tokenId, msg.sender, tier, minimumScore, commitmentHash);
-        emit Transfer(address(0), msg.sender, tokenId); // ERC-721 compatible mint event
 
         return tokenId;
     }
@@ -133,7 +131,7 @@ contract CreditAttestationSBT {
         att.tier = tier;
         att.minimumScore = minimumScore;
         att.attestedBlock = block.number;
-        // Deterministic commitment hash bound to block.number and tokenId (immune to miner timestamp drift)
+        // Deterministic commitment hash bound to block.number and tokenId
         att.commitmentHash = keccak256(abi.encodePacked(msg.sender, creditScore, block.number, tokenId));
         att.isValid = true;
 
@@ -151,13 +149,12 @@ contract CreditAttestationSBT {
         if (!attestations[tokenId].isValid) revert AlreadyRevoked();
 
         attestations[tokenId].isValid = false;
+        _burn(tokenId);
         emit AttestationRevoked(tokenId, holder);
     }
 
     /**
      * @notice Verify that an address holds a valid attestation at or above a given tier.
-     * @param holder The address to check.
-     * @param requiredTier The minimum tier required.
      */
     function verifyAttestation(address holder, CreditTier requiredTier) external view returns (bool) {
         if (holder == address(0)) return false;
@@ -172,7 +169,6 @@ contract CreditAttestationSBT {
 
     /**
      * @notice Get the attestation details for a holder.
-     * @param holder The address of the attestation holder.
      */
     function getAttestation(address holder) external view returns (Attestation memory) {
         if (holder == address(0)) revert ZeroAddress();
@@ -182,19 +178,43 @@ contract CreditAttestationSBT {
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    //  Soulbound: Prevent Transfers
+    //  Soulbound: Prevent Transfers and Approvals
     // ═══════════════════════════════════════════════════════════════════════
 
-    function transferFrom(address, address, uint256) external pure {
+    /**
+     * @dev Overridden ERC721 hook: only allow minting (from == 0) and burning (to == 0).
+     *      Any real transfer between addresses is blocked.
+     */
+    function _update(address to, uint256 tokenId, address auth) internal virtual override returns (address) {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != address(0)) {
+            revert NonTransferable();
+        }
+        return super._update(to, tokenId, auth);
+    }
+
+    function approve(address, uint256) public virtual override {
         revert NonTransferable();
     }
 
-    function safeTransferFrom(address, address, uint256) external pure {
+    function setApprovalForAll(address, bool) public virtual override {
         revert NonTransferable();
     }
 
-    function approve(address, uint256) external pure {
-        revert NonTransferable();
+    /**
+     * @notice Minimal metadata URI so wallet integrations render the attestation.
+     */
+    function tokenURI(uint256 tokenId) public view virtual override returns (string memory) {
+        return string.concat(
+            "data:application/json;base64,",
+            Base64.encode(bytes(string.concat(
+                '{"name":"CredX Credit Attestation #',
+                uint256ToString(tokenId),
+                '","description":"Nontransferable Creditcoin cross-chain credit attestation","attributes":[{"trait_type":"tier","value":"',
+                tierToString(attestations[tokenId].tier),
+                '"}]}'
+            )))
+        );
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -213,5 +233,54 @@ contract CreditAttestationSBT {
         if (tier == CreditTier.PRIME) return 650;
         if (tier == CreditTier.NEAR_PRIME) return 500;
         return 300;
+    }
+
+    function tierToString(CreditTier tier) internal pure returns (string memory) {
+        if (tier == CreditTier.SUPER_PRIME) return "SUPER_PRIME";
+        if (tier == CreditTier.PRIME) return "PRIME";
+        if (tier == CreditTier.NEAR_PRIME) return "NEAR_PRIME";
+        return "SUBPRIME";
+    }
+
+    function uint256ToString(uint256 value) internal pure returns (string memory) {
+        if (value == 0) return "0";
+        uint256 temp = value;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (value != 0) {
+            digits -= 1;
+            buffer[digits] = bytes1(uint8(48 + uint256(value % 10)));
+            value /= 10;
+        }
+        return string(buffer);
+    }
+}
+
+/**
+ * @dev Minimal base64 encoder for the inline SBT metadata URI (no external dependency).
+ */
+library Base64 {
+    bytes internal constant TABLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+    function encode(bytes memory data) internal pure returns (string memory) {
+        if (data.length == 0) return "";
+        string memory result = new string(4 * ((data.length + 2) / 3));
+        uint256 resultIndex = 0;
+        for (uint256 i = 0; i < data.length; i += 3) {
+            uint256 a = uint8(data[i]);
+            uint256 b = i + 1 < data.length ? uint8(data[i + 1]) : 0;
+            uint256 c = i + 2 < data.length ? uint8(data[i + 2]) : 0;
+            uint256 triple = (a << 16) | (b << 8) | c;
+
+            bytes(result)[resultIndex++] = TABLE[(triple >> 18) & 0x3F];
+            bytes(result)[resultIndex++] = TABLE[(triple >> 12) & 0x3F];
+            bytes(result)[resultIndex++] = i + 1 < data.length ? TABLE[(triple >> 6) & 0x3F] : bytes1("=");
+            bytes(result)[resultIndex++] = i + 2 < data.length ? TABLE[triple & 0x3F] : bytes1("=");
+        }
+        return result;
     }
 }

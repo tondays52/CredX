@@ -46,13 +46,14 @@ describe("AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification)", fun
       const initialApr = await aiHub.getAutonomousRiskAdjustedAPR();
       expect(initialApr).to.equal(500 + (1000 / 10) + 200); // 800 bps (8%)
 
-      // Ingest cross-chain volatility spike signal (volatility = 3000 (30%), default = 500 (5%))
+      // Ingest cross-chain volatility spike signal. Deltas accumulate from the baseline
+      // (1000 volatility / 200 default): new volatility = 4000, new default = 700.
       await expect(aiHub.processCrossChainRiskSignal(proof, 3000, 500))
         .to.emit(aiHub, "CrossChainRiskSignalProcessed")
-        .withArgs(proof.sourceChainId, proof.txHash, 3000, 500, 1300);
+        .withArgs(proof.sourceChainId, proof.txHash, 4000, 700, 1600);
 
       const newApr = await aiHub.getAutonomousRiskAdjustedAPR();
-      expect(newApr).to.equal(1300); // 500 + 300 + 500 = 1300 bps (13%)
+      expect(newApr).to.equal(1600); // 500 + (4000/10) + 700 = 1600 bps (16%)
     });
 
     it("should prevent replay of the same cross-chain risk proof", async function () {
@@ -101,16 +102,22 @@ describe("AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification)", fun
       const profile = await aiHub.aiAgents(aiAgent.address);
       expect(profile.reputationScore).to.be.gte(700);
 
-      // Now AI agent triggers undercollateralized loan
+      // Now AI agent triggers reputation-secured loan (rep 700 -> 85% collateral ratio)
       const loanAmount = ethers.parseEther("5000");
+      const requiredCollateral = await aiHub.getRequiredCollateral(aiAgent.address, loanAmount);
+
+      // Agent must pre-approve the hub to pull its collateral
+      await mockToken.connect(aiAgent).approve(await aiHub.getAddress(), ethers.parseEther("50000"));
+
       const agentBalBefore = await mockToken.balanceOf(aiAgent.address);
 
       await expect(aiHub.connect(aiAgent).triggerAutonomousAgentLoan(loanAmount))
         .to.emit(aiHub, "AgentLoanDispatched")
-        .withArgs(aiAgent.address, loanAmount);
+        .withArgs(aiAgent.address, loanAmount, requiredCollateral);
 
       const agentBalAfter = await mockToken.balanceOf(aiAgent.address);
-      expect(agentBalAfter - agentBalBefore).to.equal(loanAmount);
+      // Agent posts requiredCollateral, then receives loanAmount -> net gain = loanAmount - collateral
+      expect(agentBalAfter - agentBalBefore).to.equal(loanAmount - requiredCollateral);
 
       // Repay loan
       await mockToken.connect(aiAgent).approve(await aiHub.getAddress(), loanAmount);

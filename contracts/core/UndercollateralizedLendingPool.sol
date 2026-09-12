@@ -9,11 +9,10 @@ import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 uint256 constant BPS_DIVISOR = 10000;
-uint256 constant CTC_PRICE_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
 uint256 constant LOAN_DURATION_BLOCKS = 216000; // ~30 days at 12s/block
 uint256 constant BLOCKS_PER_YEAR = 2628000; // ~365 days at 12s/block
 uint256 constant INTEREST_DENOMINATOR = BPS_DIVISOR * BLOCKS_PER_YEAR; // 26,280,000,000
-uint256 constant COLLATERAL_DIVISOR = BPS_DIVISOR * CTC_PRICE_USD; // 20,000 * 10**18
+uint256 constant CTC_PRICE_DEFAULT_USD = 2 * 10**18; // Simulated 1 CTC = $2.00 USD for demo calculations
 
 /**
  * @title UndercollateralizedLendingPool
@@ -29,9 +28,16 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     CreditScoreEngine public scoreEngine;
     address public owner;
 
+    // Realistic (and owner-updatable) pricing: 1 CTC = ctcPriceUSD. Replaces a hardcoded constant.
+    uint256 public ctcPriceUSD;
+
+    // Address that receives liquidated collateral so it is actually moved (not stranded in the pool).
+    address public treasury;
+
     uint256 public nextLoanId = 1;
     uint256 public totalLiquidityUSD;
     uint256 public totalBorrowedUSD;
+    uint256 public realizedLossUSD;
 
     mapping(address lender => uint256 balanceUSD) public lenderBalances;
     mapping(uint256 loanId => LoanPosition position) public loans;
@@ -72,6 +78,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     error OnlyBorrower();
     error RepaymentAmountInsufficient();
     error LoanNotOverdue();
+    error ZeroTreasury();
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
@@ -83,9 +90,21 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         if (_credXHub == address(0)) revert ZeroAddress();
         if (_scoreEngine == address(0)) revert ZeroAddress();
         owner = msg.sender;
+        treasury = msg.sender;
+        ctcPriceUSD = CTC_PRICE_DEFAULT_USD;
         liquidityToken = IERC20(_tokenAddress);
         credXHub = ICredXHub(_credXHub);
         scoreEngine = CreditScoreEngine(_scoreEngine);
+    }
+
+    function setTreasury(address _treasury) external onlyOwner {
+        if (_treasury == address(0)) revert ZeroTreasury();
+        treasury = _treasury;
+    }
+
+    function setCtcPriceUSD(uint256 _price) external onlyOwner {
+        if (_price == 0) revert InvalidAmount();
+        ctcPriceUSD = _price;
     }
 
     /**
@@ -103,10 +122,11 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
 
     /**
      * @notice Lenders withdraw their supplied liquidity.
+     * @dev Liquidity is reduced by both outstanding borrows and irrecoverable realized default losses.
      */
     function withdrawLiquidity(uint256 amountUSD) external override nonReentrant {
         if (lenderBalances[msg.sender] < amountUSD) revert InsufficientLenderBalance();
-        if (totalLiquidityUSD - totalBorrowedUSD < amountUSD) revert InsufficientPoolLiquidity();
+        if (totalLiquidityUSD - totalBorrowedUSD - realizedLossUSD < amountUSD) revert InsufficientPoolLiquidity();
 
         lenderBalances[msg.sender] -= amountUSD;
         totalLiquidityUSD -= amountUSD;
@@ -122,7 +142,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         address borrower,
         uint256 requestedUSD,
         uint256 collateralCTC
-    ) internal view returns (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps) {
+    ) internal view returns (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps, uint256 requiredCollateralCTC) {
         if (borrower == address(0)) revert ZeroAddress();
 
         (
@@ -136,12 +156,12 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
 
         if (requestedUSD > maxCreditLineUSD) revert ExceedsApprovedCreditLine();
 
-        uint256 requiredCollateralCTC = (requestedUSD * collateralRatioBps * 10**18) / COLLATERAL_DIVISOR;
+        requiredCollateralCTC = (requestedUSD * collateralRatioBps * 10**18) / (BPS_DIVISOR * ctcPriceUSD);
 
         if (collateralCTC < requiredCollateralCTC) revert InsufficientCollateral();
 
         uint256 interestRateBps = scoreEngine.getInterestRate(creditScore);
-        return (collateralRatioBps, interestRateBps);
+        return (collateralRatioBps, interestRateBps, requiredCollateralCTC);
     }
 
     /**
@@ -152,7 +172,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         if (requestedUSD == 0) revert InvalidAmount();
         if (totalLiquidityUSD - totalBorrowedUSD < requestedUSD) revert InsufficientPoolLiquidity();
 
-        (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps) = _validateBorrowTerms(
+        (uint256 requiredCollateralRatioBps, uint256 finalInterestRateBps, uint256 requiredCollateralCTC) = _validateBorrowTerms(
             msg.sender,
             requestedUSD,
             msg.value
@@ -165,7 +185,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
             loanId: loanId,
             borrower: msg.sender,
             principalUSD: requestedUSD,
-            collateralCTC: msg.value,
+            collateralCTC: requiredCollateralCTC,
             borrowedAtBlock: block.number,
             dueBlock: dueBlock,
             interestRateBps: finalInterestRateBps,
@@ -176,6 +196,11 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         userLoanIds[msg.sender].push(loanId);
         totalBorrowedUSD += requestedUSD;
 
+        // Refund any excess native collateral sent beyond what the credit tier requires.
+        if (msg.value > requiredCollateralCTC) {
+            payable(msg.sender).sendValue(msg.value - requiredCollateralCTC);
+        }
+
         // Disburse borrowed liquidity to borrower using SafeERC20
         liquidityToken.safeTransfer(msg.sender, requestedUSD);
 
@@ -183,7 +208,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
             loanId,
             msg.sender,
             requestedUSD,
-            msg.value,
+            requiredCollateralCTC,
             requiredCollateralRatioBps,
             finalInterestRateBps,
             dueBlock
@@ -236,6 +261,13 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         uint256 liquidatedCollateral = loan.collateralCTC;
         loan.collateralCTC = 0;
 
+        // Accounting: the principal is never recovered after default.
+        totalBorrowedUSD -= loan.principalUSD;
+        realizedLossUSD += loan.principalUSD;
+
+        // Actually move collateral to the designated treasury instead of stranding it in the pool.
+        payable(treasury).sendValue(liquidatedCollateral);
+
         emit LoanDefaulted(loanId, loan.borrower, liquidatedCollateral);
     }
 
@@ -250,7 +282,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
         uint256 loanId,
         bytes32 evidenceProofRoot,
         string calldata reason
-    ) external nonReentrant {
+    ) external nonReentrant onlyOwner {
         LoanPosition storage loan = loans[loanId];
         if (loan.isRepaid) revert LoanAlreadyRepaid();
         if (loan.isDefaulted) revert LoanIsDefaulted();
@@ -262,7 +294,7 @@ contract UndercollateralizedLendingPool is ILendingPool, ReentrancyGuard {
     /**
      * @notice Restores a frozen covenant once the borrower re-attests healthy collateral state.
      */
-    function restoreCovenant(uint256 loanId) external nonReentrant {
+    function restoreCovenant(uint256 loanId) external nonReentrant onlyOwner {
         LoanPosition storage loan = loans[loanId];
         if (loan.isRepaid) revert LoanAlreadyRepaid();
         if (loan.isDefaulted) revert LoanIsDefaulted();

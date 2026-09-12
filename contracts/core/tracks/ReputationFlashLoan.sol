@@ -5,12 +5,13 @@ import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IFlashBorrower} from "../../interfaces/IFlashBorrower.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title ReputationFlashLoan
  * @notice Offers discounted flash loans to users with high cross-chain credit scores.
  */
-contract ReputationFlashLoan {
+contract ReputationFlashLoan is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     error ZeroAddress();
@@ -42,7 +43,7 @@ contract ReputationFlashLoan {
      * @param amount The amount of tokens to borrow.
      * @param data Arbitrary data passed to the receiver.
      */
-    function flashLoan(address receiver, uint256 amount, bytes calldata data) external {
+    function flashLoan(address receiver, uint256 amount, bytes calldata data) external nonReentrant {
         if (receiver == address(0)) revert ZeroAddress();
         if (amount == 0) revert InvalidAmount();
         if (TOKEN.balanceOf(address(this)) < amount) revert InsufficientLiquidity();

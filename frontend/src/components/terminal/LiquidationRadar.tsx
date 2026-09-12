@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { SimulationBadge } from '../common/SimulationBadge';
 import {
   Radio,
   Flame,
@@ -291,6 +292,17 @@ export const LiquidationRadar: React.FC<LiquidationRadarProps> = ({ activeSymbol
 
   return (
     <div className="space-y-4 font-sans select-none">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED LIQUIDATION RADAR"
+          note="Liquidation events are procedurally generated around synthetic positions via a local heartbeat — no live Creditcoin 0x0FD2 liquidation feed exists."
+        />
+        <span className="font-mono">
+          Radar sweeps + liquidation broadcasts are locally simulated; there is no real 0x0FD2 liquidation websocket feed.
+        </span>
+      </div>
+
       {/* 1. Top API Endpoint & Connection Header */}
       <div className="p-3.5 rounded-2xl bg-black/70 border border-cyan-500/20 backdrop-blur-xl space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2.5">

@@ -11,14 +11,17 @@ interface BorrowModalProps {
 
 const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
   const { addToast } = useToast();
-  const { score, maxBorrowLimit, borrow } = useProtocol();
+  const { score, maxBorrowLimit, borrow, dataSource, borrowApr, collateralRatioBps } = useProtocol();
   const [amount, setAmount] = useState('1500');
   const [collateralAsset, setCollateralAsset] = useState('ETH');
   const [loading, setLoading] = useState(false);
 
-  // Interest rate discount calculated from CTS score
-  const interestRate = Math.max(3.2, 12.5 - (score / 1000) * 8.5).toFixed(2);
-  const collateralRatio = score > 750 ? '110%' : score > 600 ? '125%' : '140%';
+  // Interest rate from the live engine APR when on-chain; score-discounted demo estimate otherwise.
+  const computedApr = Math.max(3.2, 12.5 - (score / 1000) * 8.5).toFixed(2);
+  const interestRate = dataSource === 'chain' && borrowApr !== '—' ? borrowApr : computedApr;
+  const collateralRatio = dataSource === 'chain' && collateralRatioBps > 0
+    ? `${(collateralRatioBps / 100).toFixed(0)}%`
+    : score > 750 ? '110%' : score > 600 ? '125%' : '140%';
 
   const handleBorrow = () => {
     const val = parseFloat(amount);
@@ -32,14 +35,22 @@ const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
     }
 
     setLoading(true);
-    addToast('info', 'Underwriting Loan', `Evaluating CTS score (${score}) with OCCR algorithmic parameters...`);
 
-    setTimeout(() => {
+    if (dataSource === 'chain') {
+      addToast('info', 'Borrowing On-Chain', `Borrowing $${val.toLocaleString()} cUSD from the pool on Creditcoin testnet...`);
       borrow(val, `${val * 1.15} ${collateralAsset}`);
-      setLoading(false);
-      addToast('success', 'Credit Disbursed', `Loan position for $${val.toLocaleString()} USDC activated at ${interestRate}% APR.`);
-      onClose();
-    }, 1500);
+      setTimeout(() => {
+        setLoading(false);
+        onClose();
+      }, 400);
+      return;
+    }
+
+    addToast('info', 'Demo Borrow', 'This borrow request is simulated locally — connect a wallet to borrow real cUSD.');
+    borrow(val, `${val * 1.15} ${collateralAsset}`);
+    addToast('success', 'Demo Borrow Originated', `$${val.toLocaleString()} cUSD loan simulated at ${interestRate}% APR (demo).`);
+    setLoading(false);
+    onClose();
   };
 
   return (
@@ -97,7 +108,7 @@ const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
         <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl space-y-1.5">
           <div className="flex justify-between text-white/60">
             <span>Interest Rate (APR)</span>
-            <span className="text-emerald-400 font-mono font-semibold">{interestRate}% (Score Discounted)</span>
+            <span className="text-emerald-400 font-mono font-semibold">{interestRate} {dataSource === 'chain' ? '(Live Engine Rate)' : 'APR (Score Discounted)'}</span>
           </div>
           <div className="flex justify-between text-white/60">
             <span>Origination Fee</span>

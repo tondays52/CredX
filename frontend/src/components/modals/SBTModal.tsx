@@ -16,14 +16,12 @@ const SBTModal: React.FC<SBTModalProps> = ({ isOpen, onClose }) => {
 
   const handleMint = () => {
     setLoading(true);
-    addToast('info', 'Minting Soulbound Passport', 'Generating non-transferable ERC-5192 credentials on Creditcoin...');
-
-    setTimeout(() => {
-      mintSBT();
+    mintSBT();
+    const closeTimer = setTimeout(() => {
       setLoading(false);
-      addToast('fanfare', 'Soulbound Token Minted!', `ERC-5192 SBT Sovereign Passport Token #4928 successfully bound to your wallet address.`);
       onClose();
-    }, 1800);
+    }, 1200);
+    return () => clearTimeout(closeTimer);
   };
 
   return (
@@ -44,16 +42,19 @@ const SBTModal: React.FC<SBTModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl space-y-2">
-          <div className="text-white font-semibold text-xs">Included Passport Attestations</div>
+          <div className="text-white font-semibold text-xs">What the SBT Actually Proves</div>
           <div className="space-y-1.5 text-white/70 text-[11px]">
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Zero-Knowledge KYC Proof (ID0x Verified)
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> "My address has CTS ≥ {score >= 780 ? 780 : score >= 650 ? 650 : score >= 500 ? 500 : 300}" — tier threshold only
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Multi-Chain DeFi Credit Track Record (3+ yrs)
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Canonical block of attestation (immune to re-orgs)
             </div>
             <div className="flex items-center gap-2">
-              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Verified Virtual Node Telemetry Signature
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Privacy commitment hash — exact score never revealed on-chain
+            </div>
+            <div className="flex items-center gap-2">
+              <CheckCircle className="w-3.5 h-3.5 text-emerald-400" /> Soulbound: non-transferable (transfers/approvals permanently disabled)
             </div>
           </div>
         </div>

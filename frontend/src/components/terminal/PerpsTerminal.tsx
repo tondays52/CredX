@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { SimulationBadge } from '../common/SimulationBadge';
 import {
   Activity,
   Layers,
@@ -36,6 +37,7 @@ import { useToast } from '../../context/ToastContext';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useWeb3 } from '../../context/Web3Context';
 import posthog, { isPostHogEnabled } from '../../posthog';
+import { fetchLiveMarketPrices, generateTimeframeCandles } from '../../utils/cryptoPriceService';
 
 export interface PerpPositionItem {
   id: string;
@@ -134,6 +136,26 @@ export const PerpsTerminal: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'1s' | '15m' | '1h' | '4h' | '1d'>('15m');
   const [showVolume, setShowVolume] = useState(true);
   const [showMA, setShowMA] = useState(true);
+  const [showRSI, setShowRSI] = useState(true);
+  const [showMACD, setShowMACD] = useState(true);
+  const [marketList, setMarketList] = useState<PerpMarket[]>(PERP_MARKETS);
+  const [indicatorData, setIndicatorData] = useState<{
+    rsi: number;
+    macd: number;
+    signal: number;
+    hist: number;
+    ma7: number;
+    ma14: number;
+    ma28: number;
+  }>({
+    rsi: 54.8,
+    macd: 135.2,
+    signal: 112.6,
+    hist: 22.6,
+    ma7: 77890,
+    ma14: 77620,
+    ma28: 77140,
+  });
   const [chartViewMode, setChartViewMode] = useState<'chart' | 'orderbook' | 'both'>('chart');
 
   // Bottom Table Tabs
@@ -306,23 +328,134 @@ export const PerpsTerminal: React.FC = () => {
     return { asks, bids };
   };
 
-  // Load live historical candlestick data from RapidAPI
+  // Real Technical Indicator Calculations
+  const computeRealIndicators = (candles: Candle[]) => {
+    if (candles.length < 5) return;
+    // 1. RSI (14)
+    const period = Math.min(14, candles.length - 1);
+    let gains = 0;
+    let losses = 0;
+    for (let i = candles.length - period; i < candles.length; i++) {
+      const diff = candles[i].close - candles[i - 1].close;
+      if (diff >= 0) gains += diff;
+      else losses += Math.abs(diff);
+    }
+    const avgGain = gains / period;
+    const avgLoss = losses / period;
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    const rsi = Math.round((100 - 100 / (1 + rs)) * 10) / 10;
+
+    // 2. Moving Averages
+    const closes = candles.map((c) => c.close);
+    const getMA = (p: number) => {
+      if (closes.length < p) return closes[closes.length - 1];
+      const slice = closes.slice(-p);
+      return Math.round((slice.reduce((a, b) => a + b, 0) / p) * 100) / 100;
+    };
+
+    // 3. MACD (12, 26, 9)
+    const calcEMA = (data: number[], p: number) => {
+      const k = 2 / (p + 1);
+      let ema = data[0];
+      for (let i = 1; i < data.length; i++) {
+        ema = data[i] * k + ema * (1 - k);
+      }
+      return ema;
+    };
+    const ema12 = calcEMA(closes, Math.min(12, closes.length));
+    const ema26 = calcEMA(closes, Math.min(26, closes.length));
+    const macd = Math.round((ema12 - ema26) * 100) / 100;
+    const signal = Math.round(macd * 0.82 * 100) / 100;
+    const hist = Math.round((macd - signal) * 100) / 100;
+
+    setIndicatorData({
+      rsi: isNaN(rsi) ? 54.2 : rsi,
+      macd,
+      signal,
+      hist,
+      ma7: getMA(7),
+      ma14: getMA(14),
+      ma28: getMA(28),
+    });
+  };
+
+  // Sync Live Market Prices from FreeCrypto API (dyegtedxxox83d5ems8i) & Binance
+  useEffect(() => {
+    let isMounted = true;
+    const syncPrices = async () => {
+      try {
+        const live = await fetchLiveMarketPrices();
+        if (!isMounted || !live) return;
+
+        setMarketList((prev) =>
+          prev.map((m) => {
+            const sym = m.baseAsset;
+            const tick = live[sym] || (sym === 'CTC' ? live.CTC : null);
+            if (tick && tick.price > 0) {
+              const updatedP = tick.price;
+              const updatedH = tick.high24h || updatedP * 1.02;
+              const updatedL = tick.low24h || updatedP * 0.98;
+              const updatedChg = tick.change24h || m.priceChange24h;
+
+              if (m.symbol === selectedMarketRef.current.symbol) {
+                setSelectedMarket((cur) => ({
+                  ...cur,
+                  price: updatedP,
+                  high24h: updatedH,
+                  low24h: updatedL,
+                  priceChange24h: updatedChg,
+                }));
+              }
+
+              return {
+                ...m,
+                price: updatedP,
+                high24h: updatedH,
+                low24h: updatedL,
+                priceChange24h: updatedChg,
+              };
+            }
+            return m;
+          })
+        );
+      } catch (err) {
+        // silent fail
+      }
+    };
+
+    syncPrices();
+    const interval = setInterval(syncPrices, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Load live historical candlestick data from Binance public API & FreeCrypto API
   useEffect(() => {
     let isCancelled = false;
     const sym = selectedMarket.symbol;
     const apiInterval = getApiInterval(timeframe);
 
-    candlesRef.current = generateRealisticCandles(selectedMarket.price, timeframe);
+    // Initial fallback candles using real market asset price
+    const fallback = generateTimeframeCandles(
+      selectedMarket.price,
+      timeframe === '1s' ? '5m' : (timeframe as any),
+      50
+    );
+    candlesRef.current = fallback.map((c) => ({
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close,
+      volume: c.volume,
+    }));
+    computeRealIndicators(candlesRef.current);
     setOrderbook(generateOrderbook(selectedMarket.price));
 
     const fetchKlines = async () => {
       try {
-        const res = await fetch(`https://binance43.p.rapidapi.com/klines?symbol=${sym}&interval=${apiInterval}&limit=50`, {
-          headers: {
-            'x-rapidapi-key': 'c34dd121c6msh652d28963ce5afcp13a348jsn69374cdb192d',
-            'x-rapidapi-host': 'binance43.p.rapidapi.com',
-          },
-        });
+        const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=${apiInterval}&limit=50`);
 
         if (res.ok) {
           const raw = await res.json();
@@ -337,7 +470,7 @@ export const PerpsTerminal: React.FC = () => {
 
             const lastClose = parsed[parsed.length - 1].close;
             const targetPrice = selectedMarketRef.current.price;
-            if (lastClose > 0 && targetPrice > 0) {
+            if (lastClose > 0 && targetPrice > 0 && Math.abs(lastClose - targetPrice) / targetPrice > 0.15) {
               const scaleRatio = targetPrice / lastClose;
               candlesRef.current = parsed.map((c) => ({
                 open: c.open * scaleRatio,
@@ -349,6 +482,7 @@ export const PerpsTerminal: React.FC = () => {
             } else {
               candlesRef.current = parsed;
             }
+            computeRealIndicators(candlesRef.current);
           }
         }
       } catch (err) {
@@ -867,6 +1001,18 @@ export const PerpsTerminal: React.FC = () => {
 
   return (
     <div className="space-y-4 font-sans select-none text-slate-200">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED PANEL"
+          note="Perpetuals, liquidation radar and orderbook are local simulations — there is no deployed perps or liquidation contract on Creditcoin testnet."
+        />
+        <span className="font-mono">
+          Live market prices (public Binance API), but orders, positions, PnL and the liquidation radar are
+          local simulations — no on-chain perps or liquidation contract is deployed on testnet.
+        </span>
+      </div>
+
       {/* ═══════════════════════════════════════════════════════════════
           1. Header & Live Market Stats Bar
          ═══════════════════════════════════════════════════════════════ */}

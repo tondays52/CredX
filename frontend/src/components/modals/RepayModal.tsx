@@ -13,20 +13,22 @@ interface RepayModalProps {
 
 const RepayModal: React.FC<RepayModalProps> = ({ isOpen, onClose, loan }) => {
   const { addToast } = useToast();
-  const { repay } = useProtocol();
+  const { repay, dataSource } = useProtocol();
   const [loading, setLoading] = useState(false);
 
   const handleRepay = () => {
     if (!loan) return;
     setLoading(true);
-    addToast('info', 'Submitting Repayment', `Settling $${loan.amount.toLocaleString()} USDC position on Creditcoin...`);
-
+    if (dataSource === 'chain') {
+      addToast('info', 'Submitting Repayment', `Settling $${loan.amount.toLocaleString()} cUSD position on Creditcoin testnet...`);
+    } else {
+      addToast('info', 'Demo Repayment', 'This repayment will be simulated locally — connect a wallet to settle the real on-chain loan.');
+    }
+    repay(loan.id);
     setTimeout(() => {
-      repay(loan.id);
       setLoading(false);
-      addToast('fanfare', 'Debt Retired & CTS Boosted!', `Repayment finalized. CTS Score increased +12 pts for on-time settlement.`);
       onClose();
-    }, 1500);
+    }, 300);
   };
 
   return (
@@ -48,7 +50,7 @@ const RepayModal: React.FC<RepayModalProps> = ({ isOpen, onClose, loan }) => {
             <Sparkles className="w-4 h-4" /> Reputation Reward Incentive
           </div>
           <p className="text-[11px] text-white/70">
-            Repaying this loan settles your on-chain debt obligation and submits an audited credit receipt (0x0FD2) to Creditcoin, granting <strong className="text-emerald-400">+12 CTS points</strong>.
+            Settling this loan on-chain records your repayment in the lending pool and auto-refunds excess collateral. Score updates come from verified proofs, not the repayment itself.
           </p>
         </div>
 

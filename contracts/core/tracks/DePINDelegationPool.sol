@@ -29,6 +29,7 @@ contract DePINDelegationPool {
 
     event Deposited(address indexed user, uint256 amount);
     event Delegated(address indexed user, address indexed node, uint256 amount);
+    event Undelegated(address indexed user, address indexed node, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
 
     constructor(address _credXHub, address _delegationToken) {
@@ -80,5 +81,25 @@ contract DePINDelegationPool {
         userDeposits[msg.sender] -= amount;
         DELEGATION_TOKEN.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @notice Undelegates capital from a node so delegated deposits are recoverable.
+     */
+    function undelegateFromNode(address node, uint256 amount) external {
+        if (node == address(0)) {
+            revert ZeroAddress();
+        }
+        if (amount == 0) {
+            revert ZeroAmount();
+        }
+        if (nodeDelegations[node] < amount) {
+            revert InsufficientDeposit();
+        }
+
+        nodeDelegations[node] -= amount;
+        userDeposits[msg.sender] += amount;
+
+        emit Undelegated(msg.sender, node, amount);
     }
 }

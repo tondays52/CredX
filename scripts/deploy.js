@@ -24,7 +24,10 @@ async function main() {
   if (isCreditcoinNetwork && !process.env.FORCE_MOCK_ORACLE) {
     const rawAddress = process.env.ATTESTCOIN_PRECOMPILE || "0x0000000000000000000000000000000000000FD2";
     oracleAddress = ethers.getAddress(rawAddress);
-    console.log(`\n1. Using Native Creditcoin Attestcoin Precompile at: ${oracleAddress}`);
+    console.log(`\n1. Attestation verifier address set to: ${oracleAddress}`);
+    console.log("   NOTE: tooling-only repoint. 0x0FD2 is Creditcoin's BlockProver precompile (USC SDK");
+    console.log("   ABI), not the IAttestationVerifier.EventProof ABI — adopt the USC interface before");
+    console.log("   using this address in production. Deployments default to the mock harness above.");
   } else {
     console.log("\n1. Deploying MockAttestationOracle (Simulating Creditcoin Precompile 0x0FD2)...");
     const MockAttestationOracle = await ethers.getContractFactory("MockAttestationOracle");
@@ -127,11 +130,24 @@ async function main() {
   await rwaFund.waitForDeployment();
   const rwaFundAddress = await rwaFund.getAddress();
 
+  const RWAInvoiceFinancing = await ethers.getContractFactory("RWAInvoiceFinancing");
+  const rwaInvoices = await RWAInvoiceFinancing.deploy(credXHubAddress, cUSDAddress);
+  await rwaInvoices.waitForDeployment();
+  const rwaInvoicesAddress = await rwaInvoices.getAddress();
+
   // Track 3: Gaming
   const GamingEcosystemHub = await ethers.getContractFactory("GamingEcosystemHub");
   const gamingHub = await GamingEcosystemHub.deploy(credXHubAddress, gameTokenAddress, gameNFTAddress);
   await gamingHub.waitForDeployment();
   const gamingHubAddress = await gamingHub.getAddress();
+
+  // Mock game tokens/NFTs are Ownable (deployer is owner). The hub must own
+  // them for gatherResources()/openLootbox() to mint on behalf of players.
+  const gameTokenOwnership = await gameToken.transferOwnership(gamingHubAddress);
+  await gameTokenOwnership.wait();
+  const gameNFTOwnership = await gameNFT.transferOwnership(gamingHubAddress);
+  await gameNFTOwnership.wait();
+  console.log("   🔑 Transferred gameToken & gameNFT ownership to GamingEcosystemHub (enables on-chain gather/lootbox mints)");
 
   // Track 4: DePIN
   const DePINInfrastructureHub = await ethers.getContractFactory("DePINInfrastructureHub");
@@ -152,7 +168,7 @@ async function main() {
   const arenaAddress = await arena.getAddress();
 
   console.log("   ✅ Track 1: DeFi Hubs (AMM, FlashLoan, YieldVault) deployed.");
-  console.log("   ✅ Track 2: RWA Treasury Yield Fund (tbUSD) deployed.");
+  console.log("   ✅ Track 2: RWA Treasury Yield Fund (tbUSD) + Invoice Financing deployed.");
   console.log("   ✅ Track 3: Gaming Ecosystem Hub deployed.");
   console.log("   ✅ Track 4: DePIN Infrastructure Hub deployed.");
   console.log("   ✅ Track 5: Autonomous AI Hub deployed.");
@@ -175,11 +191,14 @@ async function main() {
       ReputationFlashLoan: flashLoanAddress,
       ReputationYieldVault: yieldVaultAddress,
       RWATreasuryYieldFund: rwaFundAddress,
+      RWAInvoiceFinancing: rwaInvoicesAddress,
       GamingEcosystemHub: gamingHubAddress,
       DePINInfrastructureHub: depinHubAddress,
       AutonomousAIHub: aiHubAddress,
       ReputationArena: arenaAddress
-    }
+    },
+    verifierMode: isCreditcoinNetwork && !process.env.FORCE_MOCK_ORACLE ? "attestcoin-precompile" : "mock-harness",
+    notes: "AttestationVerifier on this deployment is the MockAttestationOracle (always-pass testnet harness standing in for Creditcoin's BlockProver precompile 0x0FD2). The ATTESTCOIN_PRECOMPILE repoint is tooling-only: 0x0FD2 uses the USC SDK BlockProver ABI, not IAttestationVerifier.EventProof — adopt that interface before pointing at it in production."
   };
 
   try {

@@ -79,6 +79,16 @@ import {
   AlertTriangle,
   X
 } from 'lucide-react';
+import SimulationBadge from '../common/SimulationBadge';
+import {
+  fetchDePINState,
+  fetchBorrowerProfile,
+  depinDelegateStake,
+  depinUndelegateStake,
+  requestHardwareLoan,
+  repayHardwareLoan,
+  txHashShort
+} from '../../services/credXService';
 
 export type DePINSector = 'pulse' | 'nodle' | 'geodnet' | 'bittensor' | 'staking';
 export type PulseSubTab = 'dashboard' | 'wallet' | 'allocation' | 'rewards';
@@ -189,6 +199,13 @@ const DePINTab: React.FC = () => {
   const [delegating, setDelegating] = useState(false);
   const [stakeAmount, setStakeAmount] = useState('500');
   const [pulseStakeInput, setPulseStakeInput] = useState('100');
+  const [undelegating, setUndelegating] = useState(false);
+  const [requestingLoan, setRequestingLoan] = useState(false);
+  const [repayingLoan, setRepayingLoan] = useState(false);
+  const [loadingDePIN, setLoadingDePIN] = useState(false);
+  const [loanInput, setLoanInput] = useState('1000');
+  const [depinState, setDepinState] = useState<Awaited<ReturnType<typeof fetchDePINState>>>(null);
+  const [delegationAmount, setDelegationAmount] = useState<number | null>(null);
 
   // CredX GeoOrbit Local State
   const [orbitSubTab, setOrbitSubTab] = useState<'explorer' | 'coverage' | 'hardware' | 'tokenomics'>('explorer');
@@ -217,7 +234,7 @@ const DePINTab: React.FC = () => {
 
   // Notifications drawer state
   const [activeNotifications, setActiveNotifications] = useState([
-    { id: 1, title: 'Epoch 0 Merkle Batch Attested', desc: 'Block #289,104 verified on Creditcoin precompile 0x0FD2. +35 CTS recorded.', time: '3m ago', unread: true, type: 'chain' },
+    { id: 1, title: 'Demo: Packets Buffered Locally', desc: 'BLE packets held locally in this browser session (simulated). No on-chain Merkle batch was attested.', time: '3m ago', unread: true, type: 'chain' },
     { id: 2, title: 'New Beacon Witnessed', desc: 'Cargo BLE Tag #8492 witnessed in Hex 882a90714b7ffff. Signal RSSI: -62 dBm.', time: '14m ago', unread: true, type: 'ble' },
     { id: 3, title: 'NEXUS Rewards Accrued', desc: '0.1420 NEXUS ready to claim from edge routing operations.', time: '1h ago', unread: false, type: 'reward' },
     { id: 4, title: 'CTS Reputation Multiplier', desc: 'Creditcoin Trust Score at 850 granting 1.65x frontier packet attestation bonus.', time: '3h ago', unread: false, type: 'score' },
@@ -415,21 +432,160 @@ const DePINTab: React.FC = () => {
     setGpuModalOpen(true);
   };
 
-  const handleDelegateStake = () => {
+  const DEPIN_SAMPLE_OPERATOR = '0x3b48b8f2C3CFc8b2BC4cFF0aE97b9b7B2c15E0d1';
+
+  const reloadDePINState = async () => {
+    if (!address) {
+      setDepinState(null);
+      setDelegationAmount(null);
+      return;
+    }
+    setLoadingDePIN(true);
+    try {
+      const [own, delegated] = await Promise.all([
+        fetchDePINState(address, null),
+        fetchDePINState(address, DEPIN_SAMPLE_OPERATOR),
+      ]);
+      setDepinState(own);
+      setDelegationAmount(delegated ? delegated.delegationAmount : null);
+    } finally {
+      setLoadingDePIN(false);
+    }
+  };
+
+  useEffect(() => {
+    reloadDePINState();
+  }, [address]);
+
+  const depinSymbol = depinState?.depinToken?.symbol || 'DEPIN';
+
+  const handleDelegateStake = async () => {
+    if (!isConnected) {
+      addToast('error', 'Connect Wallet', 'Connect your wallet to delegate DEPIN stake.');
+      return;
+    }
     const num = parseFloat(stakeAmount);
-    if (isNaN(num) || num <= 0 || num > userWalletCTC) {
-      addToast('error', 'Invalid Stake Amount', `Please enter a valid amount up to ${userWalletCTC.toLocaleString()} CTC.`);
+    if (isNaN(num) || num <= 0) {
+      addToast('error', 'Invalid Stake Amount', `Enter a valid ${depinSymbol} amount.`);
+      return;
+    }
+    if (depinState && num > depinState.depinBalance) {
+      addToast('error', 'Insufficient Balance', `Please enter an amount up to your ${depinState.depinToken.symbol} balance.`);
       return;
     }
     setDelegating(true);
-    addToast('info', 'DePIN Delegation', `Broadcasting stake of ${num.toLocaleString()} CTC to Creditcoin DePIN Node #004...`);
-    setTimeout(() => {
-      setDelegating(false);
-      if (isPostHogEnabled) {
-        posthog.capture('depin_stake_delegated', { amount: num });
+    try {
+      const profile = await fetchBorrowerProfile(DEPIN_SAMPLE_OPERATOR);
+      if (!profile || profile.creditScore < 700) {
+        addToast('error', 'Operator Not Eligible', 'Sample operator reliability is below 700 CTS (OperatorReliabilityTooLow) — delegation would revert on-chain.');
+        return;
       }
-      addToast('success', 'Delegation Active', `Successfully staked ${num.toLocaleString()} CTC at 19.4% APY. Daily rewards active!`);
-    }, 1500);
+      addToast('info', 'DePIN Delegation', `Approving DEPIN and staking ${num.toLocaleString()} ${depinSymbol} to the sample operator...`);
+      const hash = await depinDelegateStake(DEPIN_SAMPLE_OPERATOR, num);
+      addToast('success', 'Delegation Active', `Delegated ${num.toLocaleString()} ${depinSymbol}. Tx: ${txHashShort(hash)}`);
+      if (isPostHogEnabled) posthog.capture('depin_stake_delegated', { amount: num });
+      await reloadDePINState();
+    } catch (err: any) {
+      const msg = err?.reason || err?.message || 'Transaction rejected.';
+      if (msg.includes('OperatorReliabilityTooLow')) {
+        addToast('error', 'Operator Not Eligible', 'Operator score below 700 — delegation rejected on-chain.');
+      } else {
+        addToast('error', 'Delegation Failed', msg);
+      }
+    } finally {
+      setDelegating(false);
+    }
+  };
+
+  const handleUndelegateStake = async () => {
+    if (!isConnected) {
+      addToast('error', 'Connect Wallet', 'Connect your wallet to undelegate DEPIN stake.');
+      return;
+    }
+    const num = parseFloat(stakeAmount);
+    if (isNaN(num) || num <= 0 || delegationAmount == null || num > delegationAmount) {
+      addToast('error', 'Invalid Undelegate Amount', `Enter a valid amount up to your delegated ${depinSymbol} stake.`);
+      return;
+    }
+    setUndelegating(true);
+    try {
+      addToast('info', 'DePIN Undelegation', `Returning ${num.toLocaleString()} ${depinSymbol} from the sample operator...`);
+      const hash = await depinUndelegateStake(DEPIN_SAMPLE_OPERATOR, num);
+      addToast('success', 'Undelegated', `Stake ${num.toLocaleString()} ${depinSymbol} returned. Tx: ${txHashShort(hash)}`);
+      if (isPostHogEnabled) posthog.capture('depin_stake_undelegated', { amount: num });
+      await reloadDePINState();
+    } catch (err: any) {
+      const msg = err?.reason || err?.message || 'Transaction rejected.';
+      addToast('error', 'Undelegation Failed', msg);
+    } finally {
+      setUndelegating(false);
+    }
+  };
+
+  const handleRequestLoan = async () => {
+    if (!isConnected) {
+      addToast('error', 'Connect Wallet', 'Connect your wallet to request hardware financing.');
+      return;
+    }
+    const amt = parseFloat(loanInput);
+    if (isNaN(amt) || amt <= 0) {
+      addToast('error', 'Invalid Amount', `Enter a valid ${depinSymbol} loan amount.`);
+      return;
+    }
+    if (depinState && amt > depinState.maxHardwareLoanAmount) {
+      addToast('error', 'Amount Exceeds Max Loan', `Max hardware loan is ${depinState.maxHardwareLoanAmount.toLocaleString()} ${depinSymbol}.`);
+      return;
+    }
+    if (depinState && depinState.loanAmount > 0) {
+      addToast('error', 'Loan Active', 'Repay your existing hardware loan first.');
+      return;
+    }
+    setRequestingLoan(true);
+    try {
+      const profile = await fetchBorrowerProfile(address);
+      if (!profile || profile.creditScore < 750) {
+        addToast('error', 'Insufficient Score', 'Hardware loans require caller score >= 750 CTS (InsufficientScoreForLoan).');
+        return;
+      }
+      addToast('info', 'Hardware Loan', `Issuing ${amt.toLocaleString()} ${depinSymbol} hardware financing line...`);
+      const hash = await requestHardwareLoan(amt);
+      addToast('success', 'Loan Issued', `Hardware loan of ${amt.toLocaleString()} ${depinSymbol} issued. Tx: ${txHashShort(hash)}`);
+      if (isPostHogEnabled) posthog.capture('depin_loan_requested', { amount: amt });
+      await reloadDePINState();
+    } catch (err: any) {
+      const msg = err?.reason || err?.message || 'Transaction rejected.';
+      if (msg.includes('InsufficientScoreForLoan')) addToast('error', 'Score Too Low', 'Caller score below 750 — loan rejected on-chain.');
+      else if (msg.includes('AmountExceedsMaxLoan')) addToast('error', 'Max Loan Exceeded', 'Amount above the max hardware loan cap.');
+      else if (msg.includes('NoActiveHardwareLoan')) addToast('error', 'Loan Already Active', 'Repay the existing hardware loan first.');
+      else if (msg.includes('InsufficientLiquidity')) addToast('error', 'No Liquidity', 'The hub pool lacks sufficient DEPIN liquidity.');
+      else addToast('error', 'Loan Failed', msg);
+    } finally {
+      setRequestingLoan(false);
+    }
+  };
+
+  const handleRepayLoan = async () => {
+    if (!isConnected) {
+      addToast('error', 'Connect Wallet', 'Connect your wallet to repay hardware financing.');
+      return;
+    }
+    if (!depinState || depinState.loanAmount <= 0) {
+      addToast('error', 'No Loan', 'No active hardware loan to repay.');
+      return;
+    }
+    setRepayingLoan(true);
+    try {
+      addToast('info', 'Hardware Loan', `Repaying ${depinState.loanAmount.toLocaleString()} ${depinSymbol} to close the loan...`);
+      const hash = await repayHardwareLoan(depinState.loanAmount);
+      addToast('success', 'Loan Repaid', `Hardware loan fully repaid. Tx: ${txHashShort(hash)}`);
+      if (isPostHogEnabled) posthog.capture('depin_loan_repaid', { amount: depinState.loanAmount });
+      await reloadDePINState();
+    } catch (err: any) {
+      const msg = err?.reason || err?.message || 'Transaction rejected.';
+      addToast('error', 'Repay Failed', msg);
+    } finally {
+      setRepayingLoan(false);
+    }
   };
 
   const handleStakePulse = () => {
@@ -515,7 +671,7 @@ const DePINTab: React.FC = () => {
 
           <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 font-bold flex items-center gap-1.5">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>0x0FD2 Attestcoin Connected</span>
+            <span>Attestcoin Gateway (Simulated)</span>
           </div>
 
           <button
@@ -1301,7 +1457,7 @@ const DePINTab: React.FC = () => {
 
                     <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>Real device telemetry actively attested to Creditcoin L1</span>
+                      <span>Device telemetry displayed locally (SIMULATED — not yet attested to Creditcoin L1 in this panel)</span>
                     </div>
                   </div>
 
@@ -2762,40 +2918,166 @@ const DePINTab: React.FC = () => {
       {/* SECTOR 5: VALIDATOR HUB STAKING                                           */}
       {/* ========================================================================= */}
       {activeSector === 'staking' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Quick Stake Card */}
-          <GlassCard className="lg:col-span-5 p-6 space-y-4 flex flex-col justify-between">
-            <div className="space-y-3">
+        <div className="space-y-6">
+          {/* DePIN Delegation Card */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <GlassCard className="lg:col-span-5 p-6 space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Stake {depinSymbol} to DePIN Fleet</h3>
+                  <button
+                    onClick={reloadDePINState}
+                    disabled={loadingDePIN}
+                    className="text-[11px] text-emerald-400 hover:underline font-mono flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${loadingDePIN ? 'animate-spin' : ''}`} /> Refresh
+                  </button>
+                </div>
+                <p className="text-xs text-white/50 leading-relaxed">
+                  Stake your {depinSymbol} balance into DePINInfrastructureHub to underwrite physical satellite hubs. Delegation requires an operator with reliability score {'>='} 700 CTS.
+                </p>
+
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] font-mono text-xs space-y-1">
+                    <span className="text-white/40 text-[10px] uppercase block">Your {depinSymbol} Balance</span>
+                    <span className="text-emerald-400 font-bold">{depinState ? `${depinState.depinBalance.toLocaleString()} ${depinSymbol}` : '--'}</span>
+                  </div>
+                  <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] font-mono text-xs space-y-1">
+                    <span className="text-white/40 text-[10px] uppercase block">Delegated to Sample Operator</span>
+                    <span className="text-white font-bold">{delegationAmount != null ? `${delegationAmount.toLocaleString()} ${depinSymbol}` : '--'}</span>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl font-mono text-xs space-y-1">
+                  <span className="text-white/40 text-[10px] uppercase block">Sample Operator Address</span>
+                  <span className="text-cyan-400 font-bold text-[11px] break-all">{DEPIN_SAMPLE_OPERATOR}</span>
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-white/60">Stake Amount ({depinSymbol})</span>
+                    <span className="text-cyan-400 font-mono">Available: {depinState ? depinState.depinBalance.toLocaleString() : '--'} {depinSymbol}</span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={stakeAmount}
+                      onChange={(e) => setStakeAmount(e.target.value)}
+                      className="w-full bg-black/40 border border-white/[0.08] focus:border-emerald-500/60 rounded-xl px-4 py-3 text-white font-mono text-sm outline-none transition"
+                      placeholder="500"
+                    />
+                    <div className="absolute right-2 top-2 flex items-center gap-1">
+                      <button
+                        onClick={() => setStakeAmount(depinState ? (depinState.depinBalance * 0.5).toFixed(0) : '0')}
+                        className="px-2 py-1 rounded bg-white/[0.04] hover:bg-white/[0.08] text-[10px] font-mono text-white/70"
+                      >
+                        50%
+                      </button>
+                      <button
+                        onClick={() => setStakeAmount(depinState ? depinState.depinBalance.toFixed(0) : '0')}
+                        className="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-[10px] font-mono text-emerald-300 font-bold"
+                      >
+                        MAX
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl text-xs space-y-1.5 font-mono">
+                  <div className="flex justify-between text-white/60">
+                    <span>Operator Gate</span>
+                    <span className="text-cyan-400 font-bold">{'>='} 700 CTS (on-chain check)</span>
+                  </div>
+                  <div className="flex justify-between text-white/60">
+                    <span>Stake Asset</span>
+                    <span className="text-white font-bold">{depinSymbol} (DEPIN_TOKEN)</span>
+                  </div>
+                  <div className="flex justify-between text-white/60">
+                    <span>Node</span>
+                    <span className="text-white font-bold">Sample Operator (fixed address)</span>
+                  </div>
+                  <div className="flex justify-between text-white/60">
+                    <span>Undelegate</span>
+                    <span className="text-emerald-400 font-bold">Liquid via undelegateStake</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={handleDelegateStake}
+                  disabled={delegating || !isConnected}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  {delegating ? 'Delegating...' : `Delegate ${stakeAmount || '0'} ${depinSymbol}`}
+                </button>
+                <button
+                  onClick={handleUndelegateStake}
+                  disabled={undelegating || !isConnected || delegationAmount == null || delegationAmount <= 0}
+                  className="w-full py-3 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs transition flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <ArrowDownRight className="w-4 h-4 text-emerald-400" />
+                  {undelegating ? 'Undelegating...' : 'Undelegate'}
+                </button>
+              </div>
+            </GlassCard>
+
+            {/* DePIN Hardware Financing Card */}
+            <GlassCard className="lg:col-span-7 p-6 space-y-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Stake CTC to DePIN Fleet</h3>
-                <span className="text-xs font-mono text-emerald-400">19.4% Base APY</span>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">DePIN Hardware Financing</h3>
+                <span className="text-[10px] font-mono text-white/40">CHAIN ID: 102031</span>
               </div>
               <p className="text-xs text-white/50 leading-relaxed">
-                Stake your real wallet CTC to underwrite physical satellite hubs and receive continuous daily yield distributed every 24 hours.
+                Undercollateralized hardware loans from DePINInfrastructureHub for top-tier operators. Caller score must be {'>='} 750 CTS.
               </p>
 
-              <div className="space-y-2 pt-2">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+                <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] font-mono text-xs space-y-1">
+                  <span className="text-white/40 text-[10px] uppercase block">Max Hardware Loan</span>
+                  <span className="text-emerald-400 font-bold">{depinState ? `${depinState.maxHardwareLoanAmount.toLocaleString()} ${depinSymbol}` : '--'}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] font-mono text-xs space-y-1">
+                  <span className="text-white/40 text-[10px] uppercase block">Active Loan</span>
+                  <span className="text-white font-bold">{depinState && depinState.loanAmount > 0 ? `${depinState.loanAmount.toLocaleString()} ${depinSymbol}` : 'None'}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] font-mono text-xs space-y-1">
+                  <span className="text-white/40 text-[10px] uppercase block">Due Block</span>
+                  <span className="text-white font-bold">{depinState && depinState.loanAmount > 0 ? `#${depinState.loanDueBlock.toLocaleString()}` : '--'}</span>
+                </div>
+                <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] font-mono text-xs space-y-1">
+                  <span className="text-white/40 text-[10px] uppercase block">Loan Status</span>
+                  <span className={`font-bold ${depinState && depinState.loanAmount > 0 ? (depinState.loanDueBlock - depinState.currentBlock <= 0 ? 'text-red-400' : 'text-emerald-400') : 'text-white/40'}`}>
+                    {depinState && depinState.loanAmount > 0
+                      ? (depinState.loanDueBlock - depinState.currentBlock <= 0
+                        ? `OVERDUE ${Math.abs(depinState.loanDueBlock - depinState.currentBlock).toLocaleString()} blocks`
+                        : `${(depinState.loanDueBlock - depinState.currentBlock).toLocaleString()} blocks left`)
+                      : 'No active loan'}
+                  </span>
+                </div>
+              </div>
+
+              <div className="text-[10px] font-mono text-white/40">
+                Current block: {depinState ? `#${depinState.currentBlock.toLocaleString()}` : '--'} · Loan term: 216,000 blocks (~30 days)
+              </div>
+
+              <div className="space-y-2">
                 <div className="flex justify-between text-xs">
-                  <span className="text-white/60">Stake Amount (CTC)</span>
-                  <span className="text-cyan-400 font-mono">Available: {userWalletCTC.toLocaleString()} CTC</span>
+                  <span className="text-white/60">Loan Amount ({depinSymbol})</span>
+                  <span className="text-emerald-400 font-mono">Max: {depinState ? depinState.maxHardwareLoanAmount.toLocaleString() : '--'} {depinSymbol}</span>
                 </div>
                 <div className="relative">
                   <input
                     type="number"
-                    value={stakeAmount}
-                    onChange={(e) => setStakeAmount(e.target.value)}
+                    value={loanInput}
+                    onChange={(e) => setLoanInput(e.target.value)}
                     className="w-full bg-black/40 border border-white/[0.08] focus:border-emerald-500/60 rounded-xl px-4 py-3 text-white font-mono text-sm outline-none transition"
-                    placeholder="500"
+                    placeholder="1000"
                   />
                   <div className="absolute right-2 top-2 flex items-center gap-1">
                     <button
-                      onClick={() => setStakeAmount((userWalletCTC * 0.5).toFixed(0))}
-                      className="px-2 py-1 rounded bg-white/[0.04] hover:bg-white/[0.08] text-[10px] font-mono text-white/70"
-                    >
-                      50%
-                    </button>
-                    <button
-                      onClick={() => setStakeAmount(userWalletCTC.toString())}
+                      onClick={() => setLoanInput(depinState ? depinState.maxHardwareLoanAmount.toFixed(0) : '0')}
                       className="px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-[10px] font-mono text-emerald-300 font-bold"
                     >
                       MAX
@@ -2804,37 +3086,54 @@ const DePINTab: React.FC = () => {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  onClick={handleRequestLoan}
+                  disabled={requestingLoan || !isConnected || (depinState?.loanAmount ?? 0) > 0}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <ArrowDownRight className="w-4 h-4" />
+                  {requestingLoan ? 'Requesting...' : depinState && depinState.loanAmount > 0 ? 'Loan Active' : `Request Loan (${loanInput || '0'} ${depinSymbol})`}
+                </button>
+                <button
+                  onClick={handleRepayLoan}
+                  disabled={repayingLoan || !isConnected || !depinState || depinState.loanAmount <= 0}
+                  className="w-full py-3 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs transition flex items-center justify-center gap-2 disabled:opacity-40"
+                >
+                  <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                  {repayingLoan ? 'Repaying...' : 'Repay Loan'}
+                </button>
+              </div>
+
               <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl text-xs space-y-1.5 font-mono">
                 <div className="flex justify-between text-white/60">
-                  <span>Estimated Daily Yield</span>
-                  <span className="text-emerald-400 font-bold">+{(parseFloat(stakeAmount || '0') * 0.194 / 365).toFixed(3)} CTC/day</span>
+                  <span>Caller Gate</span>
+                  <span className="text-cyan-400 font-bold">{'>='} 750 CTS (on-chain check)</span>
                 </div>
                 <div className="flex justify-between text-white/60">
-                  <span>Lockup Duration</span>
-                  <span className="text-white font-bold">0 Days (Liquid Unstake)</span>
+                  <span>Loan Asset</span>
+                  <span className="text-white font-bold">{depinSymbol} (DEPIN_TOKEN)</span>
                 </div>
                 <div className="flex justify-between text-white/60">
-                  <span>CTS Score Addition</span>
-                  <span className="text-cyan-400 font-bold">+24 Rep Points</span>
+                  <span>Repayment</span>
+                  <span className="text-emerald-400 font-bold">Full balance via repayHardwareLoan</span>
+                </div>
+                <div className="flex justify-between text-white/60">
+                  <span>Allocation</span>
+                  <span className="text-white font-bold">Node hardware capex financing</span>
                 </div>
               </div>
-            </div>
+            </GlassCard>
+          </div>
 
-            <button
-              onClick={handleDelegateStake}
-              disabled={delegating}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-white font-bold text-xs shadow-lg shadow-emerald-500/25 transition flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <Sparkles className="w-4 h-4" />
-              {delegating ? 'Broadcasting Stake...' : `Stake ${stakeAmount || '0'} CTC Now`}
-            </button>
-          </GlassCard>
-
-          {/* Node Leaderboard */}
-          <GlassCard className="lg:col-span-7 p-6 space-y-4">
+          {/* Illustrative Node Directory (No Deployed Contract Mapping) */}
+          <GlassCard className="p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider">Top DePIN Validator Hubs</h3>
-              <span className="text-[10px] font-mono text-white/40">CHAIN ID: 102031</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-mono text-white/40">ILLUSTRATIVE DIRECTORY</span>
+                <SimulationBadge note="Illustrative validator directory — no live on-chain node state. Real delegation targets the sample operator address above." />
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -2850,22 +3149,16 @@ const DePINTab: React.FC = () => {
                     </div>
                     <div className="text-[11px] text-white/50 flex items-center gap-3">
                       <span>Uptime: <strong className="text-emerald-400 font-mono">{node.uptime}</strong></span>
-                      <span>Total Staked: <strong className="text-white font-mono">{node.stakedTotal}</strong></span>
+                      <span>Illustrative Stake: <strong className="text-white font-mono">{node.stakedTotal}</strong></span>
                       <span>Fee: <strong className="text-white/70 font-mono">{node.commission}</strong></span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3 shrink-0">
                     <div className="text-right">
-                      <span className="text-[10px] text-white/40 block">Est. APY</span>
+                      <span className="text-[10px] text-white/40 block">Est. APY (illustrative)</span>
                       <span className="text-sm font-bold font-mono text-emerald-400">{node.apy}</span>
                     </div>
-                    <button
-                      onClick={handleDelegateStake}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-400 font-medium text-xs transition"
-                    >
-                      Delegate
-                    </button>
                   </div>
                 </div>
               ))}
@@ -2979,7 +3272,7 @@ const DePINTab: React.FC = () => {
         isOpen={bellDrawerOpen}
         onClose={() => setBellDrawerOpen(false)}
         title="Nexus Edge Notifications"
-        subtitle="Live telemetry alerts & Creditcoin L1 attestations"
+        subtitle="Local telemetry notifications (SIMULATED — no Creditcoin L1 attestations in this panel)"
         maxWidth="max-w-lg"
         icon={
           <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
@@ -3143,7 +3436,7 @@ const DePINTab: React.FC = () => {
               </span>
             </div>
             <p className="text-white/80 leading-relaxed font-mono text-[11px]">
-              Discover and capture real-time telemetry from nearby IoT hardware (Smartwatches, Beacons, ColdChain sensors, Smart Meters) and cryptographically commit it to Creditcoin L1.
+              Discover and capture real-time telemetry from nearby IoT hardware (Smartwatches, Beacons, ColdChain sensors, Smart Meters) and display it locally (SIMULATED — nothing is committed to Creditcoin L1 in this panel).
             </p>
           </div>
 

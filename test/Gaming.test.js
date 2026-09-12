@@ -30,10 +30,10 @@ describe("GamingEcosystemHub", function () {
             DEFI_LOAN_REPAYMENT: 0
         };
 
-        // Boost Prime User to Score >= 750
-        for (let i = 0; i < 20; i++) {
+        // Boost Prime User to Score >= 750 (15 × $60k = $900k, under the $1M/day value cap)
+        for (let i = 0; i < 15; i++) {
             const proof = await buildMockEventProof(1, "tx-game1-" + primeUser.address + i);
-            await credXHub.connect(primeUser).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("200000"));
+            await credXHub.connect(primeUser).submitRepaymentProof(proof, ActionType.DEFI_LOAN_REPAYMENT, ethers.parseEther("60000"));
         }
 
         // Boost Standard User to Score >= 500 (but < 750)

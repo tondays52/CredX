@@ -11,6 +11,8 @@ contract MockERC20 {
     uint8 public decimals = 18;
     uint256 public totalSupply;
 
+    address public owner;
+
     mapping(address account => uint256 balance) public balanceOf;
     mapping(address owner => mapping(address spender => uint256 amount)) public allowance;
 
@@ -20,10 +22,17 @@ contract MockERC20 {
     error ZeroAddress();
     error InsufficientBalance();
     error InsufficientAllowance();
+    error OnlyOwner();
+
+    modifier onlyOwner() {
+        if (msg.sender != owner) revert OnlyOwner();
+        _;
+    }
 
     constructor(string memory _name, string memory _symbol) {
         name = _name;
         symbol = _symbol;
+        owner = msg.sender;
         _mint(msg.sender, 10_000_000 * 10**18); // Mint 10M initial supply to deployer
     }
 
@@ -56,7 +65,7 @@ contract MockERC20 {
         return true;
     }
 
-    function mint(address to, uint256 amount) external {
+    function mint(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
         _mint(to, amount);
     }

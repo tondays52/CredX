@@ -116,8 +116,8 @@ export const GamingTab: React.FC = () => {
                 <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-purple-500/30 text-purple-300">
                   ⚔️ Guild Win Rate: 78.4%
                 </span>
-                <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-emerald-500/30 text-emerald-400 font-bold">
-                  VRF Certified (0x0FD2)
+                <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-amber-500/30 text-amber-400 font-bold">
+                  Demo (local RNG)
                 </span>
               </div>
             </div>

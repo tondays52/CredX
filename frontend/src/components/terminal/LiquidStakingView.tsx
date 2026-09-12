@@ -33,6 +33,7 @@ import {
 import { useToast } from '../../context/ToastContext';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useWeb3 } from '../../context/Web3Context';
+import { SimulationBadge } from '../common/SimulationBadge';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 export interface StakingAsset {
@@ -1153,6 +1154,19 @@ export const LiquidStakingView: React.FC = () => {
 
   return (
     <div className="space-y-6 font-sans select-none text-slate-200">
+      {/* SIMULATED banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
+        <SimulationBadge
+          label="SIMULATED LIQUID STAKING"
+          note="stCTC mint, peg solvency and ledger are local simulations — no liquid staking contract is deployed on Creditcoin testnet."
+        />
+        <span className="font-mono">
+          Staking amounts, APYs, epoch counts and the peg-solvency ledger are locally simulated;
+          no liquid-staking contract exists on testnet. Global leaderboard rows are a static
+          DefiLlama-inspired dataset.
+        </span>
+      </div>
+
       {/* ═══════════════════════════════════════════════════════════════════
           HEADER: Master Status & Enterprise Sub-Navigation
          ═══════════════════════════════════════════════════════════════════ */}

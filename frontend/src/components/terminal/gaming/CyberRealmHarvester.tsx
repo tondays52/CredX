@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback } from 'react';
 import GlassCard from '../../common/GlassCard';
 import { useToast } from '../../../context/ToastContext';
 import { useProtocol } from '../../../context/ProtocolContext';
+import { useWeb3 } from '../../../context/Web3Context';
+import { fetchGamingState, gatherResources } from '../../../services/credXService';
 import {
   Gamepad2,
   Zap,
   Sparkles,
   Flame,
-  RotateCw,
   Award,
   Clock,
   Compass,
@@ -37,8 +38,12 @@ interface GridTile {
   isScanned?: boolean;
 }
 
+type GamingState = NonNullable<Awaited<ReturnType<typeof fetchGamingState>>>;
+const GATHER_COOLDOWN_BLOCKS = 7200;
+
 export const CyberRealmHarvester: React.FC = () => {
   const { score } = useProtocol();
+  const { isConnected, address } = useWeb3();
   const { addToast } = useToast();
 
   // Audio effects state
@@ -103,28 +108,37 @@ export const CyberRealmHarvester: React.FC = () => {
 
   // Player position on 5x5 grid (0 to 4)
   const [playerPos, setPlayerPos] = useState<{ x: number; y: number }>({ x: 2, y: 2 });
-  const [gatheredGameTokens, setGatheredGameTokens] = useState<number>(180);
+  const [gameState, setGameState] = useState<GamingState | null>(null);
   const [cyberCrystals, setCyberCrystals] = useState<number>(65);
   const [solarPlasma, setSolarPlasma] = useState<number>(24);
   const [darkOre, setDarkOre] = useState<number>(12);
   const [isHarvesting, setIsHarvesting] = useState<boolean>(false);
-  const [harvestCooldown, setHarvestCooldown] = useState<number>(0);
   const [droneBattery, setDroneBattery] = useState<number>(100);
   const [radarScanning, setRadarScanning] = useState<boolean>(false);
 
   // Harvesting history log
-  const [harvestLog, setHarvestLog] = useState<Array<{ id: string; name: string; amount: number; time: string; blockHash: string }>>([
-    {
-      id: 'TX-901',
-      name: 'Quantum Crystal Vein',
-      amount: 30,
-      time: '2 mins ago',
-      blockHash: '0x7e81...d2a1'
+  const [harvestLog, setHarvestLog] = useState<Array<{ id: string; name: string; amount: number; time: string; blockHash: string }>>([]);
+
+  const refreshGamingState = useCallback(async () => {
+    if (!address) {
+      setGameState(null);
+      return false;
     }
-  ]);
+    const s = await fetchGamingState(address);
+    setGameState(s);
+    return !!s;
+  }, [address]);
+
+  useEffect(() => {
+    if (!isConnected || !address) {
+      setGameState(null);
+      return;
+    }
+    void refreshGamingState();
+  }, [isConnected, address, refreshGamingState]);
 
   // Creditcoin Super-Prime Check (Score >= 750 grants 3X multiplier)
-  const userScore = score || 785;
+  const userScore = score;
   const isSuperPrime = userScore >= 750;
   const multiplier = isSuperPrime ? 3 : 1;
   const baseReward = 10;
@@ -168,14 +182,11 @@ export const CyberRealmHarvester: React.FC = () => {
     return () => clearInterval(batteryTimer);
   }, []);
 
-  // Cooldown timer
-  useEffect(() => {
-    if (harvestCooldown <= 0) return;
-    const interval = setInterval(() => {
-      setHarvestCooldown(c => Math.max(0, c - 1));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [harvestCooldown]);
+  const gameTokenSymbol = gameState?.gameToken.symbol || 'GAME';
+  const gameBalanceLabel = gameState ? gameState.gameBalance.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--';
+  const gatherCooldownBlocks = gameState && gameState.lastGatherBlock > 0
+    ? Math.max(0, GATHER_COOLDOWN_BLOCKS - (gameState.currentBlock - gameState.lastGatherBlock))
+    : 0;
 
   const currentTile = grid.find(t => t.x === playerPos.x && t.y === playerPos.y);
 
@@ -189,6 +200,79 @@ export const CyberRealmHarvester: React.FC = () => {
       setDroneBattery(b => Math.max(0, b - 2));
     }
   }, [playerPos, playSound]);
+
+  // Scan Sector with Radar
+  const handleScanRadar = () => {
+    if (radarScanning) return;
+    playSound('scan');
+    setRadarScanning(true);
+    addToast('info', 'Deep Sector Radar Scan', 'Probing sub-surface grid for rich energy monoliths...');
+
+    setTimeout(() => {
+      setGrid(prev => prev.map(t => ({ ...t, isScanned: true })));
+      setRadarScanning(false);
+      setDroneBattery(b => Math.max(0, b - 15));
+      addToast('success', 'Sector Map Synchronized', 'All Quantum Crystal and Solar Plasma coordinates revealed.');
+    }, 1200);
+  };
+
+  // Harvest Node
+  const handleHarvest = useCallback(async () => {
+    if (!isConnected || !address) {
+      addToast('info', 'Connect a Wallet', 'Connect your wallet to call gatherResources() on GamingEcosystemHub.');
+      return;
+    }
+    if (gatherCooldownBlocks > 0) {
+      addToast('info', 'Cooldown Active', `On-chain gather is in cooldown for ${gatherCooldownBlocks} more block(s).`);
+      return;
+    }
+    if (droneBattery < 10) {
+      addToast('error', 'Battery Depleted', 'Allow drone battery to recharge to at least 10% before mining.');
+      return;
+    }
+
+    setIsHarvesting(true);
+    playSound('harvest');
+
+    try {
+      const hash = await gatherResources();
+      setDroneBattery(b => Math.max(0, b - 20));
+
+      let addedCrystals = 0;
+      let addedPlasma = 0;
+      let addedOre = 0;
+      if (currentTile?.type === 'crystal') addedCrystals = currentTile.yieldAmount * multiplier;
+      else if (currentTile?.type === 'plasma') addedPlasma = currentTile.yieldAmount * multiplier;
+      else if (currentTile?.type === 'ore') addedOre = currentTile.yieldAmount * multiplier;
+      if (addedCrystals) setCyberCrystals(c => c + addedCrystals);
+      if (addedPlasma) setSolarPlasma(p => p + addedPlasma);
+      if (addedOre) setDarkOre(o => o + addedOre);
+
+      const newLog = {
+        id: `TX-${hash.slice(0, 8)}`,
+        name: currentTile?.name || 'Sector Grid Tile',
+        amount: totalReward,
+        time: 'Just now',
+        blockHash: `${hash.slice(0, 10)}...${hash.slice(-4)}`
+      };
+      setHarvestLog(prev => [newLog, ...prev.slice(0, 9)]);
+
+      await refreshGamingState();
+      addToast(
+        'success',
+        'Daily Resources Gathered (GamingEcosystemHub.sol)',
+        `gatherResources() confirmed — tx ${hash.slice(0, 12)}… ${isSuperPrime ? '(Super-Prime 3X CTS Multiplier Active!)' : ''}`
+      );
+    } catch (err: any) {
+      addToast(
+        'error',
+        'Gather Failed',
+        err?.reason || err?.message || 'Transaction rejected — the hub may not hold the game-token minter role yet.'
+      );
+    } finally {
+      setIsHarvesting(false);
+    }
+  }, [address, isConnected, gatherCooldownBlocks, droneBattery, currentTile, multiplier, totalReward, isSuperPrime, playSound, refreshGamingState, addToast]);
 
   // Keyboard navigation listener (W, A, S, D and Arrow keys)
   useEffect(() => {
@@ -215,77 +299,7 @@ export const CyberRealmHarvester: React.FC = () => {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleMove]);
-
-  // Scan Sector with Radar
-  const handleScanRadar = () => {
-    if (radarScanning) return;
-    playSound('scan');
-    setRadarScanning(true);
-    addToast('info', 'Deep Sector Radar Scan', 'Probing sub-surface grid for rich energy monoliths...');
-
-    setTimeout(() => {
-      setGrid(prev => prev.map(t => ({ ...t, isScanned: true })));
-      setRadarScanning(false);
-      setDroneBattery(b => Math.max(0, b - 15));
-      addToast('success', 'Sector Map Synchronized', 'All Quantum Crystal and Solar Plasma coordinates revealed.');
-    }, 1200);
-  };
-
-  // Harvest Node
-  const handleHarvest = () => {
-    if (harvestCooldown > 0) {
-      addToast('info', 'Cooldown Active', `Please wait ${harvestCooldown}s before triggering next on-chain harvest.`);
-      return;
-    }
-    if (droneBattery < 10) {
-      addToast('error', 'Battery Depleted', 'Allow drone battery to recharge to at least 10% before mining.');
-      return;
-    }
-
-    setIsHarvesting(true);
-    playSound('harvest');
-
-    setTimeout(() => {
-      // Reward GAME tokens based on smart contract gatherResources()
-      setGatheredGameTokens(prev => prev + totalReward);
-      setDroneBattery(b => Math.max(0, b - 20));
-
-      // Add resource based on current tile
-      let addedStr = `+${totalReward} GAME tokens`;
-      if (currentTile?.type === 'crystal') {
-        const added = currentTile.yieldAmount * multiplier;
-        setCyberCrystals(c => c + added);
-        addedStr += ` & +${added} Crystals`;
-      } else if (currentTile?.type === 'plasma') {
-        const added = currentTile.yieldAmount * multiplier;
-        setSolarPlasma(p => p + added);
-        addedStr += ` & +${added} Plasma`;
-      } else if (currentTile?.type === 'ore') {
-        const added = currentTile.yieldAmount * multiplier;
-        setDarkOre(o => o + added);
-        addedStr += ` & +${added} Ore`;
-      }
-
-      setIsHarvesting(false);
-      setHarvestCooldown(25); // 25s fast demo cooldown
-
-      const newLog = {
-        id: `TX-${Math.floor(1000 + Math.random() * 8999)}`,
-        name: currentTile?.name || 'Sector Grid Tile',
-        amount: totalReward,
-        time: 'Just now',
-        blockHash: `0x${Math.random().toString(16).substring(2, 6)}...${Math.random().toString(16).substring(2, 6)}`
-      };
-      setHarvestLog(prev => [newLog, ...prev.slice(0, 4)]);
-
-      addToast(
-        'success',
-        'Daily Resources Gathered (GamingEcosystemHub.sol)',
-        `Harvested ${addedStr} ${isSuperPrime ? '(Super-Prime 3X CTS Multiplier Active!)' : ''}`
-      );
-    }, 900);
-  };
+  }, [handleMove, handleHarvest]);
 
   return (
     <div className="space-y-6">
@@ -309,7 +323,7 @@ export const CyberRealmHarvester: React.FC = () => {
             <div className="grid grid-cols-3 gap-3 pt-1 font-mono text-xs">
               <div className="p-3 bg-white/[0.02] border border-white/[0.08] rounded-xl">
                 <span className="text-[10px] text-white/40 uppercase block">Base Reward</span>
-                <span className="text-base font-bold text-white">10 GAME</span>
+                <span className="text-base font-bold text-white">10 {gameTokenSymbol}</span>
               </div>
 
               <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl">
@@ -323,7 +337,7 @@ export const CyberRealmHarvester: React.FC = () => {
 
               <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
                 <span className="text-[10px] text-emerald-300 uppercase block font-semibold">Harvest Payout</span>
-                <span className="text-base font-bold text-emerald-400">+{totalReward} GAME</span>
+                <span className="text-base font-bold text-emerald-400">+{totalReward} {gameTokenSymbol}</span>
               </div>
             </div>
 
@@ -519,9 +533,13 @@ export const CyberRealmHarvester: React.FC = () => {
                 className="w-full sm:w-auto px-8 py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black font-extrabold font-mono text-xs transition flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/25 active:scale-95 disabled:opacity-40"
               >
                 <Zap className={`w-4 h-4 ${isHarvesting ? 'animate-spin text-black' : 'text-black'}`} />
-                {isHarvesting ? 'Harvesting Node...' : harvestCooldown > 0 ? `Cooldown (${harvestCooldown}s)` : `Harvest Tile (+${totalReward} GAME)`}
+                {isHarvesting ? 'Harvesting Node...' : gatherCooldownBlocks > 0 ? `Cooldown (${gatherCooldownBlocks} blocks)` : `Harvest Tile (+${totalReward} ${gameTokenSymbol})`}
               </button>
             </div>
+
+            <p className="text-[10px] font-mono text-white/40">
+              Note: the deployed hub mints via mock tokens owned by the deployer — gatherResources() may revert with OnlyOwner until the hub is granted the minter role. Reverts surface honestly in the toast.
+            </p>
           </GlassCard>
         </div>
 
@@ -552,11 +570,11 @@ export const CyberRealmHarvester: React.FC = () => {
                 <div className="flex items-center gap-2.5">
                   <span className="text-xl">🎮</span>
                   <div>
-                    <span className="text-white font-bold block">GAME Tokens</span>
+                    <span className="text-white font-bold block">{gameTokenSymbol} Tokens</span>
                     <span className="text-[10px] text-white/40">Ecosystem Utility</span>
                   </div>
                 </div>
-                <span className="text-emerald-400 font-bold text-sm">{gatheredGameTokens} GAME</span>
+                <span className="text-emerald-400 font-bold text-sm">{gameBalanceLabel} {gameTokenSymbol}</span>
               </div>
 
               <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between">
@@ -591,17 +609,18 @@ export const CyberRealmHarvester: React.FC = () => {
                 </div>
                 <span className="text-purple-400 font-bold text-sm">{darkOre} units</span>
               </div>
-            </div>
 
-            {/* Fast-Forward Cooldown Demo Button */}
-            {harvestCooldown > 0 && (
-              <button
-                onClick={() => setHarvestCooldown(0)}
-                className="w-full py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] text-white/60 hover:text-white text-xs font-mono transition flex items-center justify-center gap-1.5 cursor-pointer border border-white/[0.06]"
-              >
-                <RotateCw className="w-3.5 h-3.5 text-amber-400" /> Fast-Forward Cooldown (Hackathon Demo)
-              </button>
-            )}
+              <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="text-xl">⏳</span>
+                  <div>
+                    <span className="text-white font-bold block">Gather Cooldown</span>
+                    <span className="text-[10px] text-white/40">GamingEcosystemHub (7200 blocks)</span>
+                  </div>
+                </div>
+                <span className="text-white font-bold text-sm">{gameState ? (gatherCooldownBlocks > 0 ? `${gatherCooldownBlocks} blocks` : 'Ready') : '--'}</span>
+              </div>
+            </div>
           </GlassCard>
 
           {/* On-Chain Harvest Receipts Stream */}
@@ -611,18 +630,24 @@ export const CyberRealmHarvester: React.FC = () => {
             </span>
 
             <div className="space-y-2">
-              {harvestLog.map(log => (
-                <div key={log.id} className="p-2.5 rounded-xl bg-black/50 border border-white/[0.04] flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    <div>
-                      <span className="text-white font-bold text-[11px] block">{log.name}</span>
-                      <span className="text-[9px] text-white/40">{log.blockHash} &bull; {log.time}</span>
-                    </div>
-                  </div>
-                  <span className="text-emerald-400 font-bold text-[11px]">+{log.amount} GAME</span>
+              {harvestLog.length === 0 ? (
+                <div className="p-2.5 rounded-xl bg-black/50 border border-white/[0.04] text-white/40">
+                  No on-chain gather receipts yet. Connect a wallet and harvest a tile to generate a real receipt.
                 </div>
-              ))}
+              ) : (
+                harvestLog.map(log => (
+                  <div key={log.id} className="p-2.5 rounded-xl bg-black/50 border border-white/[0.04] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <div>
+                        <span className="text-white font-bold text-[11px] block">{log.name}</span>
+                        <span className="text-[9px] text-white/40">{log.blockHash} &bull; {log.time}</span>
+                      </div>
+                    </div>
+                    <span className="text-emerald-400 font-bold text-[11px]">+{log.amount} {gameTokenSymbol}</span>
+                  </div>
+                ))
+              )}
             </div>
           </GlassCard>
         </div>

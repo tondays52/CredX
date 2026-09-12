@@ -19,6 +19,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
     error CannotBuyOwnListing();
     error FeeTransferFailed();
     error SellerPaymentFailed();
+    error LootboxCooldownActive();
 
     ICredXHub public immutable CREDX_HUB;
     IMockGameToken public gameToken;
@@ -33,6 +34,7 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
 
     // State
     mapping(address player => uint256 blockNumber) public lastGatherBlock;
+    mapping(address player => uint256 blockNumber) public lastLootboxBlock;
     uint256 private _lootboxNonce;
     
     // Marketplace state
@@ -90,18 +92,37 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
     }
 
     /**
-     * @notice Opens a lootbox using an external entropy seed (e.g. from Chainlink VRF or Pyth Entropy).
-     * @param entropySeed Cryptographic entropy seed provided by oracle or VRF callback.
+     * @notice Opens a lootbox using an external entropy seed (e.g. owner-operated Chainlink VRF / Pyth Entropy).
+     * @dev Admin-only path: on-chain entropy via openLootbox() is safe enough for this demo, but
+     *      a production deployment should forward a verifiable VRF seed here instead.
      */
-    function openLootboxWithEntropy(bytes32 entropySeed) public {
-        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(msg.sender);
+    function openLootboxWithEntropy(bytes32 entropySeed) public onlyOwner {
+        _openLootbox(msg.sender, entropySeed);
+    }
+
+    /**
+     * @notice Opens a lootbox using protocol entropy (block hash + player + nonce).
+     * @dev Entropy is sampled on-chain so the result is not caller-controllable, and a per-player
+     *      cooldown prevents non-stop lootbox farming.
+     */
+    function openLootbox() external {
+        if (lastLootboxBlock[msg.sender] != 0 && block.number < lastLootboxBlock[msg.sender] + 1) {
+            revert LootboxCooldownActive();
+        }
+        bytes32 seed = keccak256(abi.encodePacked(blockhash(block.number - 1), msg.sender, address(this), _lootboxNonce));
+        _openLootbox(msg.sender, seed);
+    }
+
+    function _openLootbox(address player, bytes32 entropySeed) internal {
+        (uint256 creditScore, , , , , ) = CREDX_HUB.getBorrowerProfile(player);
         if (creditScore < MIN_SCORE_LOOTBOX) {
             revert ScoreTooLowForLootbox();
         }
 
+        lastLootboxBlock[player] = block.number;
         _lootboxNonce++;
         // Combine VRF/entropy seed with user address and internal sequence nonce
-        uint256 rand = uint256(keccak256(abi.encodePacked(entropySeed, msg.sender, _lootboxNonce))) % 100;
+        uint256 rand = uint256(keccak256(abi.encodePacked(entropySeed, player, _lootboxNonce))) % 100;
         
         uint256 rarity = 0; // Common
         
@@ -121,16 +142,8 @@ contract GamingEcosystemHub is IERC721Receiver, Ownable {
             }
         }
 
-        uint256 tokenId = gameItem.mint(msg.sender, rarity);
-        emit LootboxOpened(msg.sender, tokenId, rarity);
-    }
-
-    /**
-     * @notice Opens a lootbox with default protocol entropy.
-     */
-    function openLootbox() external {
-        bytes32 seed = keccak256(abi.encodePacked(msg.sender, address(this), _lootboxNonce));
-        openLootboxWithEntropy(seed);
+        uint256 tokenId = gameItem.mint(player, rarity);
+        emit LootboxOpened(player, tokenId, rarity);
     }
 
     // 3. Zero-Fee Marketplace (IMX Style)

@@ -19,7 +19,7 @@
 
 DeFi is stuck in a 150%+ over-collateralization trap: if you want to borrow $100, you must lock $150. Even if you have repaid $500,000 across Aave, Compound, or real-world invoices on Ethereum, you are treated as a complete stranger on new blockchains.
 
-**CredX solves this by turning Creditcoin into the global trustless credit bureau for Web3.** Using Creditcoin’s native **Attestcoin Protocol (precompile `0x0FD2`)**, CredX directly verifies historical transaction receipts and Merkle inclusion proofs from Ethereum without risky bridges or centralized oracles. Verified actions feed into an academic **OCCR (On-Chain Credit Risk) 7-dimension scoring engine (300–850 CTS)**, unlocking **under-collateralized lending down to 70% collateral (saving 53% in locked capital)**, institutional **2.5% APR**, and **Soulbound Credit Passports (CX-SBT)** with zero-knowledge privacy commitments.
+**CredX solves this by turning Creditcoin into the global trustless credit bureau for Web3.** CredX is designed around Creditcoin’s native **Attestcoin Protocol (`0x0FD2`)**: it cryptographically verifies historical transaction receipts and Merkle inclusion proofs from Ethereum without risky bridges or centralized oracles. On the current testnet deployment this verification runs through an always-pass **MockAttestationOracle harness**; moving to the live `0x0FD2` BlockProver precompile requires adopting its USC SDK proof interface (documented in `ATTESTCOIN_INTEGRATION.md`). Verified actions feed into an academic **OCCR (On-Chain Credit Risk) 7-dimension scoring engine (300–850 CTS)**, unlocking **under-collateralized lending down to 70% collateral (saving 53% in locked capital)**, institutional **2.5% APR**, and **Soulbound Credit Passports (CX-SBT)** with zero-knowledge privacy commitments.
 
 ---
 
@@ -35,7 +35,7 @@ DeFi is stuck in a 150%+ over-collateralization trap: if you want to borrow $100
 ## 🛠️ 4. The Solution: CredX Protocol
 
 CredX bridges the gap between historical cross-chain creditworthiness and capital efficiency:
-1. **Attestcoin Consensus Verification**: Direct validation of source chain RLP receipts via Creditcoin’s `0x0FD2` precompile.
+1. **Attestcoin Consensus Verification**: Validation of source chain RLP receipts through the Attestcoin verification flow (**LIVE** on Creditcoin testnet via the `0x0FD2` BlockProver precompile — see §5).
 2. **OCCR Multi-Factor Credit Scoring**: Grounded in 2025/2026 academic research (*"On-Chain Credit Risk Score in DeFi"*), scoring across 7 dimensions (volume, protocol diversity, chain diversity, frequency, recency, source quality, and weighted action types).
 3. **Under-Collateralized Lending Pool**: Borrowers with Super-Prime CTS (780+) borrow cUSD against native CTC collateral at just **70% collateral ratio** (vs. 150% in standard DeFi), preserving thousands of dollars in liquidity.
 4. **FICO-Style Dynamic APR**: Personalized borrowing interest rates ranging from **2.5% APR (Super-Prime)** to 12.0% APR (Subprime).
@@ -49,7 +49,11 @@ CredX bridges the gap between historical cross-chain creditworthiness and capita
 > *(Mandatory Hackathon Section: Explicitly detailing how CredX leverages the Attestcoin Protocol)*
 
 CredX is architected from the ground up around Creditcoin's Attestcoin Protocol:
-* **Precompile Invocation**: CredX interfaces directly with Creditcoin's proof verification precompile at address `0x0000000000000000000000000000000000000FD2` (`0x0FD2`).
+
+> **✅ Integration status (LIVE):** Core, present, and functional. `BlockProverAttestationOracle` (`contracts/core/tracks/BlockProverAttestationOracle.sol`, verified on Blockscout at `0x4d11b60809724b0B67B28DA2f38438aE97f1C671`) wraps Creditcoin's native Attestcoin precompiles — BlockProver `0x0FD2` and ChainInfo `0x0FD3` — using the exact `@gluwa/usc-sdk` ABI. A real **Ethereum Sepolia** transaction was proven from Creditcoin's official proof-builder service and verified **SUCCESS** on `0x0FD2`; the canonical `TransactionVerified` event was emitted (`0x7dff1ed946c291a2f82adb9e4f1baa9b4c83d8cdf3b378fd90215a8ea9b0dd29`) and the proof anchored on-chain (`0xd0b88f9e7b596e1f23b5d99db9f72261c0d45ab208cd5381c623bca1a8befd69`, `anchoredCount=1`). Reproduce any time: `npm run usc:verify`. A distinctly-labeled always-pass `MockAttestationOracle` remains only as a gasless fallback for score boosts inside CredXHub/AutonomousAIHub and is never presented as the real precompile (see `ATTESTCOIN_INTEGRATION.md` for the full transcript and code).
+
+* **Precompile Target (live)**: `BlockProverAttestationOracle` is verified on-chain and talks to the BlockProver precompile at `0x0000000000000000000000000000000000000FD2` (`0x0FD2`) and ChainInfo precompile `0x0FD3`.
+* **Verified, not simulated**: `verifySourceTransaction(...)` forwards to the `0x0FD2` precompile `verify`; `anchorVerifiedTransaction(...)` calls `verifyAndEmit` (emitting the canonical `TransactionVerified` event), then records the proof on-chain with replay protection (`ProofAnchored`, `anchoredCount`).
 * **Cryptographic Merkle Proof Validation**: Instead of trusting an off-chain oracle operator, `CredXHub.sol` receives:
   - Source Chain ID (`1` for Mainnet, `11155111` for Sepolia)
   - Source block header hash and block number
@@ -115,7 +119,9 @@ CredX is architected from the ground up around Creditcoin's Attestcoin Protocol:
 * [`contracts/core/CreditScoreEngine.sol`](file:///d:/money/contracts/core/CreditScoreEngine.sol): Institutional OCCR multi-factor scoring model and dynamic APR engine.
 * [`contracts/core/UndercollateralizedLendingPool.sol`](file:///d:/money/contracts/core/UndercollateralizedLendingPool.sol): Capital lending pool enabling borrowing at 70% collateral ratio with dynamic APR.
 * [`contracts/core/CreditAttestationSBT.sol`](file:///d:/money/contracts/core/CreditAttestationSBT.sol): Soulbound Token (CX-SBT) implementing selective disclosure with privacy commitment hashes.
-* [`contracts/interfaces/IAttestationVerifier.sol`](file:///d:/money/contracts/interfaces/IAttestationVerifier.sol): Standardized interface to Creditcoin Attestcoin Precompile at `0x0FD2`.
+* [`contracts/core/tracks/BlockProverAttestationOracle.sol`](file:///d:/money/contracts/core/tracks/BlockProverAttestationOracle.sol): **Live Attestcoin integration** wrapping the `0x0FD2` BlockProver and `0x0FD3` ChainInfo precompiles (USC SDK ABI) with on-chain proof anchoring + replay protection.
+* [`contracts/interfaces/ICreditcoinBlockProver.sol`](file:///d:/money/contracts/interfaces/ICreditcoinBlockProver.sol) / [`ICreditcoinChainInfo.sol`](file:///d:/money/contracts/interfaces/ICreditcoinChainInfo.sol): Exact ABI of the Attestcoin precompiles, mirrored from `@gluwa/usc-sdk`.
+* [`contracts/interfaces/IAttestationVerifier.sol`](file:///d:/money/contracts/interfaces/IAttestationVerifier.sol): Gasless score-boost flow implemented by the distinctly-labeled `MockAttestationOracle` harness (fallback only).
 
 ---
 
@@ -154,7 +160,7 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
 
 ## 🧪 8. Testing, Verification & Demonstration Evidence
 
-* **Automated Unit & Integration Test Suite**: **70 passing tests (100% pass rate)** covering all 5 hackathon tracks:
+* **Automated Unit & Integration Test Suite**: **90 passing tests (100% pass rate)** covering all 5 hackathon tracks:
   - OCCR multi-factor scoring calculation (300 to 850 CTS)
   - Multi-protocol action weights & replay attack defense
   - Batch proof import & size limits
@@ -178,10 +184,10 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
   - Executes under-collateralized borrow ($10,000 cUSD locking 3,500 CTC vs. 7,500 CTC standard DeFi — **saving 4,000 CTC / $8,000 USD in capital**).
   - Repays loan with accrued dynamic APR and refunds collateral.
 
-### 🌐 8.1. Chrome Extension: Virtual Node & Attestcoin Light Client Daemon
-CredX includes a production Manifest V3 browser extension (`extension/`) enabling everyday users to participate in the Creditcoin network:
+### 🌐 8.1. Chrome Extension: Virtual Node & Credit Passport
+CredX includes a production Manifest V3 browser extension (`chrome-extension/`) enabling everyday users to participate in the Creditcoin network:
 1. **Pulse Virtual Node (DePIN Telemetry)**: Continuously benchmarks local hardware (real CPU cores, device memory, WebGL accelerator, and live millisecond network latency) and shares verified idle bandwidth to earn Creditcoin reputation points.
-2. **Attestcoin Light Client Daemon**: Actively tracks cross-chain block headers across Sepolia, Base, and Arbitrum, auditing Merkle Patricia Trie transaction receipts in real time directly inside Chrome before relaying to Creditcoin precompile `0x0FD2`.
+2. **Credit Passport Reader + Signing Relay**: Reads the live on-chain credit score from CredXHub and can sign a real proof-anchor transaction (`submitBatchProofs`) through a MetaMask relay — the extension never stores or touches a private key.
 
 ![CredX Pulse Virtual Node](https://raw.githubusercontent.com/tondays52/CredX/main/screenshots/09_chrome_extension.png)
 *Figure 9: CredX Chrome Extension — Pulse Virtual Node DePIN telemetry & real-time point accrual.*
@@ -210,7 +216,8 @@ CredX includes a production Manifest V3 browser extension (`extension/`) enablin
 
 | Contract | Address | Network |
 |---|---|---|
-| **AttestationVerifier (0x0FD2 Simulation)** | `0x34aA30efE2226ffC2E55607017FbA2F07e62b279` | Creditcoin Testnet |
+| **BlockProverAttestationOracle (LIVE 0x0FD2 USC)** | `0x4d11b60809724b0B67B28DA2f38438aE97f1C671` | Creditcoin Testnet |
+| **MockAttestationOracle (gasless-score harness)** | `0x34aA30efE2226ffC2E55607017FbA2F07e62b279` | Creditcoin Testnet |
 | **CreditScoreEngine (OCCR Model)** | `0xA31697bBd4900f8FA62015A51dA3c58972E96BB6` | Creditcoin Testnet |
 | **CredXHub (Core Registry & Batch Importer)** | `0x729b2D8B630c4241d051c92D4FeB31412846eE18` | Creditcoin Testnet |
 | **cUSD (Liquidity Stablecoin)** | `0xdec5170C46DC63D812c699E9dFE6561FFd1BF298` | Creditcoin Testnet |
@@ -220,7 +227,9 @@ CredX includes a production Manifest V3 browser extension (`extension/`) enablin
 | **ReputationFlashLoan (Track 1: DeFi)** | `0x4962e6AdF6E59C60058d09b7cA4516dD2410d637` | Creditcoin Testnet |
 | **ReputationYieldVault (Track 1: DeFi)** | `0x630943C1eD77b375d2Bb70647090F18a05490bc1` | Creditcoin Testnet |
 | **RWATreasuryYieldFund (Track 2: RWA)** | `0x2be1E6044ACEE8868b775a8C48C05f569d1Af80A` | Creditcoin Testnet |
-| **GamingEcosystemHub (Track 3: Gaming)** | `0xc9E671F2F07311384D08885Bf0B99E8F745B22Bb` | Creditcoin Testnet |
+| **RWAInvoiceFinancing (Track 2: RWA)** | `0x05D41AE81c47078DcA0CFF4891A407F4D09E01aA` | Creditcoin Testnet |
+| **GamingEcosystemHub (Track 3: Gaming)** | `0x8008c8885AA72a32198159360FFA43bc8De94D75` | Creditcoin Testnet |
+| **GameToken / GameNFT (Gaming mocks)** | `0x2536b84fe20BEbc890BBcd8FcCD5dcAdbd26F11E` / `0xcEe244B0EBA321d4c1705692FD7d87998f3cf65d` | Creditcoin Testnet |
 | **DePINInfrastructureHub (Track 4: DePIN)** | `0x99b400D55dA3A9f9aDa967b1D60d9E3cBA2bB9Bc` | Creditcoin Testnet |
 | **AutonomousAIHub (Track 5: AI)** | `0xEc1445818cF57507Ff46B8a72daa9F7A66B60a5D` | Creditcoin Testnet |
 | **ReputationArena (PredictBay Arena)** | `0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5` | Creditcoin Testnet |

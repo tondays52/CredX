@@ -29,17 +29,17 @@ describe("DePINInfrastructureHub", function () {
 
         const { buildMockEventProof } = require("../scripts/generateProof");
 
-        // Prime Operator setup -> Score >= 700 but < 750
+        // Prime Operator setup -> Score >= 700 but < 750 (3 × $100k = $300k, under the value cap)
         for (let i = 0; i < 3; i++) {
             const proof = await buildMockEventProof(1, "tx-depin1-" + primeOperator.address + i);
-            await credXHub.connect(primeOperator).submitRepaymentProof(proof, 0, ethers.parseEther("1000000"));
+            await credXHub.connect(primeOperator).submitRepaymentProof(proof, 0, ethers.parseEther("100000"));
         }
         const primeProfile = await credXHub.getBorrowerProfile(primeOperator.address);
 
-        // Super-Prime Operator setup -> Score >= 750
-        for (let i = 0; i < 25; i++) {
+        // Super-Prime Operator setup -> Score >= 750 (15 × $60k = $900k, under the value cap)
+        for (let i = 0; i < 15; i++) {
             const proof2 = await buildMockEventProof(1, "tx-depin2-" + superPrimeOperator.address + i);
-            await credXHub.connect(superPrimeOperator).submitRepaymentProof(proof2, 0, ethers.parseEther("1000000"));
+            await credXHub.connect(superPrimeOperator).submitRepaymentProof(proof2, 0, ethers.parseEther("60000"));
         }
 
         // Give delegator some tokens

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import GlassCard from '../common/GlassCard';
+import SimulationBadge from '../common/SimulationBadge';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useToast } from '../../context/ToastContext';
@@ -14,7 +15,8 @@ import {
   Coins,
   DollarSign,
   Sparkles,
-  ArrowUpRight
+  ArrowUpRight,
+  RefreshCw,
 } from 'lucide-react';
 import BorrowModal from '../modals/BorrowModal';
 import RepayModal from '../modals/RepayModal';
@@ -24,14 +26,27 @@ import { ShieldAlert } from 'lucide-react';
 
 const LendingTab: React.FC = () => {
   const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
-  const { score, tier, maxBorrowLimit, activeLoans } = useProtocol();
+  const { score, tier, maxBorrowLimit, activeLoans, borrowApr, collateralRatioBps, refreshFromChain, dataSource } = useProtocol();
+  const { addToast } = useToast();
   const [borrowModalOpen, setBorrowModalOpen] = useState(false);
   const [repayModalOpen, setRepayModalOpen] = useState(false);
   const [deadswitchModalOpen, setDeadswitchModalOpen] = useState(false);
   const [selectedLoan, setSelectedLoan] = useState<LoanPosition | null>(null);
 
-  const userWalletCTC = balanceCTC > 0 ? balanceCTC : 10000;
+  const userWalletCTC = isConnected && balanceCTC > 0 ? balanceCTC : 0;
   const userWalletUSD = userWalletCTC * 2.0;
+  const collateralPct = collateralRatioBps > 0 ? `${(collateralRatioBps / 100).toFixed(0)}%` : '—';
+  const underCollatDiscount = collateralRatioBps > 0 ? `${(100 - collateralRatioBps / 100).toFixed(0)}%` : '—';
+
+  const handleRefresh = () => {
+    if (!isConnected) {
+      addToast('info', 'Connect a Wallet', 'Connect a wallet to refresh the real on-chain loan, engine and SBT state.');
+      openConnectModal();
+      return;
+    }
+    addToast('info', 'Refreshing Protocol State', 'Pulling your live profile, engine rates, loans and SBT from Creditcoin testnet...');
+    void refreshFromChain();
+  };
 
   const handleOpenRepay = (loan: LoanPosition) => {
     setSelectedLoan(loan);
@@ -49,6 +64,7 @@ const LendingTab: React.FC = () => {
           <div>
             <div className="text-[10px] uppercase font-mono text-cyan-400 tracking-wider flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Lending Account Capital
+              {!isConnected && <SimulationBadge label="DEMO BALANCE" note="Connect a wallet to display your real CTC/cUSD balances from Creditcoin testnet." />}
             </div>
             <div className="text-xl font-bold font-mono text-white flex items-center gap-2">
               {userWalletCTC.toLocaleString()} <span className="text-xs text-cyan-300 font-normal">CTC</span>
@@ -62,6 +78,14 @@ const LendingTab: React.FC = () => {
             <span className="text-[10px] font-mono text-white/40 block">Max Approved Credit Line</span>
             <span className="text-xs font-mono font-bold text-emerald-400">${maxBorrowLimit.toLocaleString()} USDC</span>
           </div>
+          <button
+            onClick={handleRefresh}
+            className="px-3 py-2 rounded-xl bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-xs font-semibold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+            title="Pull the live credit profile, engine rates, loans and SBT from Creditcoin testnet"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Pool State</span>
+          </button>
           <button
             onClick={() => setDeadswitchModalOpen(true)}
             className="px-3 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold shadow-sm transition flex items-center gap-1.5 cursor-pointer"
@@ -90,7 +114,8 @@ const LendingTab: React.FC = () => {
               Borrow Capital with Zero Over-Collateralization
             </h2>
             <p className="text-xs text-white/60 leading-relaxed max-w-xl">
-              Unlock algorithmic credit lines powered by your on-chain Creditcoin Trust Score (CTS). Enjoy low single-digit interest rates (3.2% - 5.5% APR) with zero origination penalty.
+              Unlock algorithmic credit lines powered by your on-chain Creditcoin Trust Score (CTS). Borrow with sub-100% collateral from the live OCCR pool — current engine rate{' '}
+              <span className="text-emerald-400 font-mono font-semibold">{borrowApr === '—' ? 'n/a (demo)' : `${borrowApr} APR`}</span>.
             </p>
 
             <div className="flex flex-wrap gap-4 pt-2">
@@ -99,12 +124,12 @@ const LendingTab: React.FC = () => {
                 <span className="text-base font-bold font-mono text-emerald-400">${maxBorrowLimit.toLocaleString()} USDC</span>
               </div>
               <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-                <span className="text-[10px] text-white/40 uppercase block">Interest Rate</span>
-                <span className="text-base font-bold font-mono text-cyan-300">3.2% APR (Prime)</span>
+                <span className="text-[10px] text-white/40 uppercase block">Live Engine APR</span>
+                <span className="text-base font-bold font-mono text-cyan-300">{borrowApr === '—' ? 'n/a (demo)' : borrowApr}</span>
               </div>
               <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl">
-                <span className="text-[10px] text-white/40 uppercase block">First-Loss Safety Pool</span>
-                <span className="text-base font-bold font-mono text-white">$12,500,000</span>
+                <span className="text-[10px] text-white/40 uppercase block">Collateral Requirement</span>
+                <span className="text-base font-bold font-mono text-white">{collateralPct}</span>
               </div>
             </div>
           </div>
@@ -119,7 +144,7 @@ const LendingTab: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-transparent to-transparent opacity-80" />
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between text-[11px] font-mono">
                 <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-cyan-500/30 text-cyan-300">
-                  ⚖️ LTV Margin: 110% Uncollateralized
+                  ⚖️ Collateral: {collateralPct} Undercollateralized
                 </span>
                 <span className="px-2.5 py-1 rounded-lg bg-black/60 backdrop-blur-md border border-emerald-500/30 text-emerald-400">
                   CTS: {score}
@@ -141,8 +166,8 @@ const LendingTab: React.FC = () => {
             Your high CTS score ({score}) qualifies you for maximum collateral discounts and zero protocol origination fees.
           </p>
           <div className="pt-2 border-t border-white/[0.06] flex justify-between text-xs font-mono">
-            <span className="text-white/40">Interest APR</span>
-            <span className="text-emerald-400 font-bold">3.2% - 5.5%</span>
+            <span className="text-white/40">Engine APR</span>
+            <span className="text-emerald-400 font-bold">{borrowApr === '—' ? 'n/a (demo)' : borrowApr}</span>
           </div>
         </GlassCard>
 
@@ -155,22 +180,22 @@ const LendingTab: React.FC = () => {
             Uncollateralized credit buffer dynamically refreshed based on live OCCR factor risk evaluations.
           </p>
           <div className="pt-2 border-t border-white/[0.06] flex justify-between text-xs font-mono">
-            <span className="text-white/40">LTV Margin</span>
-            <span className="text-white font-bold">110% (Prime Tier)</span>
+            <span className="text-white/40">Collateral Ratio</span>
+            <span className="text-white font-bold">{collateralPct} (OCCR)</span>
           </div>
         </GlassCard>
 
         <GlassCard className="p-5 space-y-3">
           <span className="text-[10px] font-mono text-purple-400 uppercase tracking-wider">Protocol Safety</span>
           <div className="text-2xl font-black font-mono text-purple-300">
-            $12.5M <span className="text-xs text-white/40 font-normal">RESERVE</span>
+            {underCollatDiscount} <span className="text-xs text-white/40 font-normal">DISCOUNT</span>
           </div>
           <p className="text-xs text-white/60 leading-relaxed">
-            First-loss capital pool underwritten by staking validators on Creditcoin Testnet.
+            Undercollateralization margin vs a 100%+ over-collateral standard, set by your on-chain OCCR factor evaluation on Creditcoin Testnet.
           </p>
           <div className="pt-2 border-t border-white/[0.06] flex justify-between text-xs font-mono">
-            <span className="text-white/40">Insurance Ratio</span>
-            <span className="text-emerald-400 font-bold">100% Covered</span>
+            <span className="text-white/40">Source of Trust</span>
+            <span className="text-emerald-400 font-bold">{dataSource === 'chain' ? 'On-Chain OCCR' : 'Demo Profile'}</span>
           </div>
         </GlassCard>
       </div>

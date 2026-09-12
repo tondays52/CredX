@@ -7,6 +7,8 @@
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy:creditcoin-testnet": "hardhat run scripts/deploy.js --network creditcoinTestnet",
+    "usc:deploy": "hardhat run scripts/deploy_usc_oracle.js --network creditcoinTestnet",
+    "usc:verify": "node scripts/usc-verify-real.js",
     "demo:e2e": "hardhat run scripts/test-e2e.js",
     "start:frontend": "node scripts/serve.js"
   },
@@ -31,6 +33,7 @@
     "hardhat": "^2.22.0"
   },
   "dependencies": {
+    "@gluwa/usc-sdk": "^0.18.0",
     "@openzeppelin/contracts": "^5.6.1"
   }
 }

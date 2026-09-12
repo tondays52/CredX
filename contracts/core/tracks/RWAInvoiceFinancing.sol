@@ -4,22 +4,27 @@ pragma solidity 0.8.24;
 import {ICredXHub} from "../../interfaces/ICredXHub.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title RWAInvoiceFinancing
  * @notice Businesses can tokenize accounts receivable and get funding.
  *         The discount rate is based on the business's CredXHub credit score.
  */
-contract RWAInvoiceFinancing {
+contract RWAInvoiceFinancing is ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     error ZeroAddress();
     error InvalidAmount();
+    error InvalidDuration();
     error InvoiceNotFound();
     error AlreadyFunded();
     error CannotFundOwnInvoice();
     error NotFunded();
     error AlreadyRepaid();
+    error OnlyBusiness();
+    error OnlyFunder();
+    error InvoiceNotOverdue();
 
     ICredXHub public immutable CREDX_HUB;
     IERC20 public immutable PAYMENT_TOKEN;
@@ -50,6 +55,7 @@ contract RWAInvoiceFinancing {
 
     function tokenizeInvoice(uint256 faceValue, uint256 durationBlocks) external returns (uint256) {
         if (faceValue == 0) revert InvalidAmount();
+        if (durationBlocks == 0) revert InvalidDuration();
         
         uint256 invoiceId = nextInvoiceId++;
         invoices[invoiceId] = Invoice({
@@ -67,7 +73,7 @@ contract RWAInvoiceFinancing {
         return invoiceId;
     }
 
-    function fundInvoice(uint256 invoiceId) external {
+    function fundInvoice(uint256 invoiceId) external nonReentrant {
         Invoice storage invoice = invoices[invoiceId];
         if (invoice.business == address(0)) revert InvoiceNotFound();
         if (invoice.isFunded) revert AlreadyFunded();
@@ -97,16 +103,34 @@ contract RWAInvoiceFinancing {
         emit InvoiceFunded(invoiceId, msg.sender, fundedAmount);
     }
 
-    function repayInvoice(uint256 invoiceId) external {
+    function repayInvoice(uint256 invoiceId) external nonReentrant {
         Invoice storage invoice = invoices[invoiceId];
         if (!invoice.isFunded) revert NotFunded();
         if (invoice.isRepaid) revert AlreadyRepaid();
+        if (msg.sender != invoice.business) revert OnlyBusiness();
 
         invoice.isRepaid = true;
         
         // Business repays the full face value to the funder
-        PAYMENT_TOKEN.safeTransferFrom(msg.sender, invoice.funder, invoice.faceValue);
+        PAYMENT_TOKEN.safeTransferFrom(invoice.business, invoice.funder, invoice.faceValue);
 
-        emit InvoiceRepaid(invoiceId, msg.sender);
+        emit InvoiceRepaid(invoiceId, invoice.business);
+    }
+
+    /**
+     * @notice Allows the funder to reclaim their funds if the invoice is not repaid before its term.
+     * @dev Recovery is clawed back from the defaulting business (which owes the financed amount).
+     */
+function reclaimOverdueFunds(uint256 invoiceId) external nonReentrant {
+        Invoice storage invoice = invoices[invoiceId];
+        if (!invoice.isFunded) revert NotFunded();
+        if (invoice.isRepaid) revert AlreadyRepaid();
+        if (msg.sender != invoice.funder) revert OnlyFunder();
+        if (block.number <= invoice.createdBlock + invoice.durationBlocks) revert InvoiceNotOverdue();
+
+        invoice.isRepaid = true;
+        PAYMENT_TOKEN.safeTransferFrom(invoice.business, invoice.funder, invoice.fundedAmount);
+
+        emit InvoiceRepaid(invoiceId, invoice.business);
     }
 }

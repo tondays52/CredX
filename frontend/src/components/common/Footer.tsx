@@ -82,7 +82,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate }) => {
               <Twitter className="w-4 h-4" />
             </a>
             <a
-              href="https://discord.com/users/718954737742905355"
+              href="https://discord.com/users/tdeadddd"
               target="_blank"
               rel="noreferrer"
               className="w-8 h-8 rounded-lg bg-cyan-950/40 border border-cyan-500/30 hover:border-cyan-400 hover:bg-cyan-500/20 text-cyan-300 flex items-center justify-center transition-colors"

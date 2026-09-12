@@ -1,34 +1,32 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
 import GlassCard from '../components/common/GlassCard';
 import ArenaChart from '../components/arena/ArenaChart';
 import OrderTicket from '../components/arena/OrderTicket';
-import StreakCelebrationModal from '../components/arena/StreakCelebrationModal';
+import SimulationBadge from '../components/common/SimulationBadge';
 import { useWeb3 } from '../context/Web3Context';
 import { useToast } from '../context/ToastContext';
 import { AssetSymbol, Timeframe, PredictionRound, AssetConfig, UserBet } from '../types/arena';
 import {
   fetchLiveMarketPrices,
   ACCURATE_BASE_PRICES,
-  TickerData,
 } from '../utils/cryptoPriceService';
+import {
+  fetchArenaView,
+  arenaPlacePrediction,
+  arenaClaimPayout,
+  registerArenaUser,
+  syncArenaStreak,
+  txHashShort,
+  ArenaView,
+} from '../services/credXService';
 import {
   Flame,
   Trophy,
   History,
-  Zap,
   Shield,
-  Coins,
-  DollarSign,
-  Clock,
-  Radio,
-  TrendingUp,
-  Activity,
-  ArrowUpRight,
-  Filter,
-  Sparkles,
-  Layers,
+  RefreshCw,
   CheckCircle2,
-  RefreshCw
+  Sparkles,
 } from 'lucide-react';
 
 const timeframeDurations: Record<Timeframe, number> = {
@@ -37,14 +35,6 @@ const timeframeDurations: Record<Timeframe, number> = {
   '30m': 1800,
   '1h': 3600,
   '1d': 86400,
-};
-
-const timeframeMultipliers: Record<Timeframe, number> = {
-  '5m': 1.92,
-  '15m': 2.15,
-  '30m': 2.45,
-  '1h': 2.80,
-  '1d': 3.50,
 };
 
 export const ASSETS_REGISTRY: Record<AssetSymbol, AssetConfig> = {
@@ -182,51 +172,65 @@ export const ASSETS_REGISTRY: Record<AssetSymbol, AssetConfig> = {
 
 type CategoryFilter = 'ALL' | 'CTC' | 'Major' | 'DePIN_RWA';
 
+const DEMO_SETTLED_ROUNDS: PredictionRound[] = [
+  { id: 1041, asset: 'BTC', timeframe: '5m', strikePrice: 77920.0, closePrice: 78050.0, upPool: 18200, downPool: 14400, status: 'RESOLVED', startTime: Date.now() - 360000, endTime: Date.now() - 60000 },
+  { id: 1040, asset: 'BTC', timeframe: '5m', strikePrice: 78100.0, closePrice: 77940.0, upPool: 12900, downPool: 15800, status: 'RESOLVED', startTime: Date.now() - 660000, endTime: Date.now() - 360000 },
+  { id: 1039, asset: 'ETH', timeframe: '5m', strikePrice: 2465.0, closePrice: 2472.5, upPool: 15400, downPool: 11800, status: 'RESOLVED', startTime: Date.now() - 960000, endTime: Date.now() - 660000 },
+];
+
+const roundStatusLabel = (status: number): string => {
+  switch (status) {
+    case 0: return 'OPEN';
+    case 1: return 'CLOSED';
+    case 2: return 'SETTLED';
+    case 3: return 'CANCELLED';
+    default: return 'UNKNOWN';
+  }
+};
+
+const normalizeStrike = (raw: number): number => raw / 1e8;
+
+const toHumanUnits = (raw: number): number => raw / 1e18;
+
 export const ArenaPage: React.FC = () => {
-  const { balanceCTC } = useWeb3();
+  const { isConnected, address, openConnectModal } = useWeb3();
   const { addToast } = useToast();
+
+  const account = isConnected && address ? address : null;
 
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('CTC');
   const [selectedAsset, setSelectedAsset] = useState<AssetSymbol>('BTC');
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('5m');
-  const [isFastTestMode, setIsFastTestMode] = useState<boolean>(false);
-  
+
   const currentAssetConfig = ASSETS_REGISTRY[selectedAsset] || ASSETS_REGISTRY.BTC;
   const [currentPrice, setCurrentPrice] = useState<number>(currentAssetConfig.basePrice);
-  const [strikePrice, setStrikePrice] = useState<number>(currentAssetConfig.basePrice);
-  const [timeRemaining, setTimeRemaining] = useState<number>(timeframeDurations['5m']);
-  
-  const [streak, setStreak] = useState<number>(2);
-  const [streakModalOpen, setStreakModalOpen] = useState<boolean>(false);
-  const [priceDelta24h, setPriceDelta24h] = useState<number>(-0.42);
+  const [strikePrice, setStrikePrice] = useState<number>(0);
+  const [priceDelta24h, setPriceDelta24h] = useState<number>(0);
   const [high24h, setHigh24h] = useState<number>(currentAssetConfig.basePrice * 1.015);
   const [low24h, setLow24h] = useState<number>(currentAssetConfig.basePrice * 0.985);
-  const [volume24h, setVolume24h] = useState<string>('$1.84B');
+  const [volume24h, setVolume24h] = useState<string>('—');
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
-
-  // User Paper Trading & Multi-Lane Active Bets
-  const [paperBalanceUSD, setPaperBalanceUSD] = useState<number>(10000);
-  const [activeBets, setActiveBets] = useState<Record<string, UserBet>>({});
-  const activeBetsRef = useRef<Record<string, UserBet>>({});
-  activeBetsRef.current = activeBets;
-
-  const currentLaneKey = `${selectedAsset}_${selectedTimeframe}`;
-  const userBet = activeBets[currentLaneKey] || null;
 
   const wsRef = useRef<WebSocket | null>(null);
   const currentPriceRef = useRef<number>(currentAssetConfig.basePrice);
   currentPriceRef.current = currentPrice;
 
-  const strikePriceRef = useRef<number>(currentAssetConfig.basePrice);
-  strikePriceRef.current = strikePrice;
+  const [view, setView] = useState<ArenaView | null>(null);
+  const [viewState, setViewState] = useState<'idle' | 'loading' | 'ok' | 'error'>('idle');
+  const [registerPending, setRegisterPending] = useState(false);
+  const [syncPending, setSyncPending] = useState(false);
 
-  const laneStrikesRef = useRef<Record<string, number>>({
-    [currentLaneKey]: currentAssetConfig.basePrice,
-  });
+  const round = view?.round ?? null;
+  const stats = view?.stats ?? null;
+  const prediction = view?.prediction ?? null;
 
-  // Epoch Synchronizer (Global Wall-Clock alignment: rounds never reset on asset switch)
-  const getLaneEpoch = useCallback((tf: Timeframe, isFast: boolean) => {
-    const durationSec = isFast ? 15 : timeframeDurations[tf] || 300;
+  const isRegistered = !!(
+    stats &&
+    (stats.paperBalance > 0 || stats.totalRounds > 0 || stats.currentWinStreak > 0 || stats.longestWinStreak > 0 || stats.totalWins > 0)
+  );
+
+  const getLaneEpoch = useCallback((tf: Timeframe) => {
+    const durationSec = timeframeDurations[tf] || 300;
     const durationMs = durationSec * 1000;
     const now = Date.now();
     const epochIndex = Math.floor(now / durationMs);
@@ -236,28 +240,62 @@ export const ArenaPage: React.FC = () => {
     return { durationSec, durationMs, epochIndex, startTime, endTime, remainingSec };
   }, []);
 
-  const initialEpoch = getLaneEpoch(selectedTimeframe, isFastTestMode);
+  const [timeRemaining, setTimeRemaining] = useState<number>(() => getLaneEpoch('5m').remainingSec);
 
-  const [currentRound, setCurrentRound] = useState<PredictionRound>({
-    id: initialEpoch.epochIndex,
-    asset: 'BTC',
-    timeframe: '5m',
-    strikePrice: currentAssetConfig.basePrice,
-    closePrice: null,
-    upPool: 14500,
-    downPool: 9800,
-    status: 'ACTIVE',
-    startTime: initialEpoch.startTime,
-    endTime: initialEpoch.endTime,
-  });
+  useEffect(() => {
+    setTimeRemaining(getLaneEpoch(selectedTimeframe).remainingSec);
+  }, [selectedTimeframe, getLaneEpoch]);
 
-  const [pastRounds, setPastRounds] = useState<PredictionRound[]>([
-    { id: 1041, asset: 'BTC', timeframe: '5m', strikePrice: 77920.0, closePrice: 78050.0, upPool: 18200, downPool: 14400, status: 'RESOLVED', startTime: Date.now() - 360000, endTime: Date.now() - 60000 },
-    { id: 1040, asset: 'BTC', timeframe: '5m', strikePrice: 78100.0, closePrice: 77940.0, upPool: 12900, downPool: 15800, status: 'RESOLVED', startTime: Date.now() - 660000, endTime: Date.now() - 360000 },
-    { id: 1039, asset: 'ETH', timeframe: '5m', strikePrice: 2465.0, closePrice: 2472.5, upPool: 15400, downPool: 11800, status: 'RESOLVED', startTime: Date.now() - 960000, endTime: Date.now() - 660000 },
-  ]);
+  const refreshArenaView = useCallback(async () => {
+    if (!account) {
+      setView(null);
+      setViewState('idle');
+      return;
+    }
+    setViewState('loading');
+    try {
+      const v = await fetchArenaView(account);
+      if (!v) {
+        setView(null);
+        setViewState('error');
+        return;
+      }
+      setView(v);
+      setViewState('ok');
+    } catch {
+      setView(null);
+      setViewState('error');
+    }
+  }, [account]);
 
-  // 1. Live FreeCrypto API Poller (Key: dyegtedxxox83d5ems8i)
+  useEffect(() => {
+    if (account) {
+      void refreshArenaView();
+    } else {
+      setView(null);
+      setViewState('idle');
+    }
+    const poll = setInterval(() => {
+      if (account) void refreshArenaView();
+    }, 10000);
+    return () => clearInterval(poll);
+  }, [account, refreshArenaView]);
+
+  useEffect(() => {
+    if (round && round.assetSymbol) {
+      const sym = round.assetSymbol as AssetSymbol;
+      if (ASSETS_REGISTRY[sym] && sym !== selectedAsset) {
+        setSelectedAsset(sym);
+      }
+    }
+  }, [round]);
+
+  useEffect(() => {
+    if (round) {
+      setStrikePrice(normalizeStrike(round.strikePrice));
+    }
+  }, [round]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -288,7 +326,6 @@ export const ArenaPage: React.FC = () => {
     };
   }, [selectedAsset]);
 
-  // 2. Real-time Live Binance WebSocket Connection (For sub-second tick continuity)
   useEffect(() => {
     const cfg = ASSETS_REGISTRY[selectedAsset] || ASSETS_REGISTRY.BTC;
     const symbol = cfg.binanceSymbol.toLowerCase();
@@ -309,16 +346,12 @@ export const ArenaPage: React.FC = () => {
       ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          // Trade Stream
           if (data.e === 'trade' && data.p) {
             let p = parseFloat(data.p);
-            if (selectedAsset === 'CTC_ETH') p = p / (currentPriceRef.current > 0 ? 2470.0 : 2470.0);
-            if (selectedAsset === 'CTC_BTC') p = p / (currentPriceRef.current > 0 ? 78000.0 : 78000.0);
             if (!isNaN(p) && p > 0) {
               setCurrentPrice(p);
             }
           }
-          // 24hr Ticker Stream
           if (data.e === '24hrTicker') {
             if (data.P) setPriceDelta24h(parseFloat(data.P));
             if (data.h) setHigh24h(parseFloat(data.h));
@@ -342,300 +375,53 @@ export const ArenaPage: React.FC = () => {
     };
   }, [selectedAsset]);
 
-  // 3. Manual Immediate Settlement Trigger
-  const triggerSettlement = useCallback(() => {
-    const currentBet = activeBetsRef.current[currentLaneKey];
-    const resolvedPrice = currentPriceRef.current;
-    const targetStrike = strikePriceRef.current;
-    const isUpWon = resolvedPrice >= targetStrike;
-    const mult = timeframeMultipliers[selectedTimeframe] || 1.92;
-
-    if (currentBet) {
-      const userWon =
-        (currentBet.direction === 'UP' && isUpWon) ||
-        (currentBet.direction === 'DOWN' && !isUpWon);
-
-      if (userWon) {
-        const payout = currentBet.amount * mult;
-        setPaperBalanceUSD((prev) => prev + payout);
-        setStreak((prev) => {
-          const next = prev + 1;
-          if (next >= 3) {
-            setStreakModalOpen(true);
-          }
-          return next;
-        });
-
-        addToast(
-          'success',
-          '🎉 PREDICTION WON! (+CTS REPUTATION)',
-          `Resolved at $${formatDisplayPrice(resolvedPrice)}. You won $${payout.toFixed(2)} USDC (${mult}x payout)! Streak increased to ${streak + 1}!`
-        );
-      } else {
-        setStreak(0);
-        addToast(
-          'error',
-          'Prediction Expired Out-of-the-Money',
-          `Resolved at $${formatDisplayPrice(resolvedPrice)} vs Strike $${formatDisplayPrice(targetStrike)}. Streak reset.`
-        );
-      }
-
-      setActiveBets((prev) => {
-        const copy = { ...prev };
-        delete copy[currentLaneKey];
-        return copy;
-      });
-    } else {
-      addToast(
-        'info',
-        `Round #${currentRound.id} Settled`,
-        `Resolved at $${formatDisplayPrice(resolvedPrice)} (Strike $${formatDisplayPrice(targetStrike)}). ${isUpWon ? 'UP POOL WON ↗' : 'DOWN POOL WON ↘'}.`
-      );
-    }
-
-    // Archive into Past Settled Rounds
-    setPastRounds((prev) => [
-      {
-        id: currentRound.id,
-        asset: selectedAsset,
-        timeframe: selectedTimeframe,
-        strikePrice: targetStrike,
-        closePrice: resolvedPrice,
-        upPool: currentRound.upPool,
-        downPool: currentRound.downPool,
-        status: 'RESOLVED',
-        startTime: Date.now() - (isFastTestMode ? 15000 : timeframeDurations[selectedTimeframe] * 1000),
-        endTime: Date.now(),
-      },
-      ...prev.slice(0, 7),
-    ]);
-
-    // Update Strike Price for next round
-    laneStrikesRef.current[currentLaneKey] = resolvedPrice;
-    setStrikePrice(resolvedPrice);
-    strikePriceRef.current = resolvedPrice;
-  }, [currentLaneKey, selectedAsset, selectedTimeframe, isFastTestMode, currentRound.id, currentRound.upPool, currentRound.downPool, streak, addToast]);
-
-  // 4. Continuous Multi-Lane 1-Second Master Clock
-  // (Never resets on asset/timeframe click — tracks true real-time epoch!)
   useEffect(() => {
     const timer = setInterval(() => {
-      const now = Date.now();
-
-      // Update current lane's countdown
-      const currentEpoch = getLaneEpoch(selectedTimeframe, isFastTestMode);
-      setTimeRemaining(currentEpoch.remainingSec);
-
-      // Ensure current lane has a strike price set
-      if (!laneStrikesRef.current[currentLaneKey] && currentPriceRef.current > 0) {
-        laneStrikesRef.current[currentLaneKey] = currentPriceRef.current;
-        setStrikePrice(currentPriceRef.current);
-      }
-
-      // Check all active bets across all lanes for epoch completion
-      const currentBets = { ...activeBetsRef.current };
-      let betsChanged = false;
-
-      Object.entries(currentBets).forEach(([laneKey, bet]) => {
-        const betDurationMs = (isFastTestMode ? 15 : timeframeDurations[bet.timeframe] || 300) * 1000;
-        const betEpoch = getLaneEpoch(bet.timeframe, isFastTestMode);
-
-        // Check if bet round has concluded
-        if (now >= bet.timestamp + betDurationMs || betEpoch.epochIndex > bet.roundId) {
-          betsChanged = true;
-          const assetCfg = ASSETS_REGISTRY[bet.asset] || ASSETS_REGISTRY.BTC;
-          const resolvedPrice =
-            bet.asset === selectedAsset
-              ? currentPriceRef.current
-              : assetCfg.basePrice || bet.strikePrice;
-
-          const isUpWon = resolvedPrice >= bet.strikePrice;
-          const userWon =
-            (bet.direction === 'UP' && isUpWon) ||
-            (bet.direction === 'DOWN' && !isUpWon);
-          const mult = timeframeMultipliers[bet.timeframe] || 1.92;
-
-          if (userWon) {
-            const payout = bet.amount * mult;
-            setPaperBalanceUSD((prev) => prev + payout);
-            setStreak((prev) => {
-              const next = prev + 1;
-              if (next >= 3) setStreakModalOpen(true);
-              return next;
-            });
-            addToast(
-              'success',
-              `🎉 ${bet.asset} PREDICTION WON! (+CTS REPUTATION)`,
-              `Resolved at $${formatDisplayPrice(resolvedPrice)}. Won $${payout.toFixed(2)} USDC (${mult}x) on ${bet.asset} ${bet.timeframe}!`
-            );
-          } else {
-            setStreak(0);
-            addToast(
-              'error',
-              `${bet.asset} ${bet.timeframe} Expired Out-of-the-Money`,
-              `Resolved at $${formatDisplayPrice(resolvedPrice)} vs Strike $${formatDisplayPrice(bet.strikePrice)}.`
-            );
-          }
-
-          // Log into settled rounds
-          setPastRounds((prev) => [
-            {
-              id: bet.roundId,
-              asset: bet.asset,
-              timeframe: bet.timeframe,
-              strikePrice: bet.strikePrice,
-              closePrice: resolvedPrice,
-              upPool: Math.floor(Math.random() * 8000 + 10000),
-              downPool: Math.floor(Math.random() * 8000 + 9000),
-              status: 'RESOLVED',
-              startTime: bet.timestamp,
-              endTime: now,
-            },
-            ...prev.slice(0, 7),
-          ]);
-
-          delete currentBets[laneKey];
-        }
-      });
-
-      if (betsChanged) {
-        setActiveBets(currentBets);
-      }
-
-      // Roll current round if epoch changed
-      setCurrentRound((prev) => {
-        if (prev.id !== currentEpoch.epochIndex) {
-          const newStrike = currentPriceRef.current > 0 ? currentPriceRef.current : prev.strikePrice;
-          laneStrikesRef.current[currentLaneKey] = newStrike;
-          setStrikePrice(newStrike);
-          return {
-            ...prev,
-            id: currentEpoch.epochIndex,
-            asset: selectedAsset,
-            timeframe: selectedTimeframe,
-            strikePrice: newStrike,
-            startTime: currentEpoch.startTime,
-            endTime: currentEpoch.endTime,
-            upPool: Math.floor(Math.random() * 8000 + 11000),
-            downPool: Math.floor(Math.random() * 8000 + 9500),
-          };
-        }
-        return prev;
-      });
+      setTimeRemaining(getLaneEpoch(selectedTimeframe).remainingSec);
     }, 1000);
-
     return () => clearInterval(timer);
-  }, [selectedAsset, selectedTimeframe, isFastTestMode, currentLaneKey, getLaneEpoch, addToast]);
+  }, [selectedTimeframe, getLaneEpoch]);
 
-  // Handle Asset Switch (Continuous clock: timer is NEVER reset!)
-  const handleSelectAsset = (sym: AssetSymbol) => {
-    setSelectedAsset(sym);
-    const cfg = ASSETS_REGISTRY[sym];
-    const initialPrice = ACCURATE_BASE_PRICES[sym] || cfg.basePrice;
+  const arenaRound: PredictionRound = round
+    ? {
+        id: round.roundId,
+        asset: (round.assetSymbol as AssetSymbol) || 'BTC',
+        timeframe: '5m',
+        strikePrice: normalizeStrike(round.strikePrice),
+        closePrice: null,
+        upPool: toHumanUnits(round.totalAboveStake),
+        downPool: toHumanUnits(round.totalBelowStake),
+        status: roundStatusLabel(round.status),
+        startTime: Date.now() - 60000,
+        endTime: Date.now(),
+      }
+    : {
+        id: 0,
+        asset: selectedAsset,
+        timeframe: '5m',
+        strikePrice: strikePrice,
+        closePrice: null,
+        upPool: 0,
+        downPool: 0,
+        status: viewState === 'error' ? 'UNAVAILABLE' : 'IDLE',
+        startTime: Date.now() - 60000,
+        endTime: Date.now(),
+      };
 
-    setCurrentPrice(initialPrice);
-    currentPriceRef.current = initialPrice;
-
-    const newLaneKey = `${sym}_${selectedTimeframe}`;
-    if (!laneStrikesRef.current[newLaneKey]) {
-      laneStrikesRef.current[newLaneKey] = initialPrice;
-    }
-    const currentStrike = laneStrikesRef.current[newLaneKey];
-    setStrikePrice(currentStrike);
-    strikePriceRef.current = currentStrike;
-
-    const { epochIndex, startTime, endTime, remainingSec } = getLaneEpoch(selectedTimeframe, isFastTestMode);
-    setTimeRemaining(remainingSec);
-
-    setCurrentRound((prev) => ({
-      ...prev,
-      id: epochIndex,
-      asset: sym,
-      timeframe: selectedTimeframe,
-      strikePrice: currentStrike,
-      startTime,
-      endTime,
-    }));
-  };
-
-  // Handle Timeframe Switch (Calculates target epoch clock seamlessly)
-  const handleSelectTimeframe = (tf: Timeframe) => {
-    setSelectedTimeframe(tf);
-    const newLaneKey = `${selectedAsset}_${tf}`;
-    if (!laneStrikesRef.current[newLaneKey]) {
-      laneStrikesRef.current[newLaneKey] = currentPriceRef.current;
-    }
-    const currentStrike = laneStrikesRef.current[newLaneKey];
-    setStrikePrice(currentStrike);
-    strikePriceRef.current = currentStrike;
-
-    const { epochIndex, startTime, endTime, remainingSec } = getLaneEpoch(tf, isFastTestMode);
-    setTimeRemaining(remainingSec);
-
-    setCurrentRound((curr) => ({
-      ...curr,
-      id: epochIndex,
-      timeframe: tf,
-      strikePrice: currentStrike,
-      startTime,
-      endTime,
-    }));
-
-    addToast('info', 'Timeframe Switched', `Switched to ${tf.toUpperCase()} epoch lane. Countdown continuously synchronized.`);
-  };
-
-  // Handle User Bet Placement in Current Lane
-  const handlePlaceBet = (direction: 'UP' | 'DOWN', amount: number) => {
-    if (amount > paperBalanceUSD) {
-      addToast('error', 'Insufficient Capital', `Your available balance is $${paperBalanceUSD.toFixed(2)} USDC.`);
-      return;
-    }
-
-    // Deduct stake from paper balance
-    setPaperBalanceUSD((prev) => Math.max(0, prev - amount));
-
-    const { epochIndex } = getLaneEpoch(selectedTimeframe, isFastTestMode);
-    const lockStrike = currentPriceRef.current > 0 ? currentPriceRef.current : strikePrice;
-
-    // Record user bet in active bets registry for this lane
-    const newBet: UserBet = {
-      id: `${selectedAsset}_${selectedTimeframe}_${epochIndex}_${Date.now()}`,
-      roundId: epochIndex,
-      asset: selectedAsset,
-      timeframe: selectedTimeframe,
-      laneKey: currentLaneKey,
-      direction,
-      amount,
-      strikePrice: lockStrike,
-      timestamp: Date.now(),
-      potentialPayout: amount * (timeframeMultipliers[selectedTimeframe] || 1.92),
-    };
-
-    setActiveBets((prev) => ({
-      ...prev,
-      [currentLaneKey]: newBet,
-    }));
-
-    // Lock strike price
-    setStrikePrice(lockStrike);
-    strikePriceRef.current = lockStrike;
-
-    // Update round pools
-    setCurrentRound((prev) => ({
-      ...prev,
-      upPool: direction === 'UP' ? prev.upPool + amount : prev.upPool,
-      downPool: direction === 'DOWN' ? prev.downPool + amount : prev.downPool,
-    }));
-  };
-
-  // Filter tokens by category
-  const filteredAssets = Object.values(ASSETS_REGISTRY).filter((assetCfg) => {
-    if (selectedCategory === 'ALL') return true;
-    if (selectedCategory === 'CTC') return assetCfg.category === 'CTC';
-    if (selectedCategory === 'Major') return assetCfg.category === 'Major';
-    if (selectedCategory === 'DePIN_RWA') return assetCfg.category === 'DePIN' || assetCfg.category === 'RWA';
-    return true;
-  });
+  const userBet: UserBet | null =
+    round && prediction && prediction.stakeAmount > 0
+      ? {
+          id: `arena-${round.roundId}`,
+          roundId: round.roundId,
+          asset: (round.assetSymbol as AssetSymbol) || 'BTC',
+          timeframe: '5m',
+          laneKey: `${(round.assetSymbol as AssetSymbol) || 'BTC'}_5m`,
+          direction: prediction.choice === 0 ? 'UP' : 'DOWN',
+          amount: toHumanUnits(prediction.stakeAmount),
+          strikePrice: normalizeStrike(round.strikePrice),
+          timestamp: Date.now(),
+        }
+      : null;
 
   const formatDisplayPrice = (p: number | null | undefined, dec?: number) => {
     if (p === null || p === undefined || (!p && p !== 0)) return '--';
@@ -648,6 +434,111 @@ export const ArenaPage: React.FC = () => {
     });
   };
 
+  const revertReason = (err: unknown): string => {
+    const e = err as { shortMessage?: string; reason?: string; message?: string };
+    const msg = e?.shortMessage || e?.reason || e?.message;
+    if (typeof msg === 'string' && msg.trim()) return msg.trim();
+    return 'Transaction reverted on-chain (see console for details).';
+  };
+
+  const handleSelectAsset = (sym: AssetSymbol) => {
+    setSelectedAsset(sym);
+    const initialPrice = ACCURATE_BASE_PRICES[sym] || currentAssetConfig.basePrice;
+    setCurrentPrice(initialPrice);
+    currentPriceRef.current = initialPrice;
+  };
+
+  const handleSelectTimeframe = (tf: Timeframe) => {
+    setSelectedTimeframe(tf);
+    setTimeRemaining(getLaneEpoch(tf).remainingSec);
+  };
+
+  const handlePlacePrediction = async (direction: 'UP' | 'DOWN', amount: number) => {
+    if (!account) {
+      addToast('error', 'Connect A Wallet', 'Place predictions against the deployed ReputationArena on Creditcoin testnet.');
+      return;
+    }
+    if (!round) {
+      addToast('error', 'Round Not Found', 'The contract returned no current arena round. Try again on the next refresh.');
+      return;
+    }
+    if (prediction && prediction.stakeAmount > 0) {
+      addToast('error', 'Prediction Already Placed', `Round #${round.roundId} already has a live on-chain stake of $${toHumanUnits(prediction.stakeAmount).toFixed(2)} USDC.`);
+      return;
+    }
+    if (stats && amount > stats.paperBalance) {
+      addToast('error', 'InsufficientPaperBalance', `Available paper balance is $${stats.paperBalance.toFixed(2)} USDC.`);
+      return;
+    }
+    try {
+      const hash = await arenaPlacePrediction(round.roundId, direction === 'UP' ? 0 : 1, amount);
+      addToast('success', 'Prediction Placed On-Chain', `Round #${round.roundId}: ${direction} $${amount.toFixed(2)} USDC locked. tx ${txHashShort(hash)}`);
+      await refreshArenaView();
+    } catch (err) {
+      addToast('error', 'Place-Prediction Reverted', revertReason(err));
+    }
+  };
+
+  const handleClaimPayout = async () => {
+    if (!account) {
+      addToast('error', 'Connect A Wallet', 'Claiming payouts requires a connected wallet on Creditcoin testnet.');
+      return;
+    }
+    if (!round) {
+      addToast('error', 'Round Not Found', 'No current arena round to claim for.');
+      return;
+    }
+    try {
+      const hash = await arenaClaimPayout(round.roundId);
+      addToast('success', 'Payout Claimed On-Chain', `Round #${round.roundId} payout claimed. tx ${txHashShort(hash)}`);
+      await refreshArenaView();
+    } catch (err) {
+      addToast('error', 'Claim-Payout Reverted', revertReason(err));
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!account) {
+      addToast('error', 'Connect A Wallet', 'Registering requires a connected wallet on Creditcoin testnet.');
+      return;
+    }
+    setRegisterPending(true);
+    try {
+      const hash = await registerArenaUser();
+      addToast('success', 'Arena Account Registered', `Paper-trading arena account created on-chain. tx ${txHashShort(hash)}`);
+      await refreshArenaView();
+    } catch (err) {
+      addToast('error', 'Register Reverted', revertReason(err));
+    } finally {
+      setRegisterPending(false);
+    }
+  };
+
+  const handleSyncStreak = async () => {
+    if (!account) {
+      addToast('error', 'Connect A Wallet', 'Streak sync requires a connected wallet on Creditcoin testnet.');
+      return;
+    }
+    setSyncPending(true);
+    try {
+      const hash = await syncArenaStreak();
+      addToast('success', 'Streak Synced To Reputation', `Reputation boost anchored to Creditcoin L1. tx ${txHashShort(hash)}`);
+      await refreshArenaView();
+    } catch (err) {
+      addToast('error', 'Streak Sync Reverted', revertReason(err));
+    } finally {
+      setSyncPending(false);
+    }
+  };
+
+  const filteredAssets = Object.values(ASSETS_REGISTRY).filter((assetCfg) => {
+    if (selectedCategory === 'ALL') return true;
+    if (selectedCategory === 'CTC') return assetCfg.category === 'CTC';
+    if (selectedCategory === 'Major') return assetCfg.category === 'Major';
+    if (selectedCategory === 'DePIN_RWA') return assetCfg.category === 'DePIN' || assetCfg.category === 'RWA';
+    return true;
+  });
+
   return (
     <div className="space-y-6 py-4">
       {/* Live Wallet & Available Paper Trading Capital Bar */}
@@ -658,11 +549,17 @@ export const ArenaPage: React.FC = () => {
           </div>
           <div>
             <div className="text-[10px] uppercase font-mono text-amber-400 tracking-wider flex items-center gap-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLiveConnected ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
-              {isLiveConnected ? 'FreeCrypto API + Binance WS Connected' : 'FreeCrypto API Feed Active'}
+              <span className={`w-1.5 h-1.5 rounded-full ${view?.stats ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              {view?.stats
+                ? 'ReputationArena Live Paper Balance'
+                : account
+                ? viewState === 'error'
+                  ? 'Arena Read Unavailable'
+                  : 'Loading Arena State...'
+                : 'FreeCrypto API + Binance WS Connected'}
             </div>
             <div className="text-xl font-bold font-mono text-white flex items-center gap-2">
-              ${paperBalanceUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-xs text-cyan-300 font-normal">USDC</span>
+              ${stats !== null && stats !== undefined ? formatDisplayPrice(stats.paperBalance, 2) : '--'} <span className="text-xs text-cyan-300 font-normal">USDC</span>
               <span className="text-xs text-white/40 font-mono font-normal">
                 (Paper Trading Capital)
               </span>
@@ -670,31 +567,81 @@ export const ArenaPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Fast Test Mode Toggle */}
-          <button
-            onClick={() => setIsFastTestMode((prev) => !prev)}
-            className={`px-3 py-2 rounded-xl text-xs font-mono font-bold transition border cursor-pointer flex items-center gap-1.5 ${
-              isFastTestMode
-                ? 'bg-purple-500/20 border-purple-500/60 text-purple-300 shadow-md shadow-purple-500/20'
-                : 'bg-white/[0.04] border-white/[0.08] text-white/50 hover:text-white'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5" />
-            {isFastTestMode ? '⚡ 15s Rapid Test Mode' : 'Standard 5m Mode'}
-          </button>
-
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap">
           <div className="text-right hidden sm:block">
-            <span className="text-[10px] font-mono text-white/40 block">Creditcoin CTS Multiplier</span>
-            <span className="text-xs font-mono font-bold text-emerald-400">+{streak * 5} Rep Multiplier</span>
+            <span className="text-[10px] font-mono text-white/40 block">
+              Round #{round ? round.roundId : '--'} · {round ? roundStatusLabel(round.status) : account ? 'OFFLINE' : 'IDLE'}
+            </span>
+            <span className="text-xs font-mono font-bold text-emerald-400">
+              +{(stats ? stats.currentWinStreak : 0) * 5} Rep Multiplier
+            </span>
           </div>
+
+          {!account && (
+            <button
+              onClick={openConnectModal}
+              className="px-3 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              Connect For Live Arena
+            </button>
+          )}
+
+          {account && (
+            <>
+              <button
+                onClick={handleRegister}
+                disabled={registerPending || isRegistered}
+                className="px-3 py-2 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.1] text-white/70 hover:text-white text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Register a paper-trading account on the deployed ReputationArena"
+              >
+                {registerPending ? (
+                  <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" />
+                ) : isRegistered ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
+                )}
+                {registerPending ? 'Registering...' : isRegistered ? 'Registered' : 'Register Arena User'}
+              </button>
+
+              <button
+                onClick={handleSyncStreak}
+                disabled={syncPending || !stats}
+                className="px-3 py-2 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/30 text-purple-300 text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Sync current win streak into CredX reputation via syncStreakToReputation()"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${syncPending ? 'animate-spin' : ''}`} />
+                {syncPending ? 'Syncing...' : 'Sync Streak To Rep'}
+              </button>
+            </>
+          )}
 
           <div className="px-3.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-center gap-1.5 font-bold">
             <Trophy className="w-3.5 h-3.5 text-amber-400" />
-            Streak: {streak} Wins
+            Streak: {stats ? stats.currentWinStreak : '--'} Wins
           </div>
         </div>
       </div>
+
+      {/* Live Arena Reputation Stats Strip */}
+      {account && view && (
+        <div className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/[0.06] text-xs font-mono flex flex-wrap items-center gap-x-6 gap-y-2">
+          {stats ? (
+            <>
+              <span className="text-white/40">Total Wins <strong className="text-emerald-400 ml-1">{stats.totalWins}</strong></span>
+              <span className="text-white/40">Total Rounds <strong className="text-cyan-300 ml-1">{stats.totalRounds}</strong></span>
+              <span className="text-white/40">Longest Streak <strong className="text-amber-300 ml-1">{stats.longestWinStreak}</strong></span>
+              <span className="text-white/40">Rep Boosts Claimed <strong className="text-purple-300 ml-1">{stats.totalReputationBoostsClaimed}</strong></span>
+            </>
+          ) : (
+            <span className="text-white/50 flex items-center gap-2">
+              <Shield className="w-3.5 h-3.5 text-amber-400" />
+              No arena stats returned from the contract — register an arena account to start paper-trading.
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Top Arena Header with Token Categorization */}
       <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-cyan-500/10 border border-amber-500/20 space-y-4">
@@ -786,52 +733,6 @@ export const ArenaPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Active Positions Across Lanes Strip */}
-      {Object.values(activeBets).length > 0 && (
-        <div className="p-3.5 rounded-2xl bg-cyan-950/25 border border-cyan-500/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono shadow-lg shadow-cyan-500/5">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-            <span className="font-bold text-white uppercase tracking-wider">
-              Active Multi-Asset Lanes ({Object.values(activeBets).length}):
-            </span>
-            <span className="text-white/40 hidden sm:inline">&bull; Real-time isolated epoch resolution</span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {Object.values(activeBets).map((b) => {
-              const isCurrent = b.asset === selectedAsset && b.timeframe === selectedTimeframe;
-              return (
-                <button
-                  key={b.id}
-                  onClick={() => {
-                    handleSelectAsset(b.asset);
-                    handleSelectTimeframe(b.timeframe);
-                  }}
-                  className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold transition flex items-center gap-2 cursor-pointer ${
-                    isCurrent
-                      ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 ring-1 ring-cyan-500/40 shadow-sm'
-                      : 'bg-white/[0.04] border-white/[0.08] text-white/70 hover:border-cyan-500/40 hover:text-white'
-                  }`}
-                  title={`Jump to ${b.asset} ${b.timeframe} lane`}
-                >
-                  <span className="text-white">{b.asset}</span>
-                  <span className="text-white/40 text-[10px]">{b.timeframe.toUpperCase()}</span>
-                  <span
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                      b.direction === 'UP'
-                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                        : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
-                    }`}
-                  >
-                    {b.direction} ${b.amount}
-                  </span>
-                  {isCurrent && <span className="text-[10px] text-cyan-400 font-normal">&bull; Active View</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* Main Trading Stage */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Chart & Odds */}
@@ -843,7 +744,7 @@ export const ArenaPage: React.FC = () => {
             currentPrice={currentPrice}
             strikePrice={strikePrice}
             timeRemaining={timeRemaining}
-            round={currentRound}
+            round={arenaRound}
             timeframe={selectedTimeframe}
             onSelectTimeframe={handleSelectTimeframe}
             priceDelta24h={priceDelta24h}
@@ -852,9 +753,7 @@ export const ArenaPage: React.FC = () => {
             volume24h={volume24h}
             isLiveFeed={isLiveConnected}
             userBet={userBet}
-            onForceSettle={triggerSettlement}
-            isFastTestMode={isFastTestMode}
-            onToggleFastTestMode={() => setIsFastTestMode((p) => !p)}
+            onForceSettle={handleClaimPayout}
           />
         </div>
 
@@ -862,14 +761,14 @@ export const ArenaPage: React.FC = () => {
         <div className="lg:col-span-4">
           <OrderTicket
             asset={selectedAsset}
-            round={currentRound}
-            onPlaceBet={handlePlaceBet}
-            streak={streak}
+            round={arenaRound}
+            onPlaceBet={handlePlacePrediction}
+            streak={stats ? stats.currentWinStreak : 0}
             userBet={userBet}
             currentPrice={currentPrice}
             strikePrice={strikePrice}
-            paperBalanceUSD={paperBalanceUSD}
-            onForceSettle={triggerSettlement}
+            paperBalanceUSD={stats ? stats.paperBalance : 0}
+            onForceSettle={handleClaimPayout}
           />
         </div>
       </div>
@@ -881,11 +780,16 @@ export const ArenaPage: React.FC = () => {
             <History className="w-4 h-4 text-cyan-400" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">Settled Arena Epochs</h3>
           </div>
-          <span className="text-xs font-mono text-white/40">Verified via Creditcoin L1 Precompile (0x0FD2)</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-white/40 hidden sm:inline">
+              No on-chain archive reader — local demo only
+            </span>
+            <SimulationBadge label="SIMULATED HISTORY" note="Illustrative settled-epochs list. fetchArenaView() only exposes the current arena round, so past rounds are not read on-chain." />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {pastRounds.map((r) => {
+          {DEMO_SETTLED_ROUNDS.map((r) => {
             const isUpWon = (r.closePrice || 0) >= r.strikePrice;
             const cfg = ASSETS_REGISTRY[r.asset] || ASSETS_REGISTRY.BTC;
             return (
@@ -929,13 +833,6 @@ export const ArenaPage: React.FC = () => {
           })}
         </div>
       </GlassCard>
-
-      {/* Streak Celebration Modal */}
-      <StreakCelebrationModal
-        isOpen={streakModalOpen}
-        onClose={() => setStreakModalOpen(false)}
-        streak={streak}
-      />
     </div>
   );
 };
