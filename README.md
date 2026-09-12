@@ -10,7 +10,7 @@
 
 DeFi today is crippled by **150%+ over-collateralization requirements** ($150 of capital locked to borrow $100). Borrowers who have flawlessly repaid hundreds of thousands of dollars across Ethereum DeFi protocols (Aave, Compound, Uniswap LP) or settled real-world trade invoices are treated as complete strangers on other chains.
 
-**CredX** turns **Creditcoin into the decentralized cross-chain credit layer for Web3**. Using Creditcoin's **Attestcoin Protocol (USC)**, CredX cryptographically verifies cross-chain transaction Merkle + continuity proofs **directly on the live `0x0FD2` BlockProver precompile** (see the verified-on-Blockscout [`BlockProverAttestationOracle`](file:///d:/money/contracts/core/tracks/BlockProverAttestationOracle.sol) and the real Sepolia proof transcript in [ATTESTCOIN_INTEGRATION.md](file:///d:/money/ATTESTCOIN_INTEGRATION.md); reproduce with `npm run usc:verify`). A distinctly-labeled `MockAttestationOracle` harness remains only as a gasless fallback for score boosts.
+**CredX** turns **Creditcoin into the decentralized cross-chain credit layer for Web3**. Using Creditcoin's **Attestcoin Protocol (USC)**, CredX cryptographically verifies cross-chain transaction Merkle + continuity proofs **directly on the live `0x0FD2` BlockProver precompile** (see the verified-on-Blockscout [`BlockProverAttestationOracle`](contracts/core/tracks/BlockProverAttestationOracle.sol) and the real Sepolia proof transcript in [ATTESTCOIN_INTEGRATION.md](ATTESTCOIN_INTEGRATION.md); reproduce with `npm run usc:verify`). A distinctly-labeled `MockAttestationOracle` harness remains only as a gasless fallback for score boosts.
 
 Verified actions feed into an institutional-grade **OCCR (On-Chain Credit Risk) Multi-Factor Engine**, scoring wallets across 7 dimensions (300 to 850 CTS) to unlock undercollateralized borrowing, dynamic FICO-style APRs, and multi-track ecosystems.
 
@@ -18,7 +18,7 @@ Verified actions feed into an institutional-grade **OCCR (On-Chain Credit Risk) 
 
 ## 📜 Attestcoin Protocol Integration
 
-> 📖 **Full Technical Specification**: See [ATTESTCOIN_INTEGRATION.md](file:///d:/money/ATTESTCOIN_INTEGRATION.md) for detailed verification flows, cryptographic invariants, and SDK usage.
+> 📖 **Full Technical Specification**: See [ATTESTCOIN_INTEGRATION.md](ATTESTCOIN_INTEGRATION.md) for detailed verification flows, cryptographic invariants, and SDK usage.
 
 CredX fulfills all Attestcoin Protocol requirements:
 1. **Working Integration Code**: `ICreditcoinBlockProver.sol` (exact `0x0FD2` ABI), `BlockProverAttestationOracle.sol` (live precompile wrapper), and `scripts/usc-verify-real.js` — a real Sepolia tx verified SUCCESS on `0x0FD2` and anchored on-chain.
@@ -85,6 +85,49 @@ npx hardhat test
 
   99 passing
 ```
+
+---
+
+## 🛠️ Setup & Running
+
+### 1. Prerequisites
+- Node.js 18+ and npm
+- A MetaMask / EVM wallet funded with test `CTC` (faucet: https://faucet.creditcoin.org) on **Creditcoin testnet** (chainId `102031`)
+- Optionally Sepolia ETH for source-chain reads (not required)
+
+### 2. Install & verify (smart contracts)
+```bash
+npm install          # installs hardhat, ethers, @gluwa/usc-sdk, ...
+npx hardhat test     # 99/99 passing tests
+```
+
+### 3. Configure the environment (for live on-chain deploys / verification)
+Create a `.env` in the repo root:
+```env
+PRIVATE_KEY=0x...                          # Creditcoin testnet deployer wallet
+CREDITCOIN_RPC_URL=https://rpc.cc3-testnet.creditcoin.network
+SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+MAINNET_RPC_URL=https://ethereum-rpc.publicnode.com
+```
+> ⚠️ Never commit `.env` (it is git-ignored).
+
+### 4. Run the live Attestcoin (USC / 0x0FD2) verification
+```bash
+npm run usc:deploy    # deploy BlockProverAttestationOracle to Creditcoin testnet
+npm run usc:verify    # real Sepolia proof -> verified SUCCESS on 0x0FD2 -> anchor on-chain
+```
+`RUNBOOK.md`-style transcript lives in [ATTESTCOIN_INTEGRATION.md](ATTESTCOIN_INTEGRATION.md).
+
+### 5. Run the frontend
+```bash
+cd frontend
+npm install
+npm run dev          # Vite dev server (default http://localhost:5173)
+```
+In the app: connect a wallet (Creditcoin testnet, chainId `102031`), open the **Proofs & Attest** tab, and click **Verify & Anchor on 0x0FD2** to crypto-verify a fresh Sepolia proof on the live precompile and anchor it with your wallet.
+
+### 6. Load the Chrome Extension (optional)
+Load unpacked in Chrome via `chrome://extensions` from the `chrome-extension/` directory (Manifest V3 Virtual Node & Attestcoin daemon — never stores a private key).
 
 ---
 
