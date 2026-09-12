@@ -9,6 +9,8 @@
     "deploy:creditcoin-testnet": "hardhat run scripts/deploy.js --network creditcoinTestnet",
     "usc:deploy": "hardhat run scripts/deploy_usc_oracle.js --network creditcoinTestnet",
     "usc:verify": "node scripts/usc-verify-real.js",
+    "deck:docx": "node scripts/create_docx.js",
+    "deck:pdf": "node scripts/create_deck_pdf.js",
     "demo:e2e": "hardhat run scripts/test-e2e.js",
     "start:frontend": "node scripts/serve.js"
   },
@@ -30,7 +32,8 @@
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "dotenv": "^17.4.2",
     "ethers": "^6.13.0",
-    "hardhat": "^2.22.0"
+    "hardhat": "^2.22.0",
+    "pdfkit": "^0.20.2"
   },
   "dependencies": {
     "@gluwa/usc-sdk": "^0.18.0",

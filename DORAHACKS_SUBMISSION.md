@@ -236,8 +236,23 @@ CredX includes a production Manifest V3 browser extension (`chrome-extension/`) 
 
 ---
 
+## 🎥 10b. Demo Video
+
+> **PENDING — record per `scripts/demo_video_shotlist.md`, then fill in the link below.**
+> Demo link: <https://youtu.be/PASTE_YOUR_VIDEO_URL_HERE>
+> Suggested title: "CredX Protocol — Live 0x0FD2 Attestation, 5-Track Credit Bureau (Creditcoin BUIDL 2026)"
+
+---
+
 ## 👥 11. Team & Open Source
 * **Team**: CredX Protocol Builders
 * **License**: MIT License
 * **Open Source Commitment**: Built specifically to enrich the Creditcoin L1 ecosystem.
+
+### Team members (PENDING — fill in):
+| Name | Role | Email / Contact |
+| --- | --- | --- |
+| (Team member 1) | (Role, e.g. Solidity / Full-Stack / DeFi) | (email) |
+| (Team member 2) | (Role) | (email) |
+| (Team member 3, optional) | (Role) | (email) |
 
