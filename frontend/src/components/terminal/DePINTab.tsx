@@ -358,14 +358,14 @@ const DePINTab: React.FC = () => {
         id: device.id,
         name: device.name,
         category: device.category as any,
-        macHash: `0x${Math.random().toString(16).slice(2, 6)}..${Math.random().toString(16).slice(2, 6)}`,
+        macHash: `0x${Math.random().toString(16).slice(2, 6)}..${Math.random().toString(16).slice(2, 6)}`, // NOSONAR
         distanceMeters: Math.max(0.8, +((Math.abs(device.rssi + 50) / 10).toFixed(1))),
         rssi: device.rssi,
-        lat: nexusRealGeo.lat + (Math.random() - 0.5) * 0.006,
-        lng: nexusRealGeo.lng + (Math.random() - 0.5) * 0.006,
-        batteryPct: Math.floor(70 + Math.random() * 28),
+        lat: nexusRealGeo.lat + (Math.random() - 0.5) * 0.006, // NOSONAR
+        lng: nexusRealGeo.lng + (Math.random() - 0.5) * 0.006, // NOSONAR
+        batteryPct: Math.floor(70 + Math.random() * 28), // NOSONAR
         timestamp: Date.now(),
-        merkleLeaf: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+        merkleLeaf: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''), // NOSONAR
         payloadSize: 32,
         fleetName: 'Physical Discovered IoT'
       };
@@ -406,8 +406,8 @@ const DePINTab: React.FC = () => {
         'reuters.com/markets/global-macro-sentiment',
         'kaggle.com/datasets/multimodal-dialogue'
       ];
-      const randomUrl = endpoints[Math.floor(Math.random() * endpoints.length)];
-      const randomSize = (Math.random() * 80 + 10).toFixed(1) + ' KB';
+      const randomUrl = endpoints[Math.floor(Math.random() * endpoints.length)]; // NOSONAR
+      const randomSize = (Math.random() * 80 + 10).toFixed(1) + ' KB'; // NOSONAR
       setRequestLogs(prev => [
         { id: Date.now(), time: 'Just now', url: randomUrl, size: randomSize, status: 200 },
         ...prev.slice(0, 4)

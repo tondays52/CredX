@@ -103,7 +103,7 @@ function generateChartPoints(
 
   const prices: number[] = [basePrice];
   for (let i = 1; i < cfg.count; i++) {
-    const drift = (Math.random() - 0.48) * cfg.volatility;
+    const drift = (Math.random() - 0.48) * cfg.volatility; // NOSONAR
     prices.push(Math.max(0.01, prices[prices.length - 1] * (1 + drift)));
   }
 
@@ -661,7 +661,7 @@ export const OverviewTab: React.FC = () => {
 
                 {/* Volume bars */}
                 {showVolume && chartPoints.map((p, i) => {
-                  const barH = 15 + Math.random() * 20;
+                  const barH = 15 + Math.random() * 20; // NOSONAR
                   return (
                     <rect
                       key={i}

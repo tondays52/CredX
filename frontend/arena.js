@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', () => {
     priceHistory = [];
     let p = strikePrice - (asset.volatility * 2);
     for (let i = 0; i < MAX_HISTORY_POINTS; i++) {
-      p += (Math.random() - 0.49) * asset.volatility;
+      p += (Math.random() - 0.49) * asset.volatility; // NOSONAR
       priceHistory.push(p);
     }
     currentPrice = priceHistory[priceHistory.length - 1];
@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Price Fluctuation Simulation Loop
   function tickPrice() {
     const asset = ASSETS[activeAssetKey];
-    const delta = (Math.random() - 0.49) * (asset.volatility / 2);
+    const delta = (Math.random() - 0.49) * (asset.volatility / 2); // NOSONAR
     const maxBound = strikePrice + (asset.volatility * 6);
     const minBound = strikePrice - (asset.volatility * 6);
     currentPrice = Math.max(minBound, Math.min(maxBound, currentPrice + delta));
@@ -251,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ticketStrikeHint.innerText = `strike ${formattedStrike}`;
 
     // Randomize market ratio
-    const rAbove = Math.floor(Math.random() * 30) + 35;
+    const rAbove = Math.floor(Math.random() * 30) + 35; // NOSONAR
     const rBelow = 100 - rAbove;
     abovePct.innerText = `${rAbove}%`;
     belowPct.innerText = `${rBelow}%`;

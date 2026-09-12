@@ -51,7 +51,7 @@ export function calculateRssiFromDistance(
 ): number {
   const d = Math.max(0.5, distanceMeters);
   // Add subtle Gaussian fading jitter (-2.5 to +2.5 dB)
-  const shadowFading = (Math.random() - 0.5) * 4;
+  const shadowFading = (Math.random() - 0.5) * 4; // NOSONAR
   const rssi = -10 * pathLossExponent * Math.log10(d) + refRssi1m + shadowFading;
   return Math.round(Math.max(-98, Math.min(-35, rssi)));
 }

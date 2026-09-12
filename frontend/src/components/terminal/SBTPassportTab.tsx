@@ -95,7 +95,7 @@ const SBTPassportTab: React.FC = () => {
     const count = 36;
     for (let i = 0; i < count; i++) {
       const theta = (i / count) * Math.PI * 2;
-      const phi = Math.acos((Math.random() * 2) - 1);
+      const phi = Math.acos((Math.random() * 2) - 1); // NOSONAR
       const r = 65;
       nodes.push({
         x: r * Math.sin(phi) * Math.cos(theta),

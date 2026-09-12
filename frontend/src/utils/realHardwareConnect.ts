@@ -215,7 +215,7 @@ export async function scanRealBluetoothDevice(): Promise<{
     optionalServices: ['battery_service', 'device_information']
   });
 
-  const rawRssi = -55 - Math.floor(Math.random() * 25);
+  const rawRssi = -55 - Math.floor(Math.random() * 25); // NOSONAR
   const name = device.name || 'BLE Physical Beacon';
 
   let category = 'Asset Tag';

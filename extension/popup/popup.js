@@ -182,8 +182,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       setTimeout(() => {
         const sampleHashes = ['0x4e19...9b21', '0x7c88...12fa', '0x99a3...bb44', '0x0d21...ee51'];
         const protocols = ['Uniswap V3 LP Burn', 'Morpho Blue Repay', 'Aave V3 FlashLoan', 'Maker Vault Repay'];
-        const randomHash = sampleHashes[Math.floor(Math.random() * sampleHashes.length)];
-        const randomProtocol = protocols[Math.floor(Math.random() * protocols.length)];
+        const randomHash = sampleHashes[Math.floor(Math.random() * sampleHashes.length)]; // NOSONAR
+        const randomProtocol = protocols[Math.floor(Math.random() * protocols.length)]; // NOSONAR
 
         // Append newly verified proof to stream
         if (proofStreamList) {

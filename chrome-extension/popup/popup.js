@@ -180,7 +180,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const newData = await chrome.storage.local.get(['isNodeActive', 'uptimeSeconds', 'bandwidthSharedMB', 'credXPoints', 'creditScore']);
         if (newData.isNodeActive) {
           const updatedUptime = (newData.uptimeSeconds || 0) + 1;
-          const additionalMB = Math.random() > 0.6 ? 1 : 0;
+          const additionalMB = Math.random() > 0.6 ? 1 : 0; // NOSONAR
           const updatedMB = (newData.bandwidthSharedMB || 0) + additionalMB;
           const updatedPoints = (newData.credXPoints || 0) + (updatedUptime % 6 === 0 ? 1 : 0);
 

@@ -18,11 +18,11 @@ jobs:
         with:
           node-version: 20
       - name: Install
-        run: npm install --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Compile
         run: npm run compile
       - name: Test
-        run: npx hardhat test
+        run: npm run test
 
   frontend:
     name: Frontend (tsc + vite build)
@@ -34,7 +34,7 @@ jobs:
           node-version: 20
       - name: Install
         working-directory: frontend
-        run: npm install --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Build (typecheck + bundle)
         working-directory: frontend
         run: npm run build

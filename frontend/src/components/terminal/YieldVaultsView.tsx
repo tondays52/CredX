@@ -243,15 +243,15 @@ export const YieldVaultsView: React.FC = () => {
       const now = new Date();
       const timeStr = now.toTimeString().split(' ')[0];
       const logTemplates: Array<{ msg: string; type: 'info' | 'success' | 'warn' | 'security' }> = [
-        { msg: `[ARBITRAGE] Basis spread harvested on CTC-cUSD pool (+1.${Math.floor(Math.random() * 80 + 10)}%). Net gain +$14.20.`, type: 'success' },
-        { msg: `[REBALANCE] Shifted ${Math.floor(Math.random() * 400 + 100)} cUSD into High-Yield OCCR Pool. CTS Score boosted.`, type: 'info' },
-        { msg: `[SECURITY] Circuit breaker verified: Average vault drawdown 0.${Math.floor(Math.random() * 70 + 20)}% (Well within bounds).`, type: 'security' },
-        { msg: `[SOLVER] Decentralized auction #${Math.floor(Math.random() * 900 + 1000)} cleared: Precompile 0x0FD2 won bid.`, type: 'info' },
-        { msg: `[ARBITRAGE] Auto-compounded ${(Math.random() * 4 + 1).toFixed(2)} stCTC into Tier-1 Validator Nodes.`, type: 'success' }
+        { msg: `[ARBITRAGE] Basis spread harvested on CTC-cUSD pool (+1.${Math.floor(Math.random() * 80 + 10)}%). Net gain +$14.20.`, type: 'success' }, // NOSONAR
+        { msg: `[REBALANCE] Shifted ${Math.floor(Math.random() * 400 + 100)} cUSD into High-Yield OCCR Pool. CTS Score boosted.`, type: 'info' }, // NOSONAR
+        { msg: `[SECURITY] Circuit breaker verified: Average vault drawdown 0.${Math.floor(Math.random() * 70 + 20)}% (Well within bounds).`, type: 'security' }, // NOSONAR
+        { msg: `[SOLVER] Decentralized auction #${Math.floor(Math.random() * 900 + 1000)} cleared: Precompile 0x0FD2 won bid.`, type: 'info' }, // NOSONAR
+        { msg: `[ARBITRAGE] Auto-compounded ${(Math.random() * 4 + 1).toFixed(2)} stCTC into Tier-1 Validator Nodes.`, type: 'success' } // NOSONAR
       ];
-      const randomLog = logTemplates[Math.floor(Math.random() * logTemplates.length)];
+      const randomLog = logTemplates[Math.floor(Math.random() * logTemplates.length)]; // NOSONAR
       setAgentLogs((prev) => [
-        { id: `log-${Date.now()}-${Math.random()}`, time: timeStr, ...randomLog },
+        { id: `log-${Date.now()}-${Math.random()}`, time: timeStr, ...randomLog }, // NOSONAR
         ...prev.slice(0, 39)
       ]);
     }, 4000);
@@ -1506,9 +1506,9 @@ export const YieldVaultsView: React.FC = () => {
         solverName: 'Solver #1 (CredX Sovereign Precompile 0x0FD2)',
         apy: targetApy,
         gasEstimate: '0.00 CTC ($0.00)',
-        executionTime: `${Math.floor(Math.random() * 30 + 55)}ms`,
+        executionTime: `${Math.floor(Math.random() * 30 + 55)}ms`, // NOSONAR
         confidence: 99.6,
-        zkProof: `0x${Math.random().toString(16).slice(2, 10)}${Math.random().toString(16).slice(2, 10)}`,
+        zkProof: `0x${Math.random().toString(16).slice(2, 10)}${Math.random().toString(16).slice(2, 10)}`, // NOSONAR
         legs: customLegs
       });
       playSound('fanfare');

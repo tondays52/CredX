@@ -156,7 +156,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         high: Math.max(lastCandle.close, currentPrice),
         low: Math.min(lastCandle.close, currentPrice),
         close: currentPrice,
-        volume: Math.floor(Math.random() * 50 + 20),
+        volume: Math.floor(Math.random() * 50 + 20), // NOSONAR
         isUp: currentPrice >= lastCandle.close,
       };
       candles.push(newCandle);

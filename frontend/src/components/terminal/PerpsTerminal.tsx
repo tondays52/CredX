@@ -538,9 +538,9 @@ export const PerpsTerminal: React.FC = () => {
               const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
               setRecentTrades((prev) => [
                 {
-                  id: `tr-${Date.now()}-${Math.random()}`,
+                  id: `tr-${Date.now()}-${Math.random()}`, // NOSONAR
                   price: currentPrice,
-                  size: Math.round((Math.random() * (currentPrice > 1000 ? 0.8 : 450) + 0.05) * 100) / 100,
+                  size: Math.round((Math.random() * (currentPrice > 1000 ? 0.8 : 450) + 0.05) * 100) / 100, // NOSONAR
                   side: currentPrice >= prevPrice ? 'BUY' : 'SELL',
                   time: timeStr,
                 },
@@ -654,7 +654,7 @@ export const PerpsTerminal: React.FC = () => {
   // Autonomous Micro-Tick Engine (ensures continuous live price motion & pnl updates)
   useEffect(() => {
     const tickInterval = setInterval(() => {
-      const jitter = (Math.random() - 0.495) * 0.0006;
+      const jitter = (Math.random() - 0.495) * 0.0006; // NOSONAR
       setSelectedMarket((prev) => {
         const newPrice = Math.max(0.000001, prev.price * (1 + jitter));
         const dir = newPrice >= prev.price ? 'up' : 'down';
@@ -679,7 +679,7 @@ export const PerpsTerminal: React.FC = () => {
       setPositions((prevPositions) =>
         prevPositions.map((pos) => {
           const m = selectedMarketRef.current;
-          const markP = pos.symbol === m.symbol ? m.price : pos.markPrice * (1 + (Math.random() - 0.495) * 0.0004);
+          const markP = pos.symbol === m.symbol ? m.price : pos.markPrice * (1 + (Math.random() - 0.495) * 0.0004); // NOSONAR
           const diff = pos.side === 'LONG' ? markP - pos.entryPrice : pos.entryPrice - markP;
           const pnl = (diff / pos.entryPrice) * pos.sizeUSD;
           const roi = (pnl / pos.marginUSD) * 100;

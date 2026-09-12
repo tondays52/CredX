@@ -251,7 +251,7 @@ export function generateTimeframeCandles(
   for (let i = candleCount - 1; i >= 0; i--) {
     const candleTime = now - i * stepMs;
     const wave = Math.sin((i / candleCount) * Math.PI * 2.5) * (volatility * basePrice);
-    const noise = (Math.random() - 0.49) * volatility * basePrice;
+    const noise = (Math.random() - 0.49) * volatility * basePrice; // NOSONAR
     
     // Close is open + movement
     const movement = (i === 0) ? (basePrice - currentOpen) : (wave * 0.4 + noise);
@@ -260,8 +260,8 @@ export function generateTimeframeCandles(
     // High and Low wicks
     const maxOC = Math.max(currentOpen, close);
     const minOC = Math.min(currentOpen, close);
-    const wickTop = Math.random() * (volatility * 0.7 * basePrice);
-    const wickBottom = Math.random() * (volatility * 0.7 * basePrice);
+    const wickTop = Math.random() * (volatility * 0.7 * basePrice); // NOSONAR
+    const wickBottom = Math.random() * (volatility * 0.7 * basePrice); // NOSONAR
     const high = maxOC + wickTop;
     const low = Math.max(0.000001, minOC - wickBottom);
     
@@ -273,7 +273,7 @@ export function generateTimeframeCandles(
       high,
       low,
       close,
-      volume: Math.floor(Math.random() * 80 + 30),
+      volume: Math.floor(Math.random() * 80 + 30), // NOSONAR
       isUp
     });
 

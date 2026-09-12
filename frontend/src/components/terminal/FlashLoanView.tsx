@@ -238,9 +238,9 @@ export const FlashLoanView: React.FC = () => {
 
       // Jitter one random opportunity's spread slightly to simulate live orderbook depth
       setOpportunities((prev) => {
-        const randIdx = Math.floor(Math.random() * prev.length);
+        const randIdx = Math.floor(Math.random() * prev.length); // NOSONAR
         const opp = prev[randIdx];
-        const delta = (Math.random() - 0.5) * 0.02;
+        const delta = (Math.random() - 0.5) * 0.02; // NOSONAR
         const newSpread = Math.max(0.1, +(opp.spreadPct + delta).toFixed(2));
         const newProfit = Math.round((opp.capitalReq * (newSpread / 100)) - (opp.capitalReq * 0.0001) - opp.gasUSD);
 

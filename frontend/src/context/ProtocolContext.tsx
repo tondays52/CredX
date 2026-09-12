@@ -739,7 +739,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       // Jitter satellite SNRs slightly for real-time physics tracking realism
       setOrbitSatellites(prev => prev.map(sat => {
-        const jitter = +((Math.random() - 0.5) * 0.4).toFixed(1);
+        const jitter = +((Math.random() - 0.5) * 0.4).toFixed(1); // NOSONAR
         const newSnr = Math.min(54, Math.max(38, +(sat.snrDbHz + jitter).toFixed(1)));
         return { ...sat, snrDbHz: newSnr };
       }));
@@ -797,7 +797,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const syncOrbitAttestation = useCallback(async () => {
     playSound('fanfare');
-    const randomHex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const randomHex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''); // NOSONAR
     const newHash = `0x${randomHex}`;
     setOrbitLastAttestationHash(newHash);
     setOrbitPoSTProofsCount(c => c + 1);
@@ -822,7 +822,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       })();
       return;
     }
-    const newId = `LN-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newId = `LN-${Math.floor(1000 + Math.random() * 9000)}`; // NOSONAR
     const newLoan: LoanPosition = {
       id: newId,
       amount: amountUSD,

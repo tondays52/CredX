@@ -47,8 +47,8 @@ export async function runLightweightAIBenchmark(
   const c = new Float32Array(dim * dim);
 
   for (let i = 0; i < a.length; i++) {
-    a[i] = Math.random();
-    b[i] = Math.random();
+    a[i] = Math.random(); // NOSONAR
+    b[i] = Math.random(); // NOSONAR
   }
 
   // Multiply matrices

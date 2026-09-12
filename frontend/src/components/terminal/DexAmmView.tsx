@@ -615,8 +615,8 @@ export const DexAmmView: React.FC = () => {
     let currentB = basePrice * 0.90;
 
     for (let i = 0; i < count; i++) {
-      const noiseA = (Math.sin(i * 0.35 + liveTick * 0.1) + (Math.random() - 0.48)) * (basePrice * 0.015);
-      const noiseB = (Math.cos(i * 0.28 + liveTick * 0.08) + (Math.random() - 0.5)) * (basePrice * 0.012);
+      const noiseA = (Math.sin(i * 0.35 + liveTick * 0.1) + (Math.random() - 0.48)) * (basePrice * 0.015); // NOSONAR
+      const noiseB = (Math.cos(i * 0.28 + liveTick * 0.08) + (Math.random() - 0.5)) * (basePrice * 0.012); // NOSONAR
 
       currentA += noiseA;
       currentB += noiseB;
