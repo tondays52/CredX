@@ -240,7 +240,13 @@ document.addEventListener('DOMContentLoaded', () => {
     roundTimeRemaining = roundDuration;
     
     const formattedStrike = `$${strikePrice.toLocaleString('en-US', { minimumFractionDigits: asset.decimals, maximumFractionDigits: asset.decimals })}`;
-    roundTitleText.innerHTML = `$${activeAssetKey} above ${formattedStrike} <span class="round-date" id="roundDateText">on Sep 9 UTC</span>`;
+    roundTitleText.textContent = "";
+    roundTitleText.appendChild(document.createTextNode(`$${activeAssetKey} above ${formattedStrike} `));
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "round-date";
+    dateSpan.id = "roundDateText";
+    dateSpan.textContent = "on Sep 9 UTC";
+    roundTitleText.appendChild(dateSpan);
     strikeLineLabel.innerText = `STRIKE ${formattedStrike}`;
     ticketStrikeHint.innerText = `strike ${formattedStrike}`;
 

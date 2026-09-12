@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { GOOGLE_MAPS_API_KEY } from '../../config/contracts';
 
 export interface MapMarker {
   id: string;
@@ -98,7 +99,7 @@ const GOOGLE_MAPS_DARK_STYLE: any[] = [
 ];
 
 export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
-  apiKey = 'AIzaSyBbFdjslMGnzKKVTSkhJqum-Q_QYhFaAjw',
+  apiKey = GOOGLE_MAPS_API_KEY,
   center,
   zoom = 13,
   markers = [],
@@ -122,6 +123,11 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
   useEffect(() => {
     if (window.google?.maps) {
       setMapLoaded(true);
+      return;
+    }
+
+    if (!apiKey) {
+      setLoadError(true);
       return;
     }
 
@@ -317,7 +323,9 @@ export const GoogleMapView: React.FC<GoogleMapViewProps> = ({
               Direct Street Cartography Active (OSM Free Layer)
             </span>
             <p className="text-[11px] text-white/60">
-              Rendering real street coordinates at {center.lat.toFixed(4)}° N, {center.lng.toFixed(4)}° E without Carto watermarks.
+              {apiKey
+                ? `Google Maps JS API blocked by referrer restriction — rendering real street coordinates at ${center.lat.toFixed(4)}° N, ${center.lng.toFixed(4)}° E via the free OpenStreetMap layer instead.`
+                : 'Google Maps JS API key not configured (set VITE_GOOGLE_MAPS_API_KEY in frontend/.env). Rendering the free OpenStreetMap layer instead.'}
             </p>
           </div>
         </div>

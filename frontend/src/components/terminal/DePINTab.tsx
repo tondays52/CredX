@@ -2492,7 +2492,6 @@ const DePINTab: React.FC = () => {
                         {/* Real Google Maps with Cyberpunk Styling & Zero Watermark */}
                         <div className="absolute inset-0 z-0">
                           <GoogleMapView
-                            apiKey="AIzaSyBbFdjslMGnzKKVTSkhJqum-Q_QYhFaAjw"
                             center={{ lat: nexusRealGeo.lat, lng: nexusRealGeo.lng }}
                             zoom={13}
                             theme={nexusMapTheme}

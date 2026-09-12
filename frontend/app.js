@@ -33,14 +33,32 @@ function showToast(title, message, type = "info", duration = 4000) {
     warning: "⚠️"
   };
 
-  toast.innerHTML = `
-    <span class="text-lg">${iconMap[type] || "⚡"}</span>
-    <div class="flex-1 min-w-0">
-      <div class="text-xs font-bold text-white tracking-wide">${title}</div>
-      <div class="text-[11px] text-slate-300 mt-0.5 leading-snug break-words">${message}</div>
-    </div>
-    <div class="toast-progress" style="animation-duration: ${duration}ms;"></div>
-  `;
+  toast.innerHTML = "";
+
+  const iconSpan = document.createElement("span");
+  iconSpan.className = "text-lg";
+  iconSpan.textContent = iconMap[type] || "⚡";
+
+  const bodyDiv = document.createElement("div");
+  bodyDiv.className = "flex-1 min-w-0";
+
+  const titleDiv = document.createElement("div");
+  titleDiv.className = "text-xs font-bold text-white tracking-wide";
+  titleDiv.textContent = title;
+
+  const msgDiv = document.createElement("div");
+  msgDiv.className = "text-[11px] text-slate-300 mt-0.5 leading-snug break-words";
+  msgDiv.textContent = message;
+
+  const progressDiv = document.createElement("div");
+  progressDiv.className = "toast-progress";
+  progressDiv.style.animationDuration = `${duration}ms`;
+
+  bodyDiv.appendChild(titleDiv);
+  bodyDiv.appendChild(msgDiv);
+  toast.appendChild(iconSpan);
+  toast.appendChild(bodyDiv);
+  toast.appendChild(progressDiv);
 
   container.appendChild(toast);
 

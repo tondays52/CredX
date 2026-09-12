@@ -7,6 +7,12 @@ export const CREDITCOIN_CHAIN_ID = 102031;
 export const CREDITCOIN_RPC = 'https://rpc.cc3-testnet.creditcoin.network';
 export const CREDITCOIN_BLOCKSCOUT = 'https://creditcoin-testnet.blockscout.com';
 
+/**
+ * Google Maps JS API key. NEVER hard-code a key in source — set VITE_GOOGLE_MAPS_API_KEY
+ * (frontend/.env) at build time. When empty, GoogleMapView renders its free OSM fallback.
+ */
+export const GOOGLE_MAPS_API_KEY: string = (import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string) || '';
+
 export const CONTRACTS = {
   attestationVerifier: '0x34aA30efE2226ffC2E55607017FbA2F07e62b279',
   creditScoreEngine: '0xA31697bBd4900f8FA62015A51dA3c58972E96BB6',

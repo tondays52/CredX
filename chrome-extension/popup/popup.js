@@ -313,7 +313,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       syncChainBtn.querySelector('span').innerText = '⚡ Proof Signed ✓';
       setTimeout(() => { syncChainBtn.querySelector('span').innerText = '⚡ Sign Proof to Creditcoin'; }, 4000);
     } catch (err) {
-      txStatus.innerHTML = `❌ Signing failed: ${err.message || err}`;
+      txStatus.textContent = `❌ Signing failed: ${err.message || err}`;
       txStatus.className = "tx-status error";
     }
   };
@@ -339,7 +339,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       txStatus.innerHTML = "✅ MetaMask connected via relay. Sync will sign a real CredXHub proof anchor.";
       txStatus.className = "tx-status success";
     } catch (err) {
-      txStatus.innerHTML = "❌ Relay connect failed: " + (err.message || err);
+      txStatus.textContent = "❌ Relay connect failed: " + (err.message || err);
       txStatus.className = "tx-status error";
     }
   });

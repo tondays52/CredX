@@ -737,7 +737,6 @@ export const CredXGeoOrbitView: React.FC = () => {
           {/* Interactive Google Map with Cyberpunk Dark Theme */}
           <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
             <GoogleMapView
-              apiKey="AIzaSyBbFdjslMGnzKKVTSkhJqum-Q_QYhFaAjw"
               center={{ lat: realDevicePos?.lat || 25.0, lng: realDevicePos?.lng || 20.0 }}
               zoom={3}
               theme="dark"
