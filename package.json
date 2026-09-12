@@ -9,6 +9,7 @@
     "deploy:creditcoin-testnet": "hardhat run scripts/deploy.js --network creditcoinTestnet",
     "usc:deploy": "hardhat run scripts/deploy_usc_oracle.js --network creditcoinTestnet",
     "usc:verify": "node scripts/usc-verify-real.js",
+    "deploy:policy": "hardhat run scripts/deploy_purpose_meter.js --network creditcoinTestnet",
     "deck:docx": "node scripts/create_docx.js",
     "deck:pdf": "node scripts/create_deck_pdf.js",
     "demo:capture": "node scripts/capture_demo_scenes.js",

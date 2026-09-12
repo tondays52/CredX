@@ -43,6 +43,10 @@ const sceneSpecs = [
   ["s6-gaming.png", "Track 3 Gaming - anti-sybil PoH, lootboxes, guild scholarships", 9, false],
   ["s7-depin.png", "Track 4 DePIN - staking delegation, hardware financing, virtual node", 9, true],
   ["s8-ai.png", "Track 5 AI - AgentFi credit lines + verifiable compute escrow", 9, false],
+  ["s11-riskguard.png", "RiskGuard Gate - verify-then-execute: the agent proposes, the deterministic policy decides", 11, true],
+  ["s12-covenant-ops.png", "Covenant Ops - live collateral-liveness feed from the deployed oracle", 11, false],
+  ["s13-purpose-bound.png", "Purpose-Bound RWA Vault - funds locked to a declared purpose until attestation unlocks tranches", 11, true],
+  ["s14-usage-meters.png", "Usage Meters - attested increments, fail-closed caps, on-chain debt settlement", 11, false],
   ["s9-blockscout-anchor.png", "On-chain: proof anchored on 0x0FD2 - Blockscout Creditcoin testnet", 12, true],
   ["s10-blockscout-oracle.png", "BlockProverAttestationOracle 0x4d11...C671 wraps the Creditcoin precompiles", 10, false],
 ];
@@ -75,7 +79,7 @@ const clipFiles = [];
     centeredText("Cross-Chain Trustless Credit Bureau", "(w-text_w)/2", "(h-text_h)/2", 40, "white") + "," +
     centeredText("LIVE Attestcoin (0x0FD2) Integration Demo", "(w-text_w)/2", "(h-text_h)/2+90", 30, "0x22d3ee") + "," +
     centeredText("Creditcoin BUIDL 2026 Fall", "(w-text_w)/2", "(h-text_h)/2+150", 24, "0x94a3b8") + "," +
-    centeredText("99/99 passing tests - 16 contracts on Creditcoin testnet", "(w-text_w)/2", "(h-text_h)/2+230", 20, "0x94a3b8"),
+    centeredText("113/113 passing tests - 20 contracts on Creditcoin testnet", "(w-text_w)/2", "(h-text_h)/2+230", 20, "0x94a3b8"),
     "-c:v", "libx264", "-crf", "19", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", String(FPS), f,
   ]);
   clipFiles.push(f);
@@ -90,7 +94,7 @@ const clipFiles = [];
     "drawtext=fontfile='" + FONT_ARIAL + "':text='CredX Protocol':fontsize=72:fontcolor=0x10b981:x=(w-text_w)/2:y=120," +
     centeredText("Reproduce the live proof", "(w-text_w)/2", "260", 30, "white") + "," +
     centeredText("npm run usc:verify - Sepolia -> 0x0FD2 on Creditcoin testnet", "(w-text_w)/2", "330", 24, "0x22d3ee") + "," +
-    centeredText("npx hardhat test  (99/99)", "(w-text_w)/2", "400", 24, "0x94a3b8") + "," +
+    centeredText("npx hardhat test  (113/113)", "(w-text_w)/2", "400", 24, "0x94a3b8") + "," +
     centeredText("github.com/tondays52/CredX  -  MIT License", "(w-text_w)/2", "520", 26, "white") + "," +
     centeredText("Thank you", "(w-text_w)/2", "640", 34, "0xf59e0b"),
     "-c:v", "libx264", "-crf", "19", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", String(FPS), f,

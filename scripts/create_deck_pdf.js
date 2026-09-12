@@ -107,7 +107,7 @@ function build() {
       { width: doc.page.width - 96, align: "center", lineGap: 3 }
     );
   doc.moveDown(1.4);
-  mono("LIVE 0x0FD2 integration  |  Run live: credx-protocol.vercel.app  |  99/99 tests  |  16 contracts on testnet", AMBER);
+  mono("LIVE 0x0FD2 integration  |  Run live: credx-protocol.vercel.app  |  113/113 tests  |  20 contracts on testnet", AMBER);
 
   /* ── Slide 2: Problem ───────────────────────────────────────────── */
   newSlide();
@@ -163,6 +163,29 @@ function build() {
     "Collateral liveness rules decide whether new credit stays open per position.",
     "On attested collateral departure: new credit is blocked; repay/withdraw stay open;",
     "a fresh receipt proving restoration re-opens credit automatically.",
+  ]);
+
+  /* ── Slide 6: Purpose-Bound RWA Funding ─────────────────────────── */
+  newSlide();
+  title("Purpose-Bound RWA Funding Vault", "Money locked to a declared purpose until attestation unlocks it");
+  bullets([
+    "PurposeBoundFunding: funds are bound to a purpose code at funding time (invoice purchase,",
+    "equipment, payroll, GPU lease...) - the purpose cannot be changed after funding.",
+    "Until an attested usage receipt is verified, disbursement goes ONLY to the allowlisted",
+    "counterparty - never to the borrower; attested tranches then unlock.",
+    "Covenant deadswitch: a proven breach freezes the record and blocks all further disbursement;",
+    "settlement repays principal + interest and refunds collateral. Deployed & verified on testnet.",
+  ]);
+
+  /* ── Slide 7: Metered Usage Registry ────────────────────────────── */
+  newSlide();
+  title("Metered Accountable Usage", "Every usage increment is attested, capped and priced on-chain");
+  bullets([
+    "UsageMeteringRegistry: meters per wallet + action key (GPU lease, flash-loan cycles,",
+    "compute ops, arena ticks) configured by the registry owner with caps and unit prices.",
+    "Meter advances only on a verified attested receipt (public or KYC-agent telemetry path).",
+    "Window caps fail closed: EXCEEDS WINDOW CAP reverts the increment; debt accrues on-chain",
+    "and is settlable in cUSD. Deployed & verified on testnet.",
   ]);
 
   /* ── Slide 6: Scoring & Soulbound ───────────────────────────────── */
@@ -238,9 +261,9 @@ function build() {
 
   /* ── Slide 11: Testing & honesty ────────────────────────────────── */
   newSlide();
-  title("Engineering, Testing & Honesty", "99/99 automated tests");
+  title("Engineering, Testing & Honesty", "113/113 automated tests");
   bullets([
-    "npx hardhat test -> 99 passing (BlockProver oracle 9 tests, hub/engine 26, security 19, tracks 45).",
+    "npx hardhat test -> 113 passing (BlockProver oracle 9, hub/engine 26, security 19, tracks 45, policy layer 14).",
     "OCCR math, dynamic APRs, CX-SBT soulbound invariants, replay defense: all covered.",
   ]);
   sectionHead("Clear labeling of simulations");
@@ -253,7 +276,7 @@ function build() {
 
   /* ── Slide 12: Deployments ──────────────────────────────────────── */
   newSlide();
-  title("Live on Creditcoin Testnet (chainId 102031)", "16 deployed & verified contracts");
+  title("Live on Creditcoin Testnet (chainId 102031)", "20 deployed & verified contracts");
   const deploys = [
     ["BlockProverAttestationOracle (real 0x0FD2/0x0FD3)", "0x4d11b60809724b0B67B28DA2f38438aE97f1C671"],
     ["AttestationVerifier (labeled testnet harness)", "0x34aA30efE2226ffC2E55607017FbA2F07e62b279"],
@@ -266,6 +289,8 @@ function build() {
     ["RWATreasuryYieldFund / RWAInvoiceFinancing", "0x2be1...80A / 0x05D4...1aA"],
     ["GamingEcosystemHub / DePINInfrastructureHub", "0x8008...4D75 / 0x99b4...B9Bc"],
     ["AutonomousAIHub / ReputationArena", "0xEc14...a5D / 0x42ff...c9F5"],
+    ["PurposeBoundFunding (purpose-bound RWA vault)", "0x551592C32a96555A04BB016c2DF7138A1f9DE644"],
+    ["UsageMeteringRegistry (metered accountable usage)", "0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5"],
   ];
   for (const [label, addr] of deploys) {
     doc.moveDown(0.12);
@@ -287,14 +312,14 @@ function build() {
   newSlide();
   title("Reproduce, Team & Open Source", "Everything you need to verify");
   sectionHead("Commands");
-  mono("npm install && npx hardhat test              # 99/99 tests", ACCENT);
+  mono("npm install && npx hardhat test              # 113/113 tests", ACCENT);
   mono("npm run usc:verify                            # live 0x0FD2 Sepolia proof + anchor", ACCENT);
   mono("npm run usc:deploy                            # deploy BlockProverAttestationOracle", ACCENT2);
   mono("cd frontend && npm install && npm run dev     # Web3 Terminal (localhost:5173)", ACCENT2);
   sectionHead("Links & license");
   bullets([
     "GitHub: https://github.com/tondays52/CredX",
-    "Live app: https://credx-protocol.vercel.app (RiskGuard + Covenant Ops panes live against the oracle)",
+    "Live app: https://credx-protocol.vercel.app (RiskGuard, Covenant Ops, Purpose-Bound RWA and Usage Meter panes live on-chain)",
     "License: MIT (open source for the Creditcoin L1 ecosystem).",
   ]);
 

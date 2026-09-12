@@ -14,6 +14,8 @@ DeFi today is crippled by **150%+ over-collateralization requirements** ($150 of
 
 Verified actions feed into an institutional-grade **OCCR (On-Chain Credit Risk) Multi-Factor Engine**, scoring wallets across 7 dimensions (300 to 850 CTS) to unlock undercollateralized borrowing, dynamic FICO-style APRs, and multi-track ecosystems.
 
+> **Positioning: honest by default.** Every number in the CredX demos is either read live from a contract we deployed and verified on Creditcoin testnet, or it is explicitly labeled SIMULATED. No mocked live feeds, no cherry-picked charts. Instrumented, deterministic, replayable — what the judges see is what runs in the tests.
+
 ---
 
 ## 📜 Attestcoin Protocol Integration
@@ -65,7 +67,7 @@ CredX fulfills all Attestcoin Protocol requirements:
 
 ---
 
-## 🧪 Comprehensive Verification (99/99 Passing Tests)
+## 🧪 Comprehensive Verification (113/113 Passing Tests)
 
 Run the full automated test suite:
 ```bash
@@ -82,8 +84,9 @@ npx hardhat test
   AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification) (8 tests)
   ReputationArena: PredictBay-Style Binary Paper Trading (6 tests)
   BUIDL CTC 2026 Fall: Multi-Track Extension (10 tests)
+  Enterprise Policy Layer: Purpose-Bound Funding & Usage Metering (14 tests)
 
-  99 passing
+  113 passing
 ```
 
 ---
@@ -98,7 +101,7 @@ npx hardhat test
 ### 2. Install & verify (smart contracts)
 ```bash
 npm install          # installs hardhat, ethers, @gluwa/usc-sdk, ...
-npx hardhat test     # 99/99 passing tests
+npx hardhat test     # 113/113 passing tests
 ```
 
 ### 3. Configure the environment (for live on-chain deploys / verification)
@@ -117,6 +120,11 @@ npm run usc:deploy    # deploy BlockProverAttestationOracle to Creditcoin testne
 npm run usc:verify    # real Sepolia proof -> verified SUCCESS on 0x0FD2 -> anchor on-chain
 ```
 `RUNBOOK.md`-style transcript lives in [ATTESTCOIN_INTEGRATION.md](ATTESTCOIN_INTEGRATION.md).
+
+Enterprise policy layer also **live on Creditcoin testnet** (+ verified on Blockscout):
+- `PurposeBoundFunding` — purpose-bound RWA funding vault: `0x551592C32a96555A04BB016c2DF7138A1f9DE644`
+- `UsageMeteringRegistry` — metered accountable usage, fail-closed caps, on-chain debt: `0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5`
+Reproduce with `npm run deploy:policy`.
 
 ### 5. Run the frontend
 ```bash

@@ -37,6 +37,8 @@ export const CONTRACTS = {
   autonomousAIHub: '0xEc1445818cF57507Ff46B8a72daa9F7A66B60a5D',
   reputationArena: '0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5',
   blockProverAttestationOracle: '0x4d11b60809724b0B67B28DA2f38438aE97f1C671',
+  purposeBoundFunding: '0x551592C32a96555A04BB016c2DF7138A1f9DE644',
+  usageMeteringRegistry: '0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5',
 } as const;
 
 /** Testnet settlement token decimals (MockERC20 with 18 decimals). */

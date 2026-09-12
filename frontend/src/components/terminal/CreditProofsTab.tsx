@@ -3,12 +3,14 @@ import LendingTab from './LendingTab';
 import ProofVerifierTab from './ProofVerifierTab';
 import RiskGuardView from './RiskGuardView';
 import CovenantOpsFeed from './CovenantOpsFeed';
+import PurposeFundView from './PurposeFundView';
+import MeterTrackingView from './MeterTrackingView';
 import SimulationBadge from '../common/SimulationBadge';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
-import { Landmark, FileCheck, ShieldCheck, ShieldHalf, Activity } from 'lucide-react';
+import { Landmark, FileCheck, ShieldCheck, ShieldHalf, Activity, Anchor, Gauge } from 'lucide-react';
 
-type CreditProofsSection = 'credit' | 'proofs' | 'risk' | 'ops';
+type CreditProofsSection = 'credit' | 'proofs' | 'risk' | 'ops' | 'purpose' | 'meter';
 
 const CreditProofsTab: React.FC = () => {
   const { isConnected } = useWeb3();
@@ -20,6 +22,8 @@ const CreditProofsTab: React.FC = () => {
     { id: 'proofs', label: 'Proofs & Attest', icon: FileCheck, desc: 'Submit cross-chain Merkle/continuity receipts to CredXHub and recompute your on-chain CTS.' },
     { id: 'risk', label: 'RiskGuard Gate', icon: ShieldHalf, desc: 'Verify-then-execute policy engine — the agent proposes, the deterministic contract decides after 0x0FD2 verification.' },
     { id: 'ops', label: 'Covenant Ops', icon: Activity, desc: 'Live oracle telemetry and collateral-liveness/covenant feed — new credit closes the instant an attested breach is proven.' },
+    { id: 'purpose', label: 'Purpose-Bound RWA', icon: Anchor, desc: 'Purpose-bound funding vault — money is locked to a declared purpose until attested receipts unlock borrower tranches.' },
+    { id: 'meter', label: 'Usage Meters', icon: Gauge, desc: 'Metered accountable usage — attested increments, fail-closed caps and on-chain debt settlement per use.' },
   ];
 
   return (
@@ -77,6 +81,8 @@ const CreditProofsTab: React.FC = () => {
       {section === 'proofs' && <ProofVerifierTab />}
       {section === 'risk' && <RiskGuardView />}
       {section === 'ops' && <CovenantOpsFeed />}
+      {section === 'purpose' && <PurposeFundView />}
+      {section === 'meter' && <MeterTrackingView />}
     </div>
   );
 };

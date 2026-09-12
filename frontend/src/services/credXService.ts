@@ -1247,6 +1247,149 @@ function tierToString(tier: number): CardTier {
   }
 }
 
+// ─── Purpose-Bound RWA Funding + Metered Usage (deployed 2026-09-13) ───────
+
+export interface PurposeFundState {
+  nextRecordId: number;
+  totalLiquidityUSD: number;
+  totalBorrowedUSD: number;
+  ctcPriceUSD: number;
+  verifier: string;
+}
+
+export interface PurposeRecordView {
+  recordId: string;
+  borrower: string;
+  allowlistedRecipient: string;
+  purposeCode: number;
+  covenantHash: string;
+  approvedUSD: number;
+  drawnUSD: number;
+  collateralCTC: number;
+  borrowedAtBlock: number;
+  dueBlock: number;
+  interestRateBps: number;
+  isFrozen: boolean;
+  isSettled: boolean;
+}
+
+export interface MeterRegistryState {
+  settlementToken: string;
+  verifier: string;
+}
+
+export interface ActionMeterView {
+  exists: boolean;
+  windowCapUnits: number;
+  usedUnitsThisWindow: number;
+  windowStartBlock: number;
+  windowDurationBlocks: number;
+  unitPriceUSD: number;
+  outstandingDebtUSD: number;
+}
+
+export const PURPOSE_FUND_ABI = [
+  'function nextRecordId() view returns (uint256)',
+  'function totalLiquidityUSD() view returns (uint256)',
+  'function totalBorrowedUSD() view returns (uint256)',
+  'function ctcPriceUSD() view returns (uint256)',
+  'function verifier() view returns (address)',
+  'function getUserRecords(address) view returns (uint256[])',
+  'function records(uint256) view returns (uint256 recordId, address borrower, address allowlistedRecipient, uint8 purposeCode, bytes32 covenantHash, uint256 approvedUSD, uint256 drawnUSD, uint256 collateralCTC, uint256 borrowedAtBlock, uint256 dueBlock, uint256 interestRateBps, bool isFrozen, bool isSettled)',
+];
+
+export const USAGE_METER_ABI = [
+  'function settlementToken() view returns (address)',
+  'function verifier() view returns (address)',
+  'function meters(address,bytes32) view returns (bool exists, uint256 windowCapUnits, uint256 usedUnitsThisWindow, uint256 windowStartBlock, uint256 windowDurationBlocks, uint256 unitPriceUSD, uint256 outstandingDebtUSD)',
+  'function getTotalOutstandingDebt(address) view returns (uint256)',
+];
+
+export async function fetchPurposeFundState(): Promise<PurposeFundState | null> {
+  try {
+    const contract = readContract(CONTRACTS.purposeBoundFunding, PURPOSE_FUND_ABI);
+    const [nextRecordId, totalLiquidityUSD, totalBorrowedUSD, ctcPriceUSD, verifier] = await Promise.all([
+      contract.nextRecordId(),
+      contract.totalLiquidityUSD(),
+      contract.totalBorrowedUSD(),
+      contract.ctcPriceUSD(),
+      contract.verifier(),
+    ]);
+    return {
+      nextRecordId: Number(nextRecordId),
+      totalLiquidityUSD: parseFloat(ethers.formatUnits(totalLiquidityUSD, 18)),
+      totalBorrowedUSD: parseFloat(ethers.formatUnits(totalBorrowedUSD, 18)),
+      ctcPriceUSD: parseFloat(ethers.formatUnits(ctcPriceUSD, 18)),
+      verifier: String(verifier),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPurposeRecords(user: string): Promise<PurposeRecordView[]> {
+  if (!user) return [];
+  try {
+    const contract = readContract(CONTRACTS.purposeBoundFunding, PURPOSE_FUND_ABI);
+    const ids = await contract.getUserRecords(user);
+    const out: PurposeRecordView[] = [];
+    for (const id of ids.slice(0, 10)) {
+      const r = await contract.records(id);
+      out.push({
+        recordId: id.toString(),
+        borrower: r.borrower,
+        allowlistedRecipient: r.allowlistedRecipient,
+        purposeCode: Number(r.purposeCode),
+        covenantHash: r.covenantHash,
+        approvedUSD: parseFloat(ethers.formatUnits(r.approvedUSD, 18)),
+        drawnUSD: parseFloat(ethers.formatUnits(r.drawnUSD, 18)),
+        collateralCTC: parseFloat(ethers.formatUnits(r.collateralCTC, 18)),
+        borrowedAtBlock: Number(r.borrowedAtBlock),
+        dueBlock: Number(r.dueBlock),
+        interestRateBps: Number(r.interestRateBps),
+        isFrozen: r.isFrozen,
+        isSettled: r.isSettled,
+      });
+    }
+    return out.filter((r) => r.borrower !== ethers.ZeroAddress);
+  } catch {
+    return [];
+  }
+}
+
+export async function fetchMeterRegistryState(
+  user: string,
+  actionKeys: string[]
+): Promise<{ state: MeterRegistryState; meters: Record<string, ActionMeterView | null>; totalDebt: number }> {
+  try {
+    const contract = readContract(CONTRACTS.usageMeteringRegistry, USAGE_METER_ABI);
+    const [settlementToken, verifier] = await Promise.all([contract.settlementToken(), contract.verifier()]);
+    const meters: Record<string, ActionMeterView | null> = {};
+    for (const key of actionKeys) {
+      const m = await contract.meters(user, key);
+      meters[key] = m.exists
+        ? {
+            exists: m.exists,
+            windowCapUnits: parseFloat(ethers.formatUnits(m.windowCapUnits, 18)),
+            usedUnitsThisWindow: parseFloat(ethers.formatUnits(m.usedUnitsThisWindow, 18)),
+            windowStartBlock: Number(m.windowStartBlock),
+            windowDurationBlocks: Number(m.windowDurationBlocks),
+            unitPriceUSD: parseFloat(ethers.formatUnits(m.unitPriceUSD, 18)),
+            outstandingDebtUSD: parseFloat(ethers.formatUnits(m.outstandingDebtUSD, 18)),
+          }
+        : null;
+    }
+    const totalDebtRaw = await contract.getTotalOutstandingDebt(user);
+    return {
+      state: { settlementToken: String(settlementToken), verifier: String(verifier) },
+      meters,
+      totalDebt: parseFloat(ethers.formatUnits(totalDebtRaw, 18)),
+    };
+  } catch {
+    return { state: { settlementToken: '', verifier: '' }, meters: {}, totalDebt: 0 };
+  }
+}
+
 export function scoreToTier(score: number): CardTier {
   if (score >= 780) return 'SUPER_PRIME';
   if (score >= 650) return 'PRIME';

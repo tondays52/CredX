@@ -125,7 +125,57 @@ async function main() {
     await new Promise((r) => setTimeout(r, 4000));
     await screenshot(page, "s8-ai");
 
-    /* S9 — Blockscout: on-chain anchor tx (real proof of 0x0FD2) */
+    /* S9-S12 — Enterprise policy layer panes (RiskGuard, Covenant Ops, Purpose-Bound RWA, Usage Meters) */
+    await page.goto(BASE + "/#/lending", { waitUntil: "domcontentloaded", timeout: 30000 });
+    await waitText(page, "Proofs & Attest", 40000);
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("Proofs & Attest"));
+      if (b) b.click();
+    });
+    await waitText(page, "Credit & Proofs", 30000);
+
+    /* S9 — RiskGuard Gate */
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("RiskGuard Gate"));
+      if (b) b.click();
+    });
+    await waitText(page, "RiskGuard", 30000);
+    await new Promise((r) => setTimeout(r, 4500));
+    await screenshot(page, "s11-riskguard");
+
+    /* S10 — Covenant Ops */
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("Covenant Ops"));
+      if (b) b.click();
+    });
+    await waitText(page, "Covenant Ops", 30000);
+    await new Promise((r) => setTimeout(r, 4500));
+    await screenshot(page, "s12-covenant-ops");
+
+    /* S11 — Purpose-Bound RWA */
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("Purpose-Bound RWA"));
+      if (b) b.click();
+    });
+    await waitText(page, "Purpose-Bound RWA Vault", 30000);
+    await new Promise((r) => setTimeout(r, 4500));
+    await screenshot(page, "s13-purpose-bound");
+
+    /* S12 — Usage Meters */
+    await page.evaluate(() => {
+      const els = Array.from(document.querySelectorAll("button"));
+      const b = els.find((x) => x.innerText.includes("Usage Meters"));
+      if (b) b.click();
+    });
+    await waitText(page, "Metered Usage & Accountability", 30000);
+    await new Promise((r) => setTimeout(r, 4500));
+    await screenshot(page, "s14-usage-meters");
+
+    /* S13 — Blockscout: on-chain anchor tx (real proof of 0x0FD2) */
     const bs = await browser.newPage();
     bs.setDefaultTimeout(40000);
     bs.setViewport({ width: 1600, height: 900 });
