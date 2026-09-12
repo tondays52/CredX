@@ -30,7 +30,9 @@ async function main() {
   for (const issue of all) {
     const rel = issue.component.substring(issue.component.lastIndexOf(":") + 1);
     const line = issue.line;
-    if (!line || !/\.(ts|tsx|js|jsx)$/.test(rel)) continue;
+    if (!line) continue;
+    const isCodeFile = rel.endsWith(".ts") || rel.endsWith(".tsx") || rel.endsWith(".js") || rel.endsWith(".jsx");
+    if (!isCodeFile) continue;
     if (seen.has(rel + ":" + line)) continue;
     seen.add(rel + ":" + line);
 

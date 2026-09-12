@@ -23,7 +23,9 @@ const FONT_ARIAL = "C\\:/Windows/Fonts/arialbd.ttf";
 fs.mkdirSync(CLIPS, { recursive: true });
 
 function run(args) {
-  const r = spawnSync(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
+  const r = spawnSync(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] }); // NOSONAR
+  // NOSONAR above: local dev tool; args come from a constant storyboard and are
+  // passed as an argv array (no shell) so no command injection is possible.
   if (r.status !== 0) {
     console.error("ffmpeg failed:", args.join(" "));
     console.error(r.stderr ? r.stderr.toString().split("\n").slice(-6).join("\n") : "no stderr");
