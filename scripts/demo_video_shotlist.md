@@ -1,5 +1,12 @@
 # Demo Video Shot List — CredX Protocol (Creditcoin BUIDL 2026 Fall)
 
+Two options:
+1. **Auto-generated montage (pre-made)** — `npm run demo:video` drives the real running app in
+   headless Edge, captures the LIVE 0x0FD2/0x0FD3 panel + Blockscout anchor tx + each track, and
+   renders `CredX_Demo.mp4` (1920x1080, ~1:54, silent). Add a voiceover if you like, then upload.
+2. **Manual screen capture** — record the live app yourself following the cuts below (best if you
+   want to show the wallet-signing "Verify & Anchor on 0x0FD2" step, which needs MetaMask).
+
 Target: 2–3 minutes. Record 1080p screen capture, upload to YouTube (unlisted or public),
 then paste the URL into `DORAHACKS_SUBMISSION.md` (§ Demo Video) and the submission form.
 

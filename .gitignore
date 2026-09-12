@@ -41,3 +41,8 @@ Thumbs.db
 .ai
 .failsafe/
 _extensions/
+
+# Demo video build artifacts (regenerate with npm run demo:video)
+demo-assets/
+CredX_Demo.mp4
+preview.log
