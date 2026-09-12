@@ -143,3 +143,5 @@ Load unpacked in Chrome via `chrome://extensions` from the `chrome-extension/` d
 
 ## 📄 License
 MIT License. Built for Creditcoin BUIDL Hackathon 2026 Fall.
+
+## Demo Video: https://youtu.be/BG1BrVYFH7o
