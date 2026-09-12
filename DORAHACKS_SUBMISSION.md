@@ -245,14 +245,12 @@ CredX includes a production Manifest V3 browser extension (`chrome-extension/`) 
 ---
 
 ## 👥 11. Team & Open Source
-* **Team**: CredX Protocol Builders
+* **Team**: Ton
 * **License**: MIT License
 * **Open Source Commitment**: Built specifically to enrich the Creditcoin L1 ecosystem.
 
-### Team members (PENDING — fill in):
+### Team members:
 | Name | Role | Email / Contact |
 | --- | --- | --- |
-| (Team member 1) | (Role, e.g. Solidity / Full-Stack / DeFi) | (email) |
-| (Team member 2) | (Role) | (email) |
-| (Team member 3, optional) | (Role) | (email) |
+| Ton | Founder & Lead Developer (Solidity, Smart Contracts, Frontend, Integration) | tondays52@gmail.com |
 
