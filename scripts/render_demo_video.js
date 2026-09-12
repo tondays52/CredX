@@ -53,7 +53,10 @@ function captionFilter(text) {
 }
 
 function escText(s) {
-  return String(s).replace(/'/g, "\\'").replace(/:/g, "\\:");
+  return String(s)
+    .replace(/\\/g, "\\\\")
+    .replace(/'/g, "\\'")
+    .replace(/:/g, "\\:");
 }
 
 function centeredText(text, x, y, size, color) {
