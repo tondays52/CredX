@@ -79,7 +79,7 @@ const clipFiles = [];
     centeredText("Cross-Chain Trustless Credit Bureau", "(w-text_w)/2", "(h-text_h)/2", 40, "white") + "," +
     centeredText("LIVE Attestcoin (0x0FD2) Integration Demo", "(w-text_w)/2", "(h-text_h)/2+90", 30, "0x22d3ee") + "," +
     centeredText("Creditcoin BUIDL 2026 Fall", "(w-text_w)/2", "(h-text_h)/2+150", 24, "0x94a3b8") + "," +
-    centeredText("113/113 passing tests - 20 contracts on Creditcoin testnet", "(w-text_w)/2", "(h-text_h)/2+230", 20, "0x94a3b8"),
+    centeredText("126/126 passing tests - 22 contracts on Creditcoin testnet", "(w-text_w)/2", "(h-text_h)/2+230", 20, "0x94a3b8"),
     "-c:v", "libx264", "-crf", "19", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", String(FPS), f,
   ]);
   clipFiles.push(f);
@@ -94,7 +94,7 @@ const clipFiles = [];
     "drawtext=fontfile='" + FONT_ARIAL + "':text='CredX Protocol':fontsize=72:fontcolor=0x10b981:x=(w-text_w)/2:y=120," +
     centeredText("Reproduce the live proof", "(w-text_w)/2", "260", 30, "white") + "," +
     centeredText("npm run usc:verify - Sepolia -> 0x0FD2 on Creditcoin testnet", "(w-text_w)/2", "330", 24, "0x22d3ee") + "," +
-    centeredText("npx hardhat test  (113/113)", "(w-text_w)/2", "400", 24, "0x94a3b8") + "," +
+    centeredText("npx hardhat test  (126/126)", "(w-text_w)/2", "400", 24, "0x94a3b8") + "," +
     centeredText("github.com/tondays52/CredX  -  MIT License", "(w-text_w)/2", "520", 26, "white") + "," +
     centeredText("Thank you", "(w-text_w)/2", "640", 34, "0xf59e0b"),
     "-c:v", "libx264", "-crf", "19", "-preset", "fast", "-pix_fmt", "yuv420p", "-r", String(FPS), f,

@@ -26,7 +26,7 @@ then paste the URL into `DORAHACKS_SUBMISSION.md` (§ Demo Video) and the submis
      DePIN (virtual node + Chrome extension), AI (AgentFi hub + compute escrow), PredictBay Arena.
    - Show that simulated panels carry the amber **SIMULATED** badge (honesty).
 5. **Proof of work (2:15–2:30)** — tests & deployments.
-   - `npx hardhat test` → "113 passing".
+   - `npx hardhat test` → "126 passing".
    - Blockscout verify pages quickly (oracle + a couple of hubs).
 6. **Outro (2:30–2:45)** — GitHub + MIT + thanks.
 

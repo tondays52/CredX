@@ -33,6 +33,8 @@ contract UsageMeteringRegistry is IUsageMeteringRegistry, ReentrancyGuard {
     mapping(address user => mapping(bytes32 actionKey => ActionMeter meter)) public meters;
     mapping(address user => uint256 debtUSD) public totalOutstandingDebt;
     mapping(address agent => bool isAgent) public kycAgents;
+    mapping(address user => uint256 balanceUSD) public prepaidBalance;
+    mapping(address user => uint256 spentUSD) public totalPrepaidSpent;
 
     modifier onlyOwner() {
         if (msg.sender != owner) revert OnlyOwner();
@@ -155,6 +157,36 @@ contract UsageMeteringRegistry is IUsageMeteringRegistry, ReentrancyGuard {
         emit DebtSettled(user, actionKey, amountPaidUSD);
     }
 
+    /**
+     * @notice Pre-fund metered usage with the settlement token.
+     * @dev Prepaid credits are consumed before any debt accrual. This is the
+     *      usage-first settlement mode (top-up accounts, perps margin aliases).
+     */
+    function topUp(uint256 amountUSD) external override nonReentrant {
+        if (amountUSD == 0) revert InvalidUnits();
+        prepaidBalance[msg.sender] += amountUSD;
+        settlementToken.safeTransferFrom(msg.sender, address(this), amountUSD);
+        emit PrepaidTopUp(msg.sender, amountUSD, prepaidBalance[msg.sender]);
+    }
+
+    function withdrawPrepaid(uint256 amountUSD) external override nonReentrant {
+        if (amountUSD == 0) revert InvalidUnits();
+        if (prepaidBalance[msg.sender] < amountUSD) revert InsufficientPrepaid();
+        prepaidBalance[msg.sender] -= amountUSD;
+        settlementToken.safeTransfer(msg.sender, amountUSD);
+        emit PrepaidWithdrawn(msg.sender, amountUSD, prepaidBalance[msg.sender]);
+    }
+
+    function getPrepaidBalance(address user) external view override returns (uint256) {
+        if (user == address(0)) revert ZeroAddress();
+        return prepaidBalance[user];
+    }
+
+    function getTotalPrepaidSpent(address user) external view override returns (uint256) {
+        if (user == address(0)) revert ZeroAddress();
+        return totalPrepaidSpent[user];
+    }
+
     function _increment(address user, bytes32 actionKey, uint256 units) internal {
         ActionMeter storage m = meters[user][actionKey];
 
@@ -172,8 +204,19 @@ contract UsageMeteringRegistry is IUsageMeteringRegistry, ReentrancyGuard {
 
         uint256 debitUSD = (units * m.unitPriceUSD) / 10**18;
         if (debitUSD > 0) {
-            m.outstandingDebtUSD += debitUSD;
-            totalOutstandingDebt[user] += debitUSD;
+            uint256 prepaid = prepaidBalance[user];
+            if (prepaid > 0) {
+                // Usage-first settlement: consume the prepaid balance. Fail closed —
+                // a debit that exceeds the balance is rejected, never silently
+                // converted back into debt while prepaid credits exist.
+                if (prepaid < debitUSD) revert InsufficientPrepaid();
+                prepaidBalance[user] = prepaid - debitUSD;
+                totalPrepaidSpent[user] += debitUSD;
+                emit PrepaidConsumed(user, actionKey, debitUSD, prepaidBalance[user]);
+            } else {
+                m.outstandingDebtUSD += debitUSD;
+                totalOutstandingDebt[user] += debitUSD;
+            }
         }
     }
 

@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useWeb3 } from '../../context/Web3Context';
 import { ethers } from 'ethers';
-import { fetchMeterRegistryState, ActionMeterView } from '../../services/credXService';
+import { fetchMeterRegistryState, ActionMeterView, MeterRegistryState } from '../../services/credXService';
 import { CONTRACTS, CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
 
 const DEMO_ACCOUNT = '0x9afB4FAd95d9fEa67615911Ce1fA4C9f13FA8f07';
@@ -35,6 +35,8 @@ const METER_KEYS: MeterRow[] = [
 const SIM_EVENTS = [
   { t: 'ATTESTED USAGE', d: 'Attestcoin receipt verified — +400 GPU lease seconds recorded to meter. Debit $800 accrues on-chain.', kind: 'ok' },
   { t: 'CAP REFUSED (fail closed)', d: '+400 more seconds would exceed the 1,000 window cap → EXCEEDS WINDOW CAP, increment reverted.', kind: 'err' },
+  { t: 'PREPAID TOP-UP', d: 'Wallet tops up $2,000 prepaid credit — usage now consumes the prepaid balance FIRST, never debt.', kind: 'ok' },
+  { t: 'PREPAID OVERDRAW BLOCKED', d: 'Debit exceeds remaining prepaid → INSUFFICIENT PREPAID, fail closed. No silent debt drift while credit exists.', kind: 'err' },
   { t: 'WINDOW ROLLOVER', d: 'Window elapsed → used units reset; meter starts fresh at block N.', kind: 'ok' },
   { t: 'DEBT SETTLED', d: 'Wallet settles $1,600 outstanding metered debt in cUSD — totalOutstandingDebt → 0.', kind: 'ok' },
   { t: 'METERED CREDIT RECALC', d: 'Lender re-prices credit line from meter reading + verified usage history.', kind: 'ok' },
@@ -42,7 +44,7 @@ const SIM_EVENTS = [
 
 const MeterTrackingView: React.FC = () => {
   const { address, isConnected } = useWeb3();
-  const [registry, setRegistry] = useState<{ state: { settlementToken: string; verifier: string }; meters: Record<string, ActionMeterView | null>; totalDebt: number } | null>(null);
+  const [registry, setRegistry] = useState<{ state: MeterRegistryState; meters: Record<string, ActionMeterView | null>; totalDebt: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [simIdx, setSimIdx] = useState(0);
@@ -118,7 +120,7 @@ const MeterTrackingView: React.FC = () => {
         </div>
 
         {/* Live telemetry */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/[0.06]">
             <div className="flex items-center justify-between">
               <span className="text-[10px] uppercase tracking-wider text-white/40 font-mono">Outstanding Metered Debt</span>
@@ -127,6 +129,13 @@ const MeterTrackingView: React.FC = () => {
               </button>
             </div>
             <div className="mt-1 text-xl font-black font-mono text-emerald-400">${totalDebt.toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+          </div>
+          <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/[0.06]">
+            <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono">Prepaid Credit (covers usage first)</div>
+            <div className="mt-1 text-xl font-black font-mono text-amber-300">${(registry?.state.prepaidBalance ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            {(registry?.state.prepaidSpent ?? 0) > 0 && (
+              <div className="text-[9px] font-mono text-white/35">spent ${(registry?.state.prepaidSpent ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}</div>
+            )}
           </div>
           <div className="p-3.5 rounded-xl bg-slate-900/60 border border-white/[0.06]">
             <div className="text-[10px] uppercase tracking-wider text-white/40 font-mono">Settlement Token</div>
@@ -261,7 +270,8 @@ const MeterTrackingView: React.FC = () => {
         <p className="mt-3 text-[10px] text-white/35 leading-relaxed flex items-start gap-1.5">
           <Coins className="w-3 h-3 mt-0.5 text-emerald-400" />
           Principle: usage is provable and priced. Attested receipts move the meter; registered agents cover off-chain
-          telemetry. No unit is counted twice, caps fail closed, and every dollar of debt is on-chain and payable.
+          telemetry. No unit is counted twice, caps fail closed, and every dollar of debt is on-chain and payable. A prepaid
+          balance is consumed FIRST, fail-closed — while credit exists a debit can never silently drift into debt.
         </p>
       </GlassCard>
 
@@ -270,9 +280,9 @@ const MeterTrackingView: React.FC = () => {
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> honesty note
         </div>
         <div className="text-[11px] text-white/50 leading-relaxed font-mono">
-          LIVE readings come from the deployed UsageMeteringRegistry on Creditcoin testnet. The event feed is a
-          deterministic mirror marked SIMULATED — no gas. Attested usage recording and debt settlement execute against
-          the deployed contract through a connected wallet.
+          LIVE readings (meters, prepaid balance, debt) come from the deployed UsageMeteringRegistry v2 on Creditcoin
+          testnet. The event feed is a deterministic mirror marked SIMULATED — no gas. Attested usage recording, prepaid
+          top-ups and debt settlement execute against the deployed contract through a connected wallet.
         </div>
       </GlassCard>
     </div>

@@ -22,7 +22,7 @@
 
 ## Short description (paste-able paragraph)
 
-DeFi is stuck in a 150%+ over-collateralization trap: borrowing $100 requires locking $150 — even for wallets that have repaid hundreds of thousands of dollars on Ethereum. **CredX turns Creditcoin into the global trustless credit bureau for Web3.** Using Creditcoin's native **Attestcoin Protocol (USC)**, it cryptographically verifies cross-chain transaction receipts and Merkle inclusion proofs **directly on the live `0x0FD2` BlockProver precompile** — no bridges, no multi-sig relayers, no centralized oracles. Verified history feeds an academic **OCCR 7-dimension credit-scoring engine (300–850 CTS)** that unlocks under-collateralized lending (down to 70% collateral), dynamic FICO-style APRs (2.5%–12%), and Soulbound Credit Passports (CX-SBT) with zero-knowledge privacy commitments. On top of the credit spine, CredX ships an **enterprise policy layer that the field leaves open**: a RiskGuard verify-then-execute policy gate, a live Covenant Ops / collateral-liveness feed, **purpose-bound RWA funding** (money locked to a declared purpose until an attested receipt unlocks it) and **metered accountable usage** (attested increments, fail-closed caps, on-chain debt). **20 contracts deployed and verified on Creditcoin testnet, 113/113 automated tests passing, everything live on-chain — nothing faked.**
+DeFi is stuck in a 150%+ over-collateralization trap: borrowing $100 requires locking $150 — even for wallets that have repaid hundreds of thousands of dollars on Ethereum. **CredX turns Creditcoin into the global trustless credit bureau for Web3.** Using Creditcoin's native **Attestcoin Protocol (USC)**, it cryptographically verifies cross-chain transaction receipts and Merkle inclusion proofs **directly on the live `0x0FD2` BlockProver precompile** — no bridges, no multi-sig relayers, no centralized oracles. Verified history feeds an academic **OCCR 7-dimension credit-scoring engine (300–850 CTS)** that unlocks under-collateralized lending (down to 70% collateral), dynamic FICO-style APRs (2.5%–12%), and Soulbound Credit Passports (CX-SBT) with zero-knowledge privacy commitments. On top of the credit spine, CredX ships an **enterprise policy layer that the field leaves open**: a RiskGuard verify-then-execute policy gate, a live Covenant Ops / collateral-liveness feed, **purpose-bound RWA funding** (money locked to a declared purpose until an attested receipt unlocks it), **metered accountable usage with prepaid credits** (attested increments, fail-closed caps, prepaid consumed before debt), a **replay-guarded Verified Escrow** (release only on an attested receipt), and an on-chain **Evidence Registry** for every proof-gated event. **22 contracts deployed and verified on Creditcoin testnet, 126/126 automated tests passing, everything live on-chain — nothing faked.**
 
 ---
 
@@ -38,25 +38,28 @@ DeFi is stuck in a 150%+ over-collateralization trap: borrowing $100 requires lo
 1. **RiskGuard — Verify-Then-Execute policy gate.** The agent proposes; the deterministic contract decides. Proposals execute only after a 4-gate trace: collateral liveness, covenant boundary, action allowlist (fail-closed), and live `0x0FD2` cryptographic verification. Failures return `REFUSED` with the violated rule cited.
 2. **Covenant Ops — Collateral Liveness & Covenant feed.** One pane over every verified spine fact read live from the deployed oracle (0x0FD3 ChainInfo); new credit closes the instant an attested receipt proves collateral left the source chain and re-opens on restoration.
 3. **PurposeBoundFunding** (`0x551592C32a96555A04BB016c2DF7138A1f9DE644`) — funds locked to a declared purpose at funding time; before an attested usage receipt, disbursement goes *only* to the allowlisted counterparty, never the borrower; proven breach freezes the record; settlement repays principal + interest and refunds collateral.
-4. **UsageMeteringRegistry** (`0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5`) — meters per wallet + action key with unit price and window cap; meter advances only on a verified attested receipt or registered KYC agent; caps **fail closed**; debt is on-chain and payable in cUSD.
-5. **Honesty as a feature.** Every number in the demo is read live from a deployed contract or explicitly labeled SIMULATED. No mocked live feeds, no cherry-picked charts — what judges see is what the 113 tests assert.
+4. **UsageMeteringRegistry (prepaid v2)** (`0xF8a9645ac3D234cf72B0C4C170cFB289FE2Ae4F9`) — meters per wallet + action key with unit price and window cap; meter advances only on a verified attested receipt or registered KYC agent; caps **fail closed**; debt is on-chain and payable in cUSD. v2 adds a **prepaid balance** that is consumed **first, fail-closed**: a debit that exceeds prepaid reverts (`InsufficientPrepaid`) instead of silently drifting into debt; top-up and withdrawal are settlement-token (cUSD) transactions.
+5. **VerifiedEscrow** (`0x07aBcbb7b2F9f4400c93d092F343e186ee526137`) — condition-locked escrow for proof-gated settlement: seller/order/amount/deadline bound at creation; release only on an attested cross-chain receipt verified against the deployed verifier (with optional Topic0 pin); the receipt's `keccak(sourceChainId, txHash)` is consumed (replay-guarded); after the deadline anyone triggers the refund — funds can never be stuck.
+6. **Evidence Registry** — every proof-gated event is recoverable on-chain via `eth_getLogs` from the deployed contracts: `ProofAnchored` attestation anchors, `EscrowReleased` releases, `UsageRecorded`/`PrepaidConsumed` metered usage. The same surface a dispute auditor queries; nothing can be quietly reversed.
+7. **Honesty as a feature.** Every number in the demo is read live from a deployed contract or explicitly labeled SIMULATED. No mocked live feeds, no cherry-picked charts — what judges see is what the 126 tests assert.
 
 Plus the 5-track ecosystem on the same spine: DeFi (under-collateralized lending, flash loans, yield vaults, AMM), RWA (invoice financing, treasury yield fund, purpose-bound funding), Gaming (anti-sybil, lootboxes, zero-collateral guild scholarships), DePIN (staking delegation, hardware financing, virtual-node extension), AI (AgentFi credit lines, oracle-less risk, verifiable compute escrow) — and ReputationArena binary trade terminal.
 
 ## Evidence of rigor
 
-- **113/113 automated tests** (`npx hardhat test`) covering OCCR math, replay defense, batch imports, deadswitch, all 5 tracks, Reputation Arena, and the 14-test enterprise policy layer.
+- **126/126 automated tests** (`npx hardhat test`) covering OCCR math, replay defense, batch imports, deadswitch, all 5 tracks, Reputation Arena, the 19-test enterprise policy layer (incl. prepaid credits), and the 8-test VerifiedEscrow gate.
 - **Security**: CodeQL clean; SonarCloud quality gate passed (Rating A/A/A, 0 bugs, 0 vulnerabilities, 0 security hotspots); `npm audit --omit=dev` = **0 production vulnerabilities**.
 - **Secrets hygiene**: exposed GitHub PAT and RapidAPI key rotated; no secrets in the repo.
-- **Live product**: deployed at https://credx-protocol.vercel.app (production, HTTPS) with all four policy panes reading the deployed contracts.
+- **Live product**: deployed at https://credx-protocol.vercel.app (production, HTTPS) with all six policy panes reading the deployed contracts.
 
 ## Reproduce everything
 
 ```bash
 git clone https://github.com/tondays52/CredX && cd CredX
 npm install
-npx hardhat test          # 113/113 passing
+npx hardhat test          # 126/126 passing
 npm run usc:verify        # live Sepolia proof -> 0x0FD2 -> on-chain anchor
 npm run deploy:policy     # (re)deploy Purpose-Bound RWA + Usage Meters to Creditcoin testnet
+npm run deploy:flagship   # (re)deploy Verified Escrow + prepaid-meter v2 to Creditcoin testnet
 cd frontend && npm install && npm run dev   # Web3 Terminal at localhost:5173
 ```

@@ -26,6 +26,9 @@ interface IUsageMeteringRegistry {
     event UsageRecorded(address indexed user, bytes32 indexed actionKey, uint256 units, uint256 sourceTimestamp);
     event DebtSettled(address indexed user, bytes32 indexed actionKey, uint256 amountUSD);
     event KycAgentUpdated(address indexed agent, bool isAgent);
+    event PrepaidTopUp(address indexed user, uint256 amountUSD, uint256 newBalanceUSD);
+    event PrepaidWithdrawn(address indexed user, uint256 amountUSD, uint256 newBalanceUSD);
+    event PrepaidConsumed(address indexed user, bytes32 indexed actionKey, uint256 amountUSD, uint256 remainingUSD);
 
     error ZeroAddress();
     error OnlyOwner();
@@ -36,6 +39,7 @@ interface IUsageMeteringRegistry {
     error ProofRejected();
     error WrongEventSignature();
     error InvalidUnits();
+    error InsufficientPrepaid();
 
     function setMeter(
         address user,
@@ -57,4 +61,16 @@ interface IUsageMeteringRegistry {
     function settleDebt(address user, bytes32 actionKey, uint256 maxPayUSD) external returns (uint256 amountPaidUSD);
     function getMeterReading(address user, bytes32 actionKey) external view returns (ActionMeter memory);
     function getTotalOutstandingDebt(address user) external view returns (uint256);
+
+    /**
+     * @notice Pre-fund metered usage with the settlement token. A positive
+     *         prepaid balance makes the meter consume $ from the balance FIRST,
+     *         fail-closed: if a debit exceeds the balance the increment reverts
+     *         (InsufficientPrepaid) instead of drifting back into debt. When the
+     *         balance is zero the original debt-accrual semantics apply unchanged.
+     */
+    function topUp(uint256 amountUSD) external;
+    function withdrawPrepaid(uint256 amountUSD) external;
+    function getPrepaidBalance(address user) external view returns (uint256);
+    function getTotalPrepaidSpent(address user) external view returns (uint256);
 }

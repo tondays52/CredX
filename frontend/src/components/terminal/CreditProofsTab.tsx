@@ -5,12 +5,14 @@ import RiskGuardView from './RiskGuardView';
 import CovenantOpsFeed from './CovenantOpsFeed';
 import PurposeFundView from './PurposeFundView';
 import MeterTrackingView from './MeterTrackingView';
+import VerifiedEscrowView from './VerifiedEscrowView';
+import EvidenceRegistryView from './EvidenceRegistryView';
 import SimulationBadge from '../common/SimulationBadge';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
-import { Landmark, FileCheck, ShieldCheck, ShieldHalf, Activity, Anchor, Gauge } from 'lucide-react';
+import { Landmark, FileCheck, ShieldCheck, ShieldHalf, Activity, Anchor, Gauge, Vault, ScrollText } from 'lucide-react';
 
-type CreditProofsSection = 'credit' | 'proofs' | 'risk' | 'ops' | 'purpose' | 'meter';
+type CreditProofsSection = 'credit' | 'proofs' | 'risk' | 'ops' | 'purpose' | 'meter' | 'escrow' | 'registry';
 
 const CreditProofsTab: React.FC = () => {
   const { isConnected } = useWeb3();
@@ -23,7 +25,9 @@ const CreditProofsTab: React.FC = () => {
     { id: 'risk', label: 'RiskGuard Gate', icon: ShieldHalf, desc: 'Verify-then-execute policy engine — the agent proposes, the deterministic contract decides after 0x0FD2 verification.' },
     { id: 'ops', label: 'Covenant Ops', icon: Activity, desc: 'Live oracle telemetry and collateral-liveness/covenant feed — new credit closes the instant an attested breach is proven.' },
     { id: 'purpose', label: 'Purpose-Bound RWA', icon: Anchor, desc: 'Purpose-bound funding vault — money is locked to a declared purpose until attested receipts unlock borrower tranches.' },
-    { id: 'meter', label: 'Usage Meters', icon: Gauge, desc: 'Metered accountable usage — attested increments, fail-closed caps and on-chain debt settlement per use.' },
+    { id: 'meter', label: 'Usage Meters', icon: Gauge, desc: 'Metered accountable usage — attested increments, fail-closed caps, prepaid-first settlement and on-chain debt.' },
+    { id: 'escrow', label: 'Verified Escrow', icon: Vault, desc: 'Condition-locked escrow — pays the seller only on a verified proof; replay-guarded, deadline-refundable.' },
+    { id: 'registry', label: 'Evidence Registry', icon: ScrollText, desc: 'Recoverable proof ledger — oracle anchors, escrow releases and metered usage, queryable via eth_getLogs.' },
   ];
 
   return (
@@ -83,6 +87,8 @@ const CreditProofsTab: React.FC = () => {
       {section === 'ops' && <CovenantOpsFeed />}
       {section === 'purpose' && <PurposeFundView />}
       {section === 'meter' && <MeterTrackingView />}
+      {section === 'escrow' && <VerifiedEscrowView />}
+      {section === 'registry' && <EvidenceRegistryView />}
     </div>
   );
 };

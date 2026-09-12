@@ -38,7 +38,8 @@ export const CONTRACTS = {
   reputationArena: '0x42ff8Ea2Bf277F96b7F7f31C07932bcd0C79c9F5',
   blockProverAttestationOracle: '0x4d11b60809724b0B67B28DA2f38438aE97f1C671',
   purposeBoundFunding: '0x551592C32a96555A04BB016c2DF7138A1f9DE644',
-  usageMeteringRegistry: '0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5',
+  usageMeteringRegistry: '0xF8a9645ac3D234cf72B0C4C170cFB289FE2Ae4F9',
+  verifiedEscrow: '0x07aBcbb7b2F9f4400c93d092F343e186ee526137',
 } as const;
 
 /** Testnet settlement token decimals (MockERC20 with 18 decimals). */

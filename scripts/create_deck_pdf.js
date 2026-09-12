@@ -3,7 +3,7 @@
  * Generates a dark-theme slide deck (PDF) for the Creditcoin BUIDL 2026 Fall submission.
  * Usage: node scripts/create_deck_pdf.js   (writes CredX_BUIDL_Deck.pdf in repo root)
  *
- * Content is the corrected, submission-accurate summary (99/99 tests, LIVE 0x0FD2).
+ * Content is the corrected, submission-accurate summary (126/126 tests, LIVE 0x0FD2).
  */
 const fs = require("fs");
 const path = require("path");
@@ -107,7 +107,7 @@ function build() {
       { width: doc.page.width - 96, align: "center", lineGap: 3 }
     );
   doc.moveDown(1.4);
-  mono("LIVE 0x0FD2 integration  |  Run live: credx-protocol.vercel.app  |  113/113 tests  |  20 contracts on testnet", AMBER);
+  mono("LIVE 0x0FD2 integration  |  Run live: credx-protocol.vercel.app  |  126/126 tests  |  22 contracts on testnet", AMBER);
 
   /* ── Slide 2: Problem ───────────────────────────────────────────── */
   newSlide();
@@ -177,15 +177,30 @@ function build() {
     "settlement repays principal + interest and refunds collateral. Deployed & verified on testnet.",
   ]);
 
-  /* ── Slide 7: Metered Usage Registry ────────────────────────────── */
+  /* ── Slide 7: Metered Usage + Prepaid Credits ───────────────────── */
   newSlide();
-  title("Metered Accountable Usage", "Every usage increment is attested, capped and priced on-chain");
+  title("Metered Accountable Usage + Prepaid Credits", "Usage is attested, capped, priced and prepaid-first on-chain");
   bullets([
-    "UsageMeteringRegistry: meters per wallet + action key (GPU lease, flash-loan cycles,",
+    "UsageMeteringRegistry (prepaid v2): meters per wallet + action key (GPU lease, flash-loan cycles,",
     "compute ops, arena ticks) configured by the registry owner with caps and unit prices.",
     "Meter advances only on a verified attested receipt (public or KYC-agent telemetry path).",
     "Window caps fail closed: EXCEEDS WINDOW CAP reverts the increment; debt accrues on-chain",
-    "and is settlable in cUSD. Deployed & verified on testnet.",
+    "and is settlable in cUSD.",
+    "v2 prepaid credits: a settlement-token top-up funds a prepaid balance consumed BEFORE debt;",
+    "while prepaid exists, overdraw reverts INSUFFICIENT PREPAID (fail-closed). Deployed & verified.",
+  ]);
+
+  /* ── Slide 7b: Flagship escrow + evidence registry ──────────────── */
+  newSlide();
+  title("Flagship: Verified Escrow + Evidence Registry", "Proof-gated settlement and a dispute-ready audit surface");
+  bullets([
+    "VerifiedEscrow: depositor locks cUSD against an order; release ONLY on a cross-chain receipt",
+    "verified against the Attestcoin verifier (optionally pinned to the exact event signature).",
+    "Seller / order ref / amount / deadline bound at creation; keccak(sourceChainId, txHash) nullifier",
+    "makes each receipt spendable ONCE across escrows (replay-guarded).",
+    "After the deadline anyone triggers the refund - funds can never be locked forever.",
+    "Evidence Registry: ProofAnchored, EscrowReleased, UsageRecorded and PrepaidConsumed events",
+    "recovered live via eth_getLogs from the deployed contracts - the exact read surface an auditor uses.",
   ]);
 
   /* ── Slide 6: Scoring & Soulbound ───────────────────────────────── */
@@ -259,11 +274,12 @@ function build() {
     "Achieve a 3+ win streak and sync it to Creditcoin L1 for a permanent on-chain credit boost.",
   ]);
 
-  /* ── Slide 11: Testing & honesty ────────────────────────────────── */
+  /* ── Slide 12: Testing & honesty ────────────────────────────────── */
   newSlide();
-  title("Engineering, Testing & Honesty", "113/113 automated tests");
+  title("Engineering, Testing & Honesty", "126/126 automated tests");
   bullets([
-    "npx hardhat test -> 113 passing (BlockProver oracle 9, hub/engine 26, security 19, tracks 45, policy layer 14).",
+    "npx hardhat test -> 126 passing (BlockProver oracle 9, hub/engine 26, security 19, tracks 45,",
+    "policy layer + prepaid 19, verified escrow 8).",
     "OCCR math, dynamic APRs, CX-SBT soulbound invariants, replay defense: all covered.",
   ]);
   sectionHead("Clear labeling of simulations");
@@ -274,9 +290,9 @@ function build() {
     "a clearly labeled gasless fallback for score boosts only.",
   ]);
 
-  /* ── Slide 12: Deployments ──────────────────────────────────────── */
+  /* ── Slide 13: Deployments ──────────────────────────────────────── */
   newSlide();
-  title("Live on Creditcoin Testnet (chainId 102031)", "20 deployed & verified contracts");
+  title("Live on Creditcoin Testnet (chainId 102031)", "22 deployed & verified contracts");
   const deploys = [
     ["BlockProverAttestationOracle (real 0x0FD2/0x0FD3)", "0x4d11b60809724b0B67B28DA2f38438aE97f1C671"],
     ["AttestationVerifier (labeled testnet harness)", "0x34aA30efE2226ffC2E55607017FbA2F07e62b279"],
@@ -290,7 +306,8 @@ function build() {
     ["GamingEcosystemHub / DePINInfrastructureHub", "0x8008...4D75 / 0x99b4...B9Bc"],
     ["AutonomousAIHub / ReputationArena", "0xEc14...a5D / 0x42ff...c9F5"],
     ["PurposeBoundFunding (purpose-bound RWA vault)", "0x551592C32a96555A04BB016c2DF7138A1f9DE644"],
-    ["UsageMeteringRegistry (metered accountable usage)", "0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5"],
+    ["UsageMeteringRegistry (prepaid v2: metered usage)", "0xF8a9645ac3D234cf72B0C4C170cFB289FE2Ae4F9"],
+    ["VerifiedEscrow (condition-locked, proof-gated settlement)", "0x07aBcbb7b2F9f4400c93d092F343e186ee526137"],
   ];
   for (const [label, addr] of deploys) {
     doc.moveDown(0.12);
@@ -298,28 +315,32 @@ function build() {
     mono(addr, TEXT);
   }
 
-  /* ── Slide 13: Frontend & extension ─────────────────────────────── */
+  /* ── Slide 15: Frontend & extension ─────────────────────────────── */
   newSlide();
   title("Frontend DApp & Virtual Node Extension", "React 18 + TypeScript + Vite + Three.js");
   bullets([
     "Web3 Terminal: RWA invoices, DePIN telemetry, flash loans, liquidity depth, reputation arena.",
     "Proofs & Attest tab: live 0x0FD3 chain reads + connected-wallet 'Verify & Anchor on 0x0FD2' button",
     "that verifies a fresh Sepolia proof in-browser (official proof-builder API + ethers, no SDK bundle).",
+    "Policy panes live on-chain: Purpose-Bound RWA, Usage Meters + Prepaid, Verified Escrow (real",
+    "release/refund/top-up transactions with a connected wallet) and the Evidence Registry (eth_getLogs).",
     "Chrome Extension Virtual Node: load unpacked from chrome://extensions.",
   ]);
 
-  /* ── Slide 14: Reproduce + links ────────────────────────────────── */
+  /* ── Slide 16: Reproduce + links ────────────────────────────────── */
   newSlide();
   title("Reproduce, Team & Open Source", "Everything you need to verify");
   sectionHead("Commands");
-  mono("npm install && npx hardhat test              # 113/113 tests", ACCENT);
+  mono("npm install && npx hardhat test              # 126/126 tests", ACCENT);
   mono("npm run usc:verify                            # live 0x0FD2 Sepolia proof + anchor", ACCENT);
   mono("npm run usc:deploy                            # deploy BlockProverAttestationOracle", ACCENT2);
+  mono("npm run deploy:policy / deploy:flagship       # policy layer + escrow on testnet", ACCENT2);
   mono("cd frontend && npm install && npm run dev     # Web3 Terminal (localhost:5173)", ACCENT2);
   sectionHead("Links & license");
   bullets([
     "GitHub: https://github.com/tondays52/CredX",
-    "Live app: https://credx-protocol.vercel.app (RiskGuard, Covenant Ops, Purpose-Bound RWA and Usage Meter panes live on-chain)",
+    "Live app: https://credx-protocol.vercel.app (RiskGuard, Covenant Ops, Purpose-Bound RWA, Usage Meters +",
+    "Prepaid, Verified Escrow and Evidence Registry panes live on-chain)",
     "License: MIT (open source for the Creditcoin L1 ecosystem).",
   ]);
 

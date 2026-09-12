@@ -67,7 +67,7 @@ CredX fulfills all Attestcoin Protocol requirements:
 
 ---
 
-## 🧪 Comprehensive Verification (113/113 Passing Tests)
+## 🧪 Comprehensive Verification (126/126 Passing Tests)
 
 Run the full automated test suite:
 ```bash
@@ -84,9 +84,10 @@ npx hardhat test
   AI Track: AutonomousAIHub (Oracle-less Cross-Chain Verification) (8 tests)
   ReputationArena: PredictBay-Style Binary Paper Trading (6 tests)
   BUIDL CTC 2026 Fall: Multi-Track Extension (10 tests)
-  Enterprise Policy Layer: Purpose-Bound Funding & Usage Metering (14 tests)
+  VerifiedEscrow: condition-locked, proof-gated settlement (8 tests)
+  Enterprise Policy Layer: Purpose-Bound Funding, Usage Metering & Prepaid Credits (19 tests)
 
-  113 passing
+  126 passing
 ```
 
 ---
@@ -101,7 +102,7 @@ npx hardhat test
 ### 2. Install & verify (smart contracts)
 ```bash
 npm install          # installs hardhat, ethers, @gluwa/usc-sdk, ...
-npx hardhat test     # 113/113 passing tests
+npx hardhat test     # 126/126 passing tests
 ```
 
 ### 3. Configure the environment (for live on-chain deploys / verification)
@@ -123,8 +124,10 @@ npm run usc:verify    # real Sepolia proof -> verified SUCCESS on 0x0FD2 -> anch
 
 Enterprise policy layer also **live on Creditcoin testnet** (+ verified on Blockscout):
 - `PurposeBoundFunding` — purpose-bound RWA funding vault: `0x551592C32a96555A04BB016c2DF7138A1f9DE644`
-- `UsageMeteringRegistry` — metered accountable usage, fail-closed caps, on-chain debt: `0xd0aD5750F3Ea9F4d699e5aa3612E9f48BafE9eD5`
-Reproduce with `npm run deploy:policy`.
+- `UsageMeteringRegistry` (v2, prepaid-first settlement) — metered accountable usage, fail-closed caps, top-up-consumed-before-debt: `0xF8a9645ac3D234cf72B0C4C170cFB289FE2Ae4F9`
+- `VerifiedEscrow` — condition-locked, proof-gated settlement escrow; release only on an attested receipt, replay-guarded, deadline-refundable: `0x07aBcbb7b2F9f4400c93d092F343e186ee526137`
+- Evidence Registry — proof-gated events (oracle anchors, escrow releases, metered/prepaid usage) recovered via `eth_getLogs` from the deployed contracts
+Reproduce with `npm run deploy:policy` (purpose + metering) and `npm run deploy:flagship` (escrow + prepaid-meter v2).
 
 ### 5. Run the frontend
 ```bash

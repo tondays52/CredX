@@ -1276,6 +1276,8 @@ export interface PurposeRecordView {
 export interface MeterRegistryState {
   settlementToken: string;
   verifier: string;
+  prepaidBalance: number;
+  prepaidSpent: number;
 }
 
 export interface ActionMeterView {
@@ -1303,6 +1305,11 @@ export const USAGE_METER_ABI = [
   'function verifier() view returns (address)',
   'function meters(address,bytes32) view returns (bool exists, uint256 windowCapUnits, uint256 usedUnitsThisWindow, uint256 windowStartBlock, uint256 windowDurationBlocks, uint256 unitPriceUSD, uint256 outstandingDebtUSD)',
   'function getTotalOutstandingDebt(address) view returns (uint256)',
+  'function getPrepaidBalance(address) view returns (uint256)',
+  'function getTotalPrepaidSpent(address) view returns (uint256)',
+  'function prepaidBalance(address) view returns (uint256)',
+  'function topUp(uint256 amountUSD)',
+  'function withdrawPrepaid(uint256 amountUSD)',
 ];
 
 export async function fetchPurposeFundState(): Promise<PurposeFundState | null> {
@@ -1363,7 +1370,12 @@ export async function fetchMeterRegistryState(
 ): Promise<{ state: MeterRegistryState; meters: Record<string, ActionMeterView | null>; totalDebt: number }> {
   try {
     const contract = readContract(CONTRACTS.usageMeteringRegistry, USAGE_METER_ABI);
-    const [settlementToken, verifier] = await Promise.all([contract.settlementToken(), contract.verifier()]);
+    const [settlementToken, verifier, prepaidBalance, prepaidSpent] = await Promise.all([
+      contract.settlementToken(),
+      contract.verifier(),
+      contract.getPrepaidBalance(user),
+      contract.getTotalPrepaidSpent(user),
+    ]);
     const meters: Record<string, ActionMeterView | null> = {};
     for (const key of actionKeys) {
       const m = await contract.meters(user, key);
@@ -1381,12 +1393,21 @@ export async function fetchMeterRegistryState(
     }
     const totalDebtRaw = await contract.getTotalOutstandingDebt(user);
     return {
-      state: { settlementToken: String(settlementToken), verifier: String(verifier) },
+      state: {
+        settlementToken: String(settlementToken),
+        verifier: String(verifier),
+        prepaidBalance: parseFloat(ethers.formatUnits(prepaidBalance, 18)),
+        prepaidSpent: parseFloat(ethers.formatUnits(prepaidSpent, 18)),
+      },
       meters,
       totalDebt: parseFloat(ethers.formatUnits(totalDebtRaw, 18)),
     };
   } catch {
-    return { state: { settlementToken: '', verifier: '' }, meters: {}, totalDebt: 0 };
+    return {
+      state: { settlementToken: '', verifier: '', prepaidBalance: 0, prepaidSpent: 0 },
+      meters: {},
+      totalDebt: 0,
+    };
   }
 }
 
@@ -1403,4 +1424,251 @@ export function bpsToApr(bps: number): string {
 
 export function txHashShort(hash: string): string {
   return `${hash.slice(0, 8)}...${hash.slice(-6)}`;
+}
+
+// ─── Verified Escrow (condition-locked, proof-gated settlement) ─────────────
+
+export const VERIFIED_ESCROW_ABI = [
+  'function nextEscrowId() view returns (uint256)',
+  'function totalLockedUSD() view returns (uint256)',
+  'function escrowCount() view returns (uint256)',
+  'function escrows(uint256) view returns (uint256 escrowId, address depositor, address seller, bytes32 orderRef, uint256 amountUSD, uint256 deadlineBlock, bool released, bool refunded)',
+  'function verifier() view returns (address)',
+  'function createEscrow(address seller, bytes32 orderRef, uint256 amountUSD, uint256 deadlineBlock) returns (uint256)',
+  'function release(uint256 escrowId, (uint256,bytes32,uint256,bytes32,uint256,bytes,bytes) evidence, bytes32 expectedEventSignature)',
+  'function refundAfterDeadline(uint256 escrowId)',
+];
+
+export const ATTESTATION_VERIFIER_ABI = [
+  'function verifyEventProof((uint256,bytes32,uint256,bytes32,uint256,bytes,bytes) proof) view returns (bool isValid, address emitterAddress, bytes32 eventSignature, bytes eventData, uint256 sourceBlockTime)',
+  'function isTransactionAttested(uint256 sourceChainId, bytes32 txHash) view returns (bool)',
+];
+
+export interface EscrowView {
+  escrowId: string;
+  depositor: string;
+  seller: string;
+  orderRef: string;
+  amountUSD: number;
+  deadlineBlock: number;
+  released: boolean;
+  refunded: boolean;
+  status: 'released' | 'refunded' | 'active';
+}
+
+export interface EscrowState {
+  escrowCount: number;
+  totalLockedUSD: number;
+  verifier: string;
+}
+
+export async function fetchEscrowState(): Promise<EscrowState | null> {
+  try {
+    const contract = readContract(CONTRACTS.verifiedEscrow, VERIFIED_ESCROW_ABI);
+    const [count, locked, verifier] = await Promise.all([
+      contract.escrowCount(),
+      contract.totalLockedUSD(),
+      contract.verifier(),
+    ]);
+    return {
+      escrowCount: Number(count),
+      totalLockedUSD: parseFloat(ethers.formatUnits(locked, 18)),
+      verifier: String(verifier),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchEscrowJobs(user: string): Promise<EscrowView[]> {
+  try {
+    const contract = readContract(CONTRACTS.verifiedEscrow, VERIFIED_ESCROW_ABI);
+    const count = Number(await contract.escrowCount());
+    const out: EscrowView[] = [];
+    for (let i = count; i >= 1 && out.length < 12; i--) {
+      const r = await contract.escrows(i);
+      if (r.depositor === ethers.ZeroAddress) continue;
+      out.push({
+        escrowId: r.escrowId.toString(),
+        depositor: r.depositor,
+        seller: r.seller,
+        orderRef: r.orderRef.slice(0, 10) + '…',
+        amountUSD: parseFloat(ethers.formatUnits(r.amountUSD, 18)),
+        deadlineBlock: Number(r.deadlineBlock),
+        released: r.released,
+        refunded: r.refunded,
+        status: r.released ? 'released' : r.refunded ? 'refunded' : 'active',
+      });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Deterministic testnet EventProof for a release (mirrors submitProofBatch harness pattern). */
+function buildEscrowProof(escrowId: number | string): any {
+  const txHash = ethers.id('tx-verified-escrow-' + escrowId);
+  return {
+    sourceChainId: 11155111,
+    blockHash: ethers.id(`${txHash}:block`),
+    blockNumber: 1,
+    txHash,
+    txIndex: 0,
+    rlpEncodedReceipt: '0x',
+    merkleProof: '0x',
+  };
+}
+
+export async function escrowCreateEscrow(seller: string, orderRef: string, amountUSD: number, deadlineBlocks: number): Promise<string> {
+  const signer = await getSigner();
+  await ensureApproval(signer, CONTRACTS.verifiedEscrow, ethers.parseUnits(amountUSD.toString(), CUSD_DECIMALS));
+  const cur = Number(await readProvider().getBlockNumber());
+  const escrowC = new ethers.Contract(CONTRACTS.verifiedEscrow, VERIFIED_ESCROW_ABI, signer);
+  const tx = await escrowC.createEscrow(
+    seller,
+    ethers.id(orderRef),
+    ethers.parseUnits(amountUSD.toString(), CUSD_DECIMALS),
+    cur + deadlineBlocks,
+    { gasLimit: 400000 }
+  );
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function escrowRelease(escrowId: number): Promise<string> {
+  const signer = await getSigner();
+  const proof = buildEscrowProof(escrowId);
+  const verifier = readContract(CONTRACTS.attestationVerifier, ATTESTATION_VERIFIER_ABI);
+  const result = await verifier.verifyEventProof(proof);
+  const escrowC = new ethers.Contract(CONTRACTS.verifiedEscrow, VERIFIED_ESCROW_ABI, signer);
+  const tx = await escrowC.release(escrowId, proof, result.eventSignature, { gasLimit: 400000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function escrowRefund(escrowId: number): Promise<string> {
+  const signer = await getSigner();
+  const escrowC = new ethers.Contract(CONTRACTS.verifiedEscrow, VERIFIED_ESCROW_ABI, signer);
+  const tx = await escrowC.refundAfterDeadline(escrowId, { gasLimit: 400000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function meterTopUp(amountUSD: number): Promise<string> {
+  const signer = await getSigner();
+  await ensureApproval(signer, CONTRACTS.usageMeteringRegistry, ethers.parseUnits(amountUSD.toString(), CUSD_DECIMALS));
+  const meter = new ethers.Contract(CONTRACTS.usageMeteringRegistry, USAGE_METER_ABI, signer);
+  const tx = await meter.topUp(ethers.parseUnits(amountUSD.toString(), CUSD_DECIMALS), { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function meterWithdrawPrepaid(amountUSD: number): Promise<string> {
+  const signer = await getSigner();
+  const meter = new ethers.Contract(CONTRACTS.usageMeteringRegistry, USAGE_METER_ABI, signer);
+  const tx = await meter.withdrawPrepaid(ethers.parseUnits(amountUSD.toString(), CUSD_DECIMALS), { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+// ─── Evidence Registry (attested proofs + proof-gated events, via eth_getLogs) ─
+
+export interface EvidenceEntry {
+  source: 'oracle' | 'escrow' | 'meter';
+  kind: string;
+  actor: string;
+  txHash: string;       // source-chain txHash (oracle/escrow) or event-key seeded
+  chainId: number;      // source chain id (oracle: chainKey)
+  blockNumber: number;  // height (oracle) or CC3 block (escrow/meter)
+  verified: boolean;
+  amountUSD: number | null;
+}
+
+const EVIDENCE_TOPICS = {
+  ProofAnchored: ethers.id('ProofAnchored(uint64,uint64,bytes32,bool)'),
+  EscrowReleased: ethers.id('EscrowReleased(uint256,address,uint256,uint256,bytes32,uint256)'),
+  UsageRecorded: ethers.id('UsageRecorded(address,bytes32,uint256,uint256)'),
+  PrepaidConsumed: ethers.id('PrepaidConsumed(address,bytes32,uint256,uint256)'),
+};
+
+const EVIDENCE_FROM_BLOCKS = 30000;
+
+export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[]; anchoredCount: number; latestBlock: number }> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const fromBlock = Math.max(1, latest - EVIDENCE_FROM_BLOCKS);
+    const raw = await Promise.all([
+      provider.getLogs({ address: CONTRACTS.blockProverAttestationOracle, topics: [EVIDENCE_TOPICS.ProofAnchored], fromBlock, toBlock: 'latest' }).catch(() => []),
+      provider.getLogs({ address: CONTRACTS.verifiedEscrow, topics: [EVIDENCE_TOPICS.EscrowReleased], fromBlock, toBlock: 'latest' }).catch(() => []),
+      provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.UsageRecorded], fromBlock, toBlock: 'latest' }).catch(() => []),
+      provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.PrepaidConsumed], fromBlock, toBlock: 'latest' }).catch(() => []),
+    ]);
+
+    const entries: EvidenceEntry[] = [];
+
+    for (const log of raw[0] || []) {
+      entries.push({
+        source: 'oracle',
+        kind: 'ProofAnchored',
+        actor: CONTRACTS.blockProverAttestationOracle,
+        txHash: String(log.topics[3]),
+        chainId: Number(log.topics[1]),
+        blockNumber: Number(log.topics[2]),
+        verified: log.data === '0x01' || String(log.data) !== '0x00',
+        amountUSD: null,
+      });
+    }
+
+    const escrowDecoder = ethers.AbiCoder.defaultAbiCoder();
+    for (const log of raw[1] || []) {
+      const data = escrowDecoder.decode(['uint256', 'uint256', 'bytes32', 'uint256'], log.data);
+      entries.push({
+        source: 'escrow',
+        kind: 'EscrowReleased',
+        actor: ethers.getAddress('0x' + log.topics[2].slice(26)),
+        txHash: String(data[2]),
+        chainId: Number(data[1]),
+        blockNumber: Number(log.blockNumber),
+        verified: true,
+        amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+      });
+    }
+
+    for (const log of raw[2] || []) {
+      const data = escrowDecoder.decode(['uint256', 'uint256'], log.data);
+      entries.push({
+        source: 'meter',
+        kind: 'UsageRecorded',
+        actor: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        txHash: ethers.id('usage:block:' + String(log.blockNumber)),
+        chainId: Number(data[1]),
+        blockNumber: Number(log.blockNumber),
+        verified: true,
+        amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+      });
+    }
+
+    for (const log of raw[3] || []) {
+      const data = escrowDecoder.decode(['uint256', 'uint256'], log.data);
+      entries.push({
+        source: 'meter',
+        kind: 'PrepaidConsumed',
+        actor: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        txHash: ethers.id('prepaid:block:' + String(log.blockNumber)),
+        chainId: Number(data[1]),
+        blockNumber: Number(log.blockNumber),
+        verified: true,
+        amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+      });
+    }
+
+    entries.sort((a, b) => b.blockNumber - a.blockNumber);
+
+    const oracleInfo = await fetchUSCOracleInfo().catch(() => null);
+    return { entries: entries.slice(0, 30), anchoredCount: oracleInfo?.anchoredCount ?? 0, latestBlock: latest };
+  } catch {
+    return { entries: [], anchoredCount: 0, latestBlock: 0 };
+  }
 }

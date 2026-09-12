@@ -263,4 +263,93 @@ describe("Enterprise Policy Layer: Purpose-Bound Funding & Usage Metering", func
       expect(reading.outstandingDebtUSD).to.equal(0n);
     });
   });
+
+  describe("Prepaid Metered Credits (usage-first settlement)", function () {
+    const GPU_KEY = ethers.id("gpu.lease.seconds");
+
+    it("top-ups fund a prepaid balance in the settlement token", async function () {
+      await cUSD.mint(user1.address, ethers.parseEther("5000"));
+      await cUSD.connect(user1).approve(await meterRegistry.getAddress(), ethers.parseEther("5000"));
+
+      await expect(meterRegistry.connect(user1).topUp(ethers.parseEther("2000")))
+        .to.emit(meterRegistry, "PrepaidTopUp")
+        .withArgs(user1.address, ethers.parseEther("2000"), ethers.parseEther("2000"));
+      expect(await meterRegistry.getPrepaidBalance(user1.address)).to.equal(ethers.parseEther("2000"));
+    });
+
+    it("consumes prepaid FIRST and accrues no debt while the balance covers the debit", async function () {
+      const debtBefore = await meterRegistry.getTotalOutstandingDebt(user1.address);
+      const proof = await buildMockEventProof(1, "tx-prepaid-1-" + user1.address);
+
+      await expect(
+        meterRegistry.recordAttestedUsage(
+          user1.address,
+          GPU_KEY,
+          ethers.parseEther("300"),
+          proof,
+          ethers.id("AttestationVerified(uint256,bytes32)")
+        )
+      )
+        .to.emit(meterRegistry, "PrepaidConsumed")
+        .withArgs(user1.address, GPU_KEY, ethers.parseEther("600"), ethers.parseEther("1400"));
+
+      expect(await meterRegistry.getPrepaidBalance(user1.address)).to.equal(ethers.parseEther("1400"));
+      expect(await meterRegistry.getTotalOutstandingDebt(user1.address)).to.equal(debtBefore);
+      expect(await meterRegistry.getTotalPrepaidSpent(user1.address)).to.equal(ethers.parseEther("600"));
+    });
+
+    it("withdraws prepaid credits and rejects over-withdrawals", async function () {
+      await expect(meterRegistry.connect(user1).withdrawPrepaid(ethers.parseEther("1200")))
+        .to.emit(meterRegistry, "PrepaidWithdrawn")
+        .withArgs(user1.address, ethers.parseEther("1200"), ethers.parseEther("200"));
+      await expect(
+        meterRegistry.connect(user1).withdrawPrepaid(ethers.parseEther("300"))
+      ).to.be.revertedWithCustomError(meterRegistry, "InsufficientPrepaid");
+      expect(await meterRegistry.getPrepaidBalance(user1.address)).to.equal(ethers.parseEther("200"));
+    });
+
+    it("fails closed when a debit exceeds the remaining prepaid balance", async function () {
+      const debtBefore = await meterRegistry.getTotalOutstandingDebt(user1.address);
+      const proof = await buildMockEventProof(1, "tx-prepaid-overdraw-" + user1.address);
+
+      await expect(
+        meterRegistry.recordAttestedUsage(
+          user1.address,
+          GPU_KEY,
+          ethers.parseEther("200"),
+          proof,
+          ethers.id("AttestationVerified(uint256,bytes32)")
+        )
+      ).to.be.revertedWithCustomError(meterRegistry, "InsufficientPrepaid");
+
+      expect(await meterRegistry.getPrepaidBalance(user1.address)).to.equal(ethers.parseEther("200"));
+      expect(await meterRegistry.getTotalOutstandingDebt(user1.address)).to.equal(debtBefore);
+      const reading = await meterRegistry.getMeterReading(user1.address, GPU_KEY);
+      expect(reading.outstandingDebtUSD).to.equal(debtBefore);
+    });
+
+    it("returns to debt accrual once prepaid is drained (backward compatible)", async function () {
+      const proof = await buildMockEventProof(1, "tx-prepaid-2-" + user1.address);
+      await meterRegistry.recordAttestedUsage(
+        user1.address,
+        GPU_KEY,
+        ethers.parseEther("100"),
+        proof,
+        ethers.id("AttestationVerified(uint256,bytes32)")
+      );
+      expect(await meterRegistry.getPrepaidBalance(user1.address)).to.equal(0n);
+      expect(await meterRegistry.getTotalPrepaidSpent(user1.address)).to.equal(ethers.parseEther("800"));
+
+      const debtBefore = await meterRegistry.getTotalOutstandingDebt(user1.address);
+      const proof2 = await buildMockEventProof(1, "tx-prepaid-3-" + user1.address);
+      await meterRegistry.recordAttestedUsage(
+        user1.address,
+        GPU_KEY,
+        ethers.parseEther("100"),
+        proof2,
+        ethers.id("AttestationVerified(uint256,bytes32)")
+      );
+      expect(await meterRegistry.getTotalOutstandingDebt(user1.address)).to.equal(debtBefore + ethers.parseEther("200"));
+    });
+  });
 });
