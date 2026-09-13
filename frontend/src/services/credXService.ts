@@ -12,6 +12,7 @@
 
 import { ethers, BrowserProvider, JsonRpcProvider } from 'ethers';
 import { CONTRACTS, CUSD_DECIMALS, CREDITCOIN_RPC, CREDITCOIN_CHAIN_ID } from '../config/contracts';
+import { DEMO_WALLET_VAULT } from '../config/demoWallets';
 
 export type CardTier = 'SUBPRIME' | 'NEAR_PRIME' | 'PRIME' | 'SUPER_PRIME';
 
@@ -2061,6 +2062,216 @@ export async function fetchGeoOrbitStations(limit = 200): Promise<GeoOrbitStatio
 /** In-browser signer for a CC3 demo vault wallet (testnet keys only). */
 export function demoWalletSigner(privateKey: string): ethers.Wallet {
   return new ethers.Wallet(privateKey, readProvider());
+}
+
+// ─── Zero-collateral flash loans (real ReputationFlashLoan executions) ───────
+
+export const FLASH_LOAN_ABI = [
+  'function TOKEN() view returns (address)',
+  'function CREDX_HUB() view returns (address)',
+  'function CALLBACK_SUCCESS() view returns (bytes32)',
+  'function flashLoan(address receiver, uint256 amount, bytes data)',
+  'event FlashLoan(address indexed receiver, address indexed token, uint256 amount, uint256 fee, uint256 score)',
+];
+
+export const FLASH_BORROWER_ABI = [
+  'function lastAudit() view returns (uint256 blockNumber, uint256 amount, uint256 fee, uint256 feeBps, uint256 score, uint256 projectedDepin, uint256 projectedBack, bool profitable)',
+  'function projectRoundTrip(uint256 amount) view returns (uint256 depinOut, uint256 cusdBack)',
+  'function reputationFeeBps(address) view returns (uint256)',
+  'function ammFeeBps() view returns (uint256)',
+  'function FLASH_LOAN() view returns (address)',
+  'function INITIATOR() view returns (address)',
+];
+
+export const FlashLoanEventTopic = ethers.id('FlashLoan(address,address,uint256,uint256,uint256)');
+
+export interface FlashLoanLedgerEntry {
+  receiver: string;
+  amount: number;
+  fee: number;
+  score: number;
+  txHash: string;
+  block: number;
+  timestamp: number;
+}
+
+export interface FlashLoanState {
+  token: TokenMeta;
+  initiator: string;
+  creditScore: number;
+  feeBps: number;
+  tier: CardTier;
+  capacity: number;
+  float: number;
+  borrower: string;
+  currentBlock: number;
+}
+
+/**
+ * Real state of the zero-collateral flash-loan market: actual cUSD capacity held
+ * by ReputationFlashLoan, the live credit tier of the demo-root borrower (real
+ * score → real fee bps: 1/5/9), and the executor float inside the receiver.
+ */
+export async function fetchFlashLoanState(initiator: string): Promise<FlashLoanState | null> {
+  try {
+    const flash = readContract(CONTRACTS.reputationFlashLoan, FLASH_LOAN_ABI);
+    const borrower = readContract(CONTRACTS.reputationFlashBorrower, FLASH_BORROWER_ABI);
+    const tokenAddr = await flash.TOKEN();
+    const token = await tokenMeta(tokenAddr);
+    const tokenRead = new ethers.Contract(tokenAddr, CUSD_ABI, readProvider());
+    const [profile, feeBps, block, capacity, floatNum] = await Promise.all([
+      fetchBorrowerProfile(initiator),
+      borrower.reputationFeeBps(initiator),
+      readProvider().getBlockNumber(),
+      tokenRead.balanceOf(CONTRACTS.reputationFlashLoan),
+      tokenRead.balanceOf(CONTRACTS.reputationFlashBorrower),
+    ]);
+    return {
+      token,
+      initiator,
+      creditScore: profile?.creditScore ?? 0,
+      feeBps: Number(feeBps),
+      tier: profile ? scoreToTier(profile.creditScore) : 'SUBPRIME',
+      capacity: parseFloat(ethers.formatUnits(capacity, token.decimals)),
+      float: parseFloat(ethers.formatUnits(floatNum, token.decimals)),
+      borrower: CONTRACTS.reputationFlashBorrower,
+      currentBlock: Number(block),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Real AMM round-trip projection for `amount` cUSD, computed by the DEPLOYED
+ * receiver (projectRoundTrip) so the numbers shown are exactly the ones the
+ * on-chain callback will use (receiver fee tier + post-first-leg reserves).
+ */
+export async function projectFlashRoundTrip(amountNumber: number, initiator: string) {
+  try {
+    const flash = readContract(CONTRACTS.reputationFlashLoan, FLASH_LOAN_ABI);
+    const borrower = readContract(CONTRACTS.reputationFlashBorrower, FLASH_BORROWER_ABI);
+    const token = await tokenMeta(await flash.TOKEN());
+    const amountWei = ethers.parseUnits(amountNumber.toString(), token.decimals);
+    const feeBps = Number(await borrower.reputationFeeBps(initiator));
+    const fee = (amountWei * BigInt(feeBps)) / 10000n;
+    const [depinOutWei, cusdBackWei] = await borrower.projectRoundTrip(amountWei);
+    const depinOut = parseFloat(ethers.formatUnits(depinOutWei, token.decimals));
+    const cusdBack = parseFloat(ethers.formatUnits(cusdBackWei, token.decimals));
+    const feeNum = parseFloat(ethers.formatUnits(fee, token.decimals));
+    return {
+      depinOut,
+      cusdBack,
+      fee: feeNum,
+      net: cusdBack - amountNumber,
+      profitable: cusdBack >= amountNumber + feeNum,
+    };
+  } catch {
+    return {
+      depinOut: 0,
+      cusdBack: 0,
+      fee: 0,
+      net: 0,
+      profitable: false,
+    };
+  }
+}
+
+/** Real on-chain ledger of every FlashLoan event on the deployed lender. */
+export async function fetchFlashLoanLedger(limit = 30): Promise<FlashLoanLedgerEntry[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const out: FlashLoanLedgerEntry[] = [];
+    let logs: any[] = [];
+    for (const win of [1200000, 600000, 300000, 150000, 60000]) {
+      try {
+        logs = await provider.getLogs({
+          address: CONTRACTS.reputationFlashLoan,
+          topics: [FlashLoanEventTopic],
+          fromBlock: Math.max(1, latest - win),
+          toBlock: 'latest',
+        });
+        if (logs.length > 0) break;
+      } catch {
+        /* try a narrower window */
+      }
+    }
+    for (const l of logs) {
+      try {
+        const decoded = new ethers.Interface(FLASH_LOAN_ABI).parseLog(l);
+        if (!decoded || decoded.name !== 'FlashLoan') continue;
+        const { receiver, amount, fee, score } = decoded.args as any;
+        out.push({
+          receiver: String(receiver),
+          amount: parseFloat(ethers.formatUnits(amount, 18)),
+          fee: parseFloat(ethers.formatUnits(fee, 18)),
+          score: Number(score),
+          txHash: String(l.transactionHash),
+          block: Number(l.blockNumber),
+          timestamp: 0,
+        });
+      } catch {
+        /* skip undecodable log */
+      }
+    }
+    const uniqBlocks = [...new Set(out.map((e) => e.block))].filter((b) => b > 0);
+    const stamps: Record<number, number> = {};
+    await Promise.all(
+      uniqBlocks.map(async (b) => {
+        stamps[b] = await provider.getBlock(b).then((x) => x?.timestamp ?? 0).catch(() => 0);
+      })
+    );
+    for (const e of out) e.timestamp = stamps[e.block] ?? 0;
+    out.sort((a, b) => b.block - a.block);
+    return out.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Execute a REAL flash loan on CC3, signed by the demo-root wallet (the seeded
+ * super-prime borrower). mode 0 = audit & return (succeeds — float covers the
+ * live fee); mode 1 = guarded AMM round-trip (reverts atomically when the exact
+ * projection nets below the live fee). Returns the decoded on-chain FlashLoan
+ * outcome for the receipt. No approvals are required — flash loans pull nothing
+ * from the borrower's own wallet.
+ */
+export async function executeFlashLoan(
+  amountNumber: number,
+  mode: 0 | 1,
+  profitTo: string,
+  signer?: ethers.Signer
+): Promise<{ txHash: string; block: number; amount: number; fee: number; score: number; reverted: string | null }> {
+  const s = signer ?? demoWalletSigner(DEMO_WALLET_VAULT.find((w) => w.id === 'credx-root')?.privateKey ?? '');
+  const flash = new ethers.Contract(CONTRACTS.reputationFlashLoan, FLASH_LOAN_ABI, s);
+  const token = await tokenMeta(await flash.TOKEN());
+  const amountWei = ethers.parseUnits(amountNumber.toString(), token.decimals);
+  const data = ethers.AbiCoder.defaultAbiCoder().encode(['uint256', 'address'], [mode, profitTo]);
+  const tx = await flash.flashLoan(CONTRACTS.reputationFlashBorrower, amountWei, data, { gasLimit: 700000 });
+  const receipt = await tx.wait();
+  let fee = 0;
+  let score = 0;
+  try {
+    const parsed = receipt.logs
+      .map((l: any) => (l.address.toLowerCase() === CONTRACTS.reputationFlashLoan.toLowerCase() ? new ethers.Interface(FLASH_LOAN_ABI).parseLog(l) : null))
+      .find((p: any) => p && p.name === 'FlashLoan');
+    if (parsed) {
+      fee = parseFloat(ethers.formatUnits(parsed.args.fee, token.decimals));
+      score = Number(parsed.args.score);
+    }
+  } catch {
+    /* event decode best-effort */
+  }
+  return {
+    txHash: String(receipt.hash),
+    block: Number(receipt.blockNumber),
+    amount: amountNumber,
+    fee,
+    score,
+    reverted: null,
+  };
 }
 
 // ─── Pulse (live on-chain bandwidth Data-DAO epoch ledger) ──────────────────
