@@ -24,7 +24,7 @@ const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
     : score > 750 ? '110%' : score > 600 ? '125%' : '140%';
 
   const handleBorrow = () => {
-    const val = parseFloat(amount);
+    const val = Number.parseFloat(amount);
     if (!val || val <= 0) {
       addToast('error', 'Invalid Sum', 'Please enter a valid loan request amount.');
       return;
@@ -73,9 +73,9 @@ const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-white/70 block mb-1.5">Borrow Amount (USDC)</label>
+          <label htmlFor="ctl-borrowmodal-10" className="text-[11px] font-medium text-white/70 block mb-1.5">Borrow Amount (USDC)</label>
           <div className="relative">
-            <input
+            <input id="ctl-borrowmodal-10"
               type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
@@ -87,8 +87,8 @@ const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div>
-          <label className="text-[11px] font-medium text-white/70 block mb-1.5">Collateral Asset</label>
-          <div className="grid grid-cols-3 gap-2">
+          <label id="ctl-borrowmodal-collat" className="text-[11px] font-medium text-white/70 block mb-1.5">Collateral Asset</label>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="ctl-borrowmodal-collat">
             {['ETH', 'WBTC', 'CTC'].map((token) => (
               <button
                 key={token}

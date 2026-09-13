@@ -105,7 +105,7 @@ describe("PulseBandwidthRegistry: real epoch-based bandwidth Data-DAO ledger", f
 
   it("accrues and claims rewards exactly once", async function () {
     const n0 = await pulse.nodes(alice.address);
-    expect(n0.totalRewardUnits - n0.claimedUnits).to.equal(RPT() * 7n);
+    expect(BigInt(n0.totalRewardUnits - n0.claimedUnits)).to.equal(RPT() * 7n);
 
     await expect(pulse.connect(alice).claimRewards())
       .to.emit(pulse, "RewardsClaimed")

@@ -281,7 +281,7 @@ function executeProofSubmission() {
   const step1 = document.getElementById("step-1");
   const step2 = document.getElementById("step-2");
   const step3 = document.getElementById("step-3");
-  const valueUSD = parseFloat(document.getElementById("proof-value-usd").value) || 25000;
+  const valueUSD = Number.parseFloat(document.getElementById("proof-value-usd").value) || 25000;
 
   pipeline.classList.remove("hidden");
   btn.disabled = true;
@@ -327,7 +327,7 @@ function updateCollateralCalc() {
 
   if (!borrowInput || !ctcReqEl) return;
 
-  const borrowUSD = parseFloat(borrowInput.value) || 0;
+  const borrowUSD = Number.parseFloat(borrowInput.value) || 0;
   const requiredUSD = borrowUSD * 0.70;
   const requiredCTC = requiredUSD / 2.0;
   const standardUSD = borrowUSD * 1.50;
@@ -349,7 +349,7 @@ function updateCollateralCalc() {
 // Borrow Execution
 function executeBorrow() {
   const borrowInput = document.getElementById("borrow-amount-input");
-  const borrowUSD = parseFloat(borrowInput.value) || 10000;
+  const borrowUSD = Number.parseFloat(borrowInput.value) || 10000;
   const requiredCTC = (borrowUSD * 0.7) / 2;
 
   document.getElementById("borrowModalDisbursed").textContent = `$${borrowUSD.toLocaleString()} cUSD`;
@@ -415,7 +415,7 @@ function selectFlashAmount(amount) {
 
   document.getElementById('flashPrincipalText').textContent = `$${amount.toLocaleString()} cUSD`;
   document.getElementById('flashFeeText').innerHTML = `$${fee.toFixed(2)} cUSD <span class="text-[10px] text-slate-500">(Saved $${saved.toFixed(2)} vs standard)</span>`;
-  document.getElementById('flashProfitText').textContent = `+$${parseFloat(estimatedProfit).toLocaleString()} cUSD`;
+  document.getElementById('flashProfitText').textContent = `+$${Number.parseFloat(estimatedProfit).toLocaleString()} cUSD`;
 }
 
 function runFlashLoanSimulation() {
@@ -473,7 +473,7 @@ function confirmVaultStake() {
   playSoundEffect('success');
   const amt = document.getElementById('yieldStakeInput').value || 5000;
   closeGameModal('yieldVaultModal');
-  showStatus(`🏛️ Staked ${parseFloat(amt).toLocaleString()} cUSD into Boosted 17.0% APY Yield Vault! (2.0x Multiplier Active)`, "success");
+  showStatus(`🏛️ Staked ${Number.parseFloat(amt).toLocaleString()} cUSD into Boosted 17.0% APY Yield Vault! (2.0x Multiplier Active)`, "success");
 }
 
 function harvestVaultYield() {
@@ -493,7 +493,7 @@ function executeAMMSwapDemo() {
 }
 
 function updateAmmReceiveAmount() {
-  const payAmt = parseFloat(document.getElementById('ammPayAmount').value) || 0;
+  const payAmt = Number.parseFloat(document.getElementById('ammPayAmount').value) || 0;
   const rate = 0.5; // 1 cUSD = 0.5 CTC
   const feeRate = 0.0005; // 0.05% fee
   const netReceived = (payAmt * rate * (1 - feeRate)).toFixed(2);
@@ -600,7 +600,7 @@ function selectDePINNode(nodeId, score, apyStr, el) {
   el.classList.add('active', 'bg-cyan-500/20', 'border-cyan-400');
   el.classList.remove('bg-white/5', 'border-white/10');
 
-  selectedNodeApy = parseFloat(apyStr);
+  selectedNodeApy = Number.parseFloat(apyStr);
   updateDePINStakeAmount();
   playSoundEffect('harvest');
 }
@@ -608,7 +608,7 @@ function selectDePINNode(nodeId, score, apyStr, el) {
 function updateDePINStakeAmount() {
   const slider = document.getElementById('depinStakeSlider');
   if (!slider) return;
-  const amt = parseInt(slider.value);
+  const amt = Number.parseInt(slider.value);
   document.getElementById('depinStakeAmtText').textContent = `${amt.toLocaleString()} CTC`;
   const estEarn = ((amt * selectedNodeApy) / 100).toFixed(1);
   document.getElementById('depinEstEarnings').textContent = `${estEarn} CTC / Year (${selectedNodeApy}% APY)`;
@@ -617,7 +617,7 @@ function updateDePINStakeAmount() {
 function runNodeDelegationSimulation() {
   playSoundEffect('success');
   const slider = document.getElementById('depinStakeSlider');
-  const amt = slider ? parseInt(slider.value) : 2500;
+  const amt = slider ? Number.parseInt(slider.value) : 2500;
   closeGameModal('depinDelegationModal');
   showStatus(`📡 Delegated ${amt.toLocaleString()} CTC to Verified DePIN Node! Earning ${selectedNodeApy}% APY revenue share.`, "success");
 }
@@ -791,8 +791,8 @@ function executeAIRiskUpdateDemo() {
 }
 
 function updateAIRiskCalc() {
-  const vol = parseFloat(document.getElementById('aiVolSlider').value) || 10;
-  const defRate = parseFloat(document.getElementById('aiDefSlider').value) || 2;
+  const vol = Number.parseFloat(document.getElementById('aiVolSlider').value) || 10;
+  const defRate = Number.parseFloat(document.getElementById('aiDefSlider').value) || 2;
   document.getElementById('aiVolDisplay').textContent = `${vol.toFixed(1)}%`;
   document.getElementById('aiDefDisplay').textContent = `${defRate.toFixed(1)}%`;
 
@@ -879,10 +879,10 @@ function runRWAMintSimulation() {
 
   setTimeout(() => {
     playSoundEffect('success');
-    btn.textContent = `✅ Minted ${parseFloat(amt).toLocaleString()} tbUSD`;
+    btn.textContent = `✅ Minted ${Number.parseFloat(amt).toLocaleString()} tbUSD`;
     setTimeout(() => {
       closeGameModal('rwaTreasuryModal');
-      showStatus(`🏛️ Treasury Fund Minted: ${parseFloat(amt).toLocaleString()} tbUSD! +2.0% Super-Prime Bonus APY applied.`, "success");
+      showStatus(`🏛️ Treasury Fund Minted: ${Number.parseFloat(amt).toLocaleString()} tbUSD! +2.0% Super-Prime Bonus APY applied.`, "success");
       btn.disabled = false;
     }, 900);
   }, 1000);

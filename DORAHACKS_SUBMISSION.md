@@ -210,7 +210,7 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
   - Repays loan with accrued dynamic APR and refunds collateral.
 
 ### 🌐 8.1. Chrome Extension: Virtual Node & Credit Passport
-CredX includes a production Manifest V3 browser extension (`chrome-extension/`) enabling everyday users to participate in the Creditcoin network:
+CredX includes a production Manifest V3 browser extension (`extension/`) enabling everyday users to participate in the Creditcoin network:
 1. **Pulse Virtual Node (DePIN Telemetry)**: Continuously benchmarks local hardware (real CPU cores, device memory, WebGL accelerator, and live millisecond network latency) and shares verified idle bandwidth to earn Creditcoin reputation points.
 2. **Credit Passport Reader + Signing Relay**: Reads the live on-chain credit score from CredXHub and can sign a real proof-anchor transaction (`submitBatchProofs`) through a MetaMask relay — the extension never stores or touches a private key.
 

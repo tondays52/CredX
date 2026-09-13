@@ -1,3 +1,5 @@
+import { secureRandom } from './secureRandom';
+
 /**
  * Lightweight Browser-Native AI Inference & Hardware Benchmark
  * 
@@ -47,8 +49,8 @@ export async function runLightweightAIBenchmark(
   const c = new Float32Array(dim * dim);
 
   for (let i = 0; i < a.length; i++) {
-    a[i] = Math.random(); // NOSONAR
-    b[i] = Math.random(); // NOSONAR
+    a[i] = secureRandom(); // NOSONAR
+    b[i] = secureRandom(); // NOSONAR
   }
 
   // Multiply matrices

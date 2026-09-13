@@ -28,6 +28,7 @@ import {
 } from '../../services/credXService';
 import { CONTRACTS, CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
 import { ethers } from 'ethers';
+import { secureRandom } from '../../utils/secureRandom';
 
 // Seeded demo reference (Amsterdam scientific). The connected demo account owns
 // the seeded station — heartbeats walk a few meters around this origin.
@@ -119,8 +120,8 @@ const GeoOrbitStatePanel: React.FC = () => {
       if (gpsPos) { lat = gpsPos.latE7; lng = gpsPos.lngE7; h = gpsPos.hMeters; }
       else if (station) {
         // PoST walk: drift a few meters inside the speed envelope.
-        lat += Math.round((Math.random() * 800 - 400));
-        lng += Math.round((Math.random() * 800 - 400));
+        lat += Math.round((secureRandom() * 800 - 400));
+        lng += Math.round((secureRandom() * 800 - 400));
       }
       const txHash = await geoOrbitSubmitTelemetry(
         lat, lng, h,

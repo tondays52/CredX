@@ -40,7 +40,7 @@ export function calculateTechnicalSignals(prices: number[]): TechnicalSignals {
     rsi = 100;
   } else {
     const rs = avgGain / avgLoss;
-    rsi = parseFloat((100 - (100 / (1 + rs))).toFixed(1));
+    rsi = Number.parseFloat((100 - (100 / (1 + rs))).toFixed(1));
   }
 
   // 2. Calculate EMA 9 & EMA 21
@@ -57,8 +57,8 @@ export function calculateTechnicalSignals(prices: number[]): TechnicalSignals {
   const emaSlow = calcEMA(prices, Math.min(21, prices.length));
 
   // 3. MACD Approximation
-  const macd = parseFloat((emaFast - emaSlow).toFixed(4));
-  const macdSignal = parseFloat((macd * 0.85).toFixed(4));
+  const macd = Number.parseFloat((emaFast - emaSlow).toFixed(4));
+  const macdSignal = Number.parseFloat((macd * 0.85).toFixed(4));
 
   // 4. Trend & Headline Signal Logic
   let rsiLabel: 'OVERBOUGHT' | 'OVERSOLD' | 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
@@ -92,8 +92,8 @@ export function calculateTechnicalSignals(prices: number[]): TechnicalSignals {
   return {
     rsi,
     rsiLabel,
-    emaFast: parseFloat(emaFast.toFixed(2)),
-    emaSlow: parseFloat(emaSlow.toFixed(2)),
+    emaFast: Number.parseFloat(emaFast.toFixed(2)),
+    emaSlow: Number.parseFloat(emaSlow.toFixed(2)),
     trend,
     macd,
     macdSignal,

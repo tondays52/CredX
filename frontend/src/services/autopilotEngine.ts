@@ -389,7 +389,7 @@ export class AutopilotEngine {
           try {
             // Real quote from the deployed AMM (getAmountOut with the wallet's credit tier).
             const ammContract = new ethers.Contract(CONTRACTS.reputationAMM, AMM_ABI, this.signer);
-            const quotedOut = parseFloat(
+            const quotedOut = Number.parseFloat(
               ethers.formatUnits(
                 await ammContract.getAmountOut(ethers.parseUnits(amountIn.toString(), 18), amm.token1.address, this.signer.address),
                 18
@@ -510,7 +510,7 @@ export class AutopilotEngine {
         const amountIn = Math.min(depinNow * 0.95, maxIn);
         if (amountIn >= 10) {
           const ammContract = new ethers.Contract(CONTRACTS.reputationAMM, AMM_ABI, this.signer);
-          const quotedOut = parseFloat(
+          const quotedOut = Number.parseFloat(
             ethers.formatUnits(
               await ammContract.getAmountOut(ethers.parseUnits(amountIn.toString(), 18), amm.token1.address, this.signer.address),
               18

@@ -228,9 +228,9 @@ export async function fetchLiveNasaFirmsHotspots(): Promise<LiveHazardHotspot[]>
       const parts = lines[i].split(',');
       if (parts.length >= 8) {
         results.push({
-          latitude: parseFloat(parts[1]),
-          longitude: parseFloat(parts[2]),
-          brightness: parseFloat(parts[3]),
+          latitude: Number.parseFloat(parts[1]),
+          longitude: Number.parseFloat(parts[2]),
+          brightness: Number.parseFloat(parts[3]),
           acqDate: parts[6],
           satellite: parts[0],
           confidence: parts[8] || 'nominal'

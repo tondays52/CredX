@@ -296,7 +296,7 @@ const OsmLayer: React.FC<OsmLayerProps> = ({ center, zoom, markers, circles, the
             }}
             className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full cursor-pointer pointer-events-auto"
             style={{ left: p.left, top: p.top, width: isLabel ? 30 : 18, height: isLabel ? 30 : 18 }}
-          >
+           role="button" tabIndex={0}>
             <div
               className="rounded-full border-2 border-white"
               style={{

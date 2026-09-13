@@ -5,6 +5,7 @@ import { useToast } from '../../../context/ToastContext';
 import { useProtocol } from '../../../context/ProtocolContext';
 import { useWeb3 } from '../../../context/Web3Context';
 import { fetchGamingState, openLootbox } from '../../../services/credXService';
+import { secureRandom } from '../../../utils/secureRandom';
 import {
   Sparkles,
   Gift,
@@ -217,7 +218,7 @@ export const GachaLootboxChamber: React.FC = () => {
       let lastEntropy = 0;
 
       for (let i = 0; i < count; i++) {
-        const rand = Math.floor(Math.random() * 100); // NOSONAR
+        const rand = Math.floor(secureRandom() * 100); // NOSONAR
         lastEntropy = rand;
 
         let rarity: 'COMMON' | 'RARE' | 'LEGENDARY' = 'COMMON';
@@ -236,7 +237,7 @@ export const GachaLootboxChamber: React.FC = () => {
               { n: 'Hyperdrive Core Class-S', a: 980, d: 650, y: 28.0, v: 4400, i: '💠' },
               { n: 'Cyber Katana of Aethelgard', a: 940, d: 320, y: 14.5, v: 1850, i: '⚔️' },
               { n: 'Quantum Particle Cannon', a: 1120, d: 290, y: 32.0, v: 5200, i: '🔫' }
-            ][Math.floor(Math.random() * 3)]; // NOSONAR
+            ][Math.floor(secureRandom() * 3)]; // NOSONAR
             name = legGear.n; atk = legGear.a; def = legGear.d; dailyYield = legGear.y; valUSD = legGear.v; icon = legGear.i;
             highestRarity = 'LEGENDARY';
           } else if (rand < 45) {
@@ -245,7 +246,7 @@ export const GachaLootboxChamber: React.FC = () => {
               { n: 'Vanguard Plasma Aegis', a: 410, d: 720, y: 8.5, v: 850, i: '🛡️' },
               { n: 'Aetherion Pulse Rifle', a: 620, d: 240, y: 7.2, v: 720, i: '⚡' },
               { n: 'Graviton Kinetic Boots', a: 290, d: 580, y: 6.8, v: 680, i: '🥾' }
-            ][Math.floor(Math.random() * 3)]; // NOSONAR
+            ][Math.floor(secureRandom() * 3)]; // NOSONAR
             name = rareGear.n; atk = rareGear.a; def = rareGear.d; dailyYield = rareGear.y; valUSD = rareGear.v; icon = rareGear.i;
             if (highestRarity !== 'LEGENDARY') highestRarity = 'RARE';
           }
@@ -284,7 +285,7 @@ export const GachaLootboxChamber: React.FC = () => {
       setRevealedItems(results);
       setMintedItemsHistory(prev => [...results, ...prev]);
       setNonce(n => n + count);
-      setEntropySeed(`0x${Math.random().toString(16).substring(2, 18)}`); // NOSONAR
+      setEntropySeed(`0x${secureRandom().toString(16).substring(2, 18)}`); // NOSONAR
       setLastCalculatedEntropy(lastEntropy);
       setIsOpening(false);
 

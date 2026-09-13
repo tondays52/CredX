@@ -86,6 +86,7 @@ import {
   X
 } from 'lucide-react';
 import SimulationBadge from '../common/SimulationBadge';
+import { secureRandom } from '../../utils/secureRandom';
 import {
   fetchDePINState,
   fetchBorrowerProfile,
@@ -113,6 +114,9 @@ const DePINTab: React.FC = () => {
     pulseRealIP,
     pulseCountryFlag,
     pulseCountryName,
+    pulseDeviceName,
+    pulseConnected,
+    togglePulseNode,
     // CredX Nexus IoT Edge & Fleet State
     nexusActive,
     nexusMode,
@@ -213,7 +217,7 @@ orbitConnected,
         ]);
         if (!cancelled) {
           setWalletBalances({
-            ctc: parseFloat(ethers.formatEther(ctcWei)),
+            ctc: Number.parseFloat(ethers.formatEther(ctcWei)),
             cusd,
             depin: depinState?.depinBalance ?? 0,
           });
@@ -397,14 +401,14 @@ orbitConnected,
         id: device.id,
         name: device.name,
         category: device.category as any,
-        macHash: `0x${Math.random().toString(16).slice(2, 6)}..${Math.random().toString(16).slice(2, 6)}`, // NOSONAR
+        macHash: `0x${secureRandom().toString(16).slice(2, 6)}..${secureRandom().toString(16).slice(2, 6)}`, // NOSONAR
         distanceMeters: Math.max(0.8, +((Math.abs(device.rssi + 50) / 10).toFixed(1))),
         rssi: device.rssi,
-        lat: nexusRealGeo.lat + (Math.random() - 0.5) * 0.006, // NOSONAR
-        lng: nexusRealGeo.lng + (Math.random() - 0.5) * 0.006, // NOSONAR
-        batteryPct: Math.floor(70 + Math.random() * 28), // NOSONAR
+        lat: nexusRealGeo.lat + (secureRandom() - 0.5) * 0.006, // NOSONAR
+        lng: nexusRealGeo.lng + (secureRandom() - 0.5) * 0.006, // NOSONAR
+        batteryPct: Math.floor(70 + secureRandom() * 28), // NOSONAR
         timestamp: Date.now(),
-        merkleLeaf: '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''), // NOSONAR
+        merkleLeaf: '0x' + Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join(''), // NOSONAR
         payloadSize: 32,
         fleetName: 'Physical Discovered IoT'
       };
@@ -468,8 +472,8 @@ orbitConnected,
       addToast('error', 'Connect Wallet', 'Connect your wallet to delegate DEPIN stake.');
       return;
     }
-    const num = parseFloat(stakeAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = Number.parseFloat(stakeAmount);
+    if (Number.isNaN(num) || num <= 0) {
       addToast('error', 'Invalid Stake Amount', `Enter a valid ${depinSymbol} amount.`);
       return;
     }
@@ -506,8 +510,8 @@ orbitConnected,
       addToast('error', 'Connect Wallet', 'Connect your wallet to undelegate DEPIN stake.');
       return;
     }
-    const num = parseFloat(stakeAmount);
-    if (isNaN(num) || num <= 0 || delegationAmount == null || num > delegationAmount) {
+    const num = Number.parseFloat(stakeAmount);
+    if (Number.isNaN(num) || num <= 0 || delegationAmount == null || num > delegationAmount) {
       addToast('error', 'Invalid Undelegate Amount', `Enter a valid amount up to your delegated ${depinSymbol} stake.`);
       return;
     }
@@ -531,8 +535,8 @@ orbitConnected,
       addToast('error', 'Connect Wallet', 'Connect your wallet to request hardware financing.');
       return;
     }
-    const amt = parseFloat(loanInput);
-    if (isNaN(amt) || amt <= 0) {
+    const amt = Number.parseFloat(loanInput);
+    if (Number.isNaN(amt) || amt <= 0) {
       addToast('error', 'Invalid Amount', `Enter a valid ${depinSymbol} loan amount.`);
       return;
     }
@@ -606,7 +610,7 @@ orbitConnected,
 
   return (
     <div className="space-y-6 font-sans">
-      {/* Physical Hardware Telemetry & Network Health Banner (No Unrelated Lending/Money) */}
+      {/* Physical Hardware Telemetry & Network Health Banner */}
       <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/30 via-[#070b14]/80 to-emerald-950/30 border border-cyan-500/20 backdrop-blur-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3.5">
           <div className="w-11 h-11 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.2)]">
@@ -614,24 +618,48 @@ orbitConnected,
           </div>
           <div>
             <div className="text-[10px] uppercase font-mono text-cyan-400 tracking-wider flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" /> Live Machine Telemetry & Edge Station
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>LIVE MACHINE TELEMETRY</span>
+              <span className="text-white/30">•</span>
+              {pulseConnected && pulseDeviceName ? (
+                <span className="text-emerald-400 font-semibold">{pulseDeviceName}</span>
+              ) : (
+                <span className="text-white/35 font-semibold">no device connected</span>
+              )}
             </div>
             <div className="text-sm sm:text-base font-bold font-mono text-white flex flex-wrap items-center gap-2 mt-0.5">
-              <span>{hardware.cpuCores} CPU Cores</span>
-              <span className="text-white/30">•</span>
-              <span>{hardware.deviceMemoryGB || hardware.ramGB || 16} GB RAM</span>
-              <span className="text-white/30">•</span>
-              <span className="text-cyan-300 truncate max-w-[200px]">{hardware.gpuRenderer}</span>
+              {pulseConnected ? (
+                <>
+                  <span>{hardware.cpuCores} CPU Cores</span>
+                  <span className="text-white/30">•</span>
+                  <span>{hardware.deviceMemoryGB || hardware.ramGB || 16} GB RAM</span>
+                  <span className="text-white/30">•</span>
+                  <span className="text-cyan-300 truncate max-w-[240px]" title={hardware.gpuRenderer}>{hardware.gpuRenderer}</span>
+                </>
+              ) : (
+                <span className="text-xs font-normal text-white/40 max-w-md">
+                  Device telemetry stays hidden until you connect this machine — no device name or IP is read while disconnected.
+                </span>
+              )}
             </div>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08] font-mono text-xs flex items-center gap-2">
-            <Globe className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="text-white/80">{pulseCountryFlag} {pulseCountryName}</span>
-            <span className="text-white/40 text-[10px]">({pulseRealIP})</span>
-          </div>
+          {pulseConnected ? (
+            <div
+              className="px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08] font-mono text-xs flex items-center gap-2"
+              title={pulseRealIP ? `Connected device IP: ${pulseRealIP} (${pulseCountryName ?? ''})` : 'Locating connected device...'}
+            >
+              <Globe className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="text-white/90 font-medium">{pulseCountryFlag ?? '🌐'} {pulseCountryName ?? 'Locating…'}</span>
+              <span className="text-cyan-300/80 text-[10px] bg-white/[0.04] px-1.5 py-0.5 rounded border border-white/5 font-bold font-mono">({pulseRealIP ?? '…'})</span>
+            </div>
+          ) : (
+            <span className="px-3 py-1.5 rounded-xl bg-white/[0.03] border border-white/[0.08] font-mono text-xs text-white/40 flex items-center gap-2">
+              <Globe className="w-3.5 h-3.5" /> IP: —
+            </span>
+          )}
 
           <div
             className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 font-bold flex items-center gap-1.5"
@@ -641,14 +669,24 @@ orbitConnected,
             <span>Attestcoin Gateway · 0x0FD2 live on-chain</span>
           </div>
 
-          <button
-            onClick={handlePing}
-            disabled={pinging}
-            className="px-3.5 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer"
-          >
-            <Activity className={`w-3.5 h-3.5 text-cyan-400 ${pinging ? 'animate-pulse' : ''}`} />
-            {pinging ? 'Probing...' : `Probe Ping (${hardware.pingMs}ms)`}
-          </button>
+          {pulseConnected ? (
+            <button
+              onClick={handlePing}
+              disabled={pinging}
+              className="px-3.5 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer"
+            >
+              <Activity className={`w-3.5 h-3.5 text-cyan-400 ${pinging ? 'animate-pulse' : ''}`} />
+              {pinging ? 'Probing...' : `Probe Ping (${hardware.pingMs}ms)`}
+            </button>
+          ) : (
+            <button
+              onClick={togglePulseNode}
+              className="px-3.5 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 hover:bg-emerald-500/20 text-emerald-300 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer font-bold"
+            >
+              <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+              Connect Device
+            </button>
+          )}
         </div>
       </div>
 
@@ -2649,7 +2687,7 @@ orbitConnected,
                           }}
                           className="h-2.5 rounded-full bg-gradient-to-r from-red-500 via-emerald-400 to-blue-500 p-0.5 relative cursor-pointer"
                           title="Click to adjust recency filter"
-                        >
+                         role="button" tabIndex={0}>
                           <div
                             style={{
                               left: nexusRecencyFilter === '15m' ? '12%' : nexusRecencyFilter === '1h' ? '45%' : nexusRecencyFilter === '6h' ? '75%' : '95%'
@@ -2759,7 +2797,7 @@ orbitConnected,
                               key={b.id}
                               onClick={() => setSelectedBeacon(b)}
                               className={`absolute ${pos.className} cursor-pointer group z-20 transition-all duration-300`}
-                            >
+                             role="button" tabIndex={0}>
                               {meta.color === 'red' && (
                                 <div className="w-7 h-7 rounded-full border border-red-500/40 absolute animate-ping -top-1.5 -left-1.5 pointer-events-none" />
                               )}
@@ -3363,8 +3401,8 @@ orbitConnected,
         <div className="space-y-4 font-sans text-xs">
           <div className="space-y-3 font-mono">
             <div>
-              <label className="text-white/60 block mb-1">Radio Transmission Power</label>
-              <select
+              <label htmlFor="ctl-depintab-14" className="text-white/60 block mb-1">Radio Transmission Power</label>
+              <select id="ctl-depintab-14"
                 value={stationConfig.txPower}
                 onChange={(e) => setStationConfig({ ...stationConfig, txPower: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white outline-none"
@@ -3376,8 +3414,8 @@ orbitConnected,
             </div>
 
             <div>
-              <label className="text-white/60 block mb-1">Beacon Scan Frequency</label>
-              <select
+              <label htmlFor="ctl-depintab-15" className="text-white/60 block mb-1">Beacon Scan Frequency</label>
+              <select id="ctl-depintab-15"
                 value={stationConfig.scanInterval}
                 onChange={(e) => setStationConfig({ ...stationConfig, scanInterval: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white outline-none"
@@ -3389,8 +3427,8 @@ orbitConnected,
             </div>
 
             <div>
-              <label className="text-white/60 block mb-1">Merkle Batch Submission Size</label>
-              <select
+              <label htmlFor="ctl-depintab-16" className="text-white/60 block mb-1">Merkle Batch Submission Size</label>
+              <select id="ctl-depintab-16"
                 value={stationConfig.merkleBatchSize}
                 onChange={(e) => setStationConfig({ ...stationConfig, merkleBatchSize: e.target.value })}
                 className="w-full px-3 py-2 rounded-xl bg-black/50 border border-white/10 text-white outline-none"
@@ -3402,8 +3440,8 @@ orbitConnected,
             </div>
 
             <div>
-              <label className="text-white/60 block mb-1">Creditcoin L1 Precompile Address</label>
-              <input
+              <label htmlFor="ctl-depintab-17" className="text-white/60 block mb-1">Creditcoin L1 Precompile Address</label>
+              <input id="ctl-depintab-17"
                 type="text"
                 readOnly
                 value="0x0000000000000000000000000000000000000FD2"

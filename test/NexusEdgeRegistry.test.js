@@ -100,7 +100,7 @@ describe("NexusEdgeRegistry: real on-chain IoT proximity detection ledger", func
 
   it("accrues and claims rewards exactly once", async function () {
     const e0 = await nexus.edges(alice.address);
-    expect(e0.totalRewardUnits - e0.claimedUnits).to.equal(RPD() * 60n);
+    expect(BigInt(e0.totalRewardUnits - e0.claimedUnits)).to.equal(RPD() * 60n);
 
     await expect(nexus.connect(alice).claimRewards())
       .to.emit(nexus, "RewardsClaimed")

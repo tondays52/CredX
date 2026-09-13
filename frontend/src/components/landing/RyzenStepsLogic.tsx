@@ -65,7 +65,7 @@ export const RyzenStepsLogic: React.FC<RyzenStepsLogicProps> = ({ onLaunchApp })
             key={step.num}
             onClick={onLaunchApp}
             className="p-5 rounded-3xl bg-[#090b0e] border border-white/[0.08] hover:border-[#00FF66]/50 transition-all duration-300 space-y-4 hover:shadow-[0_0_20px_rgba(0,255,102,0.1)] group cursor-pointer flex flex-col justify-between"
-          >
+           role="button" tabIndex={0}>
             <div className="space-y-3">
               {/* Circular Number Badge matching Ali Hyder's design */}
               <div className="w-11 h-11 rounded-full bg-[#00FF66]/10 border-2 border-[#00FF66]/40 flex items-center justify-center font-black font-mono text-base text-[#00FF66] group-hover:scale-110 group-hover:bg-[#00FF66] group-hover:text-black transition-all duration-300 shadow-[0_0_15px_rgba(0,255,102,0.2)]">

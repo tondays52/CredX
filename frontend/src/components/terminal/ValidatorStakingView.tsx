@@ -61,14 +61,14 @@ const ValidatorStakingView: React.FC = () => {
   }, [account]);
 
   const busyAny = busy !== null || loanBusy !== null;
-  const amountFor = (op: string) => parseFloat(amounts[op] ?? '0') || 0;
+  const amountFor = (op: string) => Number.parseFloat(amounts[op] ?? '0') || 0;
 
   const registerValidatorSlot = () => register(toGeoOrbitHexId(tagInput), commission);
   const doStake = (op: string) => stake(op, amountFor(op));
   const doUnstake = (op: string) => unstake(op, amountFor(op));
 
   const doRequestLoan = async () => {
-    const amt = parseFloat(loanInput);
+    const amt = Number.parseFloat(loanInput);
     if (!amt || amt <= 0) { setLoanError('Enter a valid amount.'); return; }
     if (depin && amt > depin.maxHardwareLoanAmount) { setLoanError(`Max hardware loan is ${fmt(depin.maxHardwareLoanAmount)} ${depinSymbol}.`); return; }
     if (depin && depin.loanAmount > 0) { setLoanError('Repay the existing loan first.'); return; }

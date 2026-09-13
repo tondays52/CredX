@@ -35,7 +35,7 @@ const ROOT_WALLET = DEMO_WALLET_VAULT.find((w) => w.id === 'credx-root');
 const DEMO_ACCOUNT = ROOT_WALLET?.address ?? '';
 
 const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
-  v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
+  v == null || !Number.isFinite(Number(v)) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
 
 const fmtAddr = (a: string): string => (a ? `${a.slice(0, 8)}…${a.slice(-6)}` : '—');
 
@@ -76,7 +76,7 @@ export const FlashLoanView: React.FC = () => {
   const [showSpecs, setShowSpecs] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const numAmount = parseFloat(amount) || 0;
+  const numAmount = Number.parseFloat(amount) || 0;
   const capacity = state?.capacity ?? 50000;
   const amountTooBig = numAmount > capacity && capacity > 0;
   const refreshRef = useRef<() => void>(() => {});
@@ -416,7 +416,7 @@ export const FlashLoanView: React.FC = () => {
                   onClick={() => { setAmount(amt); }}
                   className="px-2 py-0.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 transition cursor-pointer"
                 >
-                  {parseInt(amt, 10).toLocaleString()}
+                  {Number.parseInt(amt, 10).toLocaleString()}
                 </button>
               ))}
             </div>

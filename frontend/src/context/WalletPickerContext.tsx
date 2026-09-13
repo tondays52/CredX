@@ -86,7 +86,7 @@ export const WalletPickerProvider: React.FC<{ children: React.ReactNode }> = ({ 
         if (!w.address) return;
         try {
           const bal = await provider.getBalance(w.address);
-          next[w.id] = parseFloat(parseFloat(ethers.formatEther(bal)).toFixed(4));
+          next[w.id] = Number.parseFloat(Number.parseFloat(ethers.formatEther(bal)).toFixed(4));
         } catch {
           next[w.id] = 0;
         }

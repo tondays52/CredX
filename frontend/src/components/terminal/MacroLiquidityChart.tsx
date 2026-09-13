@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationBadge } from '../common/SimulationBadge';
 import { RAPIDAPI_BINANCE_KEY } from '../../config/contracts';
+import { secureRandom } from '../../utils/secureRandom';
 import {
   TrendingUp,
   Activity,
@@ -89,7 +90,7 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
         const assetCycle = Math.sin(progress * Math.PI * 5.5 - 1.4) * 14.5 + Math.sin(progress * Math.PI * 11) * 4.0 + 2.5;
         const assetYoY = assetCycle + (Math.sin(i * 1.9) * 1.4);
 
-        const volume = (Math.abs(liqYoY) + 50) * (price * 0.08) * (1 + Math.random() * 0.5); // NOSONAR
+        const volume = (Math.abs(liqYoY) + 50) * (price * 0.08) * (1 + secureRandom() * 0.5); // NOSONAR
 
         data.push({
           date: year,
@@ -127,7 +128,7 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
 
         const liqYoY = 45 + Math.sin(p * Math.PI * 4) * 35 + Math.sin(i * 0.7) * 12;
         const assetYoY = 1.2 + Math.cos(p * Math.PI * 3.5) * 2.8 + Math.sin(i * 0.9) * 0.4;
-        const volume = (Math.abs(price - curr) + basePrice * 0.002) * 1200 * (1 + Math.random() * 0.8); // NOSONAR
+        const volume = (Math.abs(price - curr) + basePrice * 0.002) * 1200 * (1 + secureRandom() * 0.8); // NOSONAR
 
         data.push({
           date: `T-${count - i}`,
@@ -155,8 +156,8 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
             const raw = await res.json();
             if (Array.isArray(raw) && raw.length > 0 && !isCancelled) {
               const liveParsed = raw.map((k: any, idx: number) => {
-                const cPrice = parseFloat(k[4]);
-                const cVol = parseFloat(k[5]);
+                const cPrice = Number.parseFloat(k[4]);
+                const cVol = Number.parseFloat(k[5]);
                 return {
                   date: new Date(k[0]).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                   price: symbol === 'CTC' ? (cPrice / 78900) * 2.00 : cPrice,
@@ -199,7 +200,7 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
         try {
           const d = JSON.parse(event.data);
           if (d && d.p) {
-            const currentP = parseFloat(d.p);
+            const currentP = Number.parseFloat(d.p);
             const displayP = symbol === 'CTC' ? 2.00 + (Math.sin(Date.now() / 1500) * 0.02) : currentP;
             setLivePrice(displayP);
 
@@ -222,7 +223,7 @@ export const MacroLiquidityChart: React.FC<MacroLiquidityChartProps> = ({ initia
     const autoTickTimer = setInterval(() => {
       if (historicalData.current.length > 0) {
         const last = historicalData.current[historicalData.current.length - 1];
-        const drift = (Math.random() - 0.49) * (last.price * 0.0004); // NOSONAR
+        const drift = (secureRandom() - 0.49) * (last.price * 0.0004); // NOSONAR
         const newPrice = Math.max(0.01, last.price + drift);
         last.price = newPrice;
         last.liqYoY = 87.28 + Math.sin(Date.now() / 2800) * 4.2;

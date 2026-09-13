@@ -26,6 +26,7 @@ import {
 import SBTModal from '../modals/SBTModal';
 import SimulationBadge from '../common/SimulationBadge';
 import { fetchSBTAttestation } from '../../services/credXService';
+import { secureRandom } from '../../utils/secureRandom';
 
 const SBTPassportTab: React.FC = () => {
   const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
@@ -95,7 +96,7 @@ const SBTPassportTab: React.FC = () => {
     const count = 36;
     for (let i = 0; i < count; i++) {
       const theta = (i / count) * Math.PI * 2;
-      const phi = Math.acos((Math.random() * 2) - 1); // NOSONAR
+      const phi = Math.acos((secureRandom() * 2) - 1); // NOSONAR
       const r = 65;
       nodes.push({
         x: r * Math.sin(phi) * Math.cos(theta),
@@ -256,7 +257,7 @@ const SBTPassportTab: React.FC = () => {
             style={{ perspective: '1200px' }}
             className="w-full max-w-md cursor-pointer select-none"
             onClick={() => setIsFlipped((prev) => !prev)}
-          >
+           role="button" tabIndex={0}>
             <div
               ref={cardRef}
               onMouseMove={handleMouseMove}

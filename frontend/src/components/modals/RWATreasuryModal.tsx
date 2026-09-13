@@ -43,11 +43,11 @@ const RWATreasuryModal: React.FC<RWATreasuryModalProps> = ({
   const isKycVerified = userScore >= minScoreRequired;
   const isSuperPrime = userScore >= 750;
 
-  const parsedAmount = parseFloat(amount) || 0;
+  const parsedAmount = Number.parseFloat(amount) || 0;
   const estimatedShares = parsedAmount > 0 ? parsedAmount / navPrice : 0;
 
   // Withdrawal calculations
-  const parsedWithdrawShares = parseFloat(amount) || 0;
+  const parsedWithdrawShares = Number.parseFloat(amount) || 0;
   const baseWithdrawUSD = parsedWithdrawShares * navPrice;
   const superPrimeBonusUSD = isSuperPrime ? (baseWithdrawUSD * 0.02) : 0;
   const totalWithdrawReturn = baseWithdrawUSD + superPrimeBonusUSD;
@@ -199,13 +199,13 @@ const RWATreasuryModal: React.FC<RWATreasuryModalProps> = ({
         {tab === 'deposit' ? (
           <div>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-[11px] font-medium text-white/70">USDC Deposit Amount</label>
+              <label htmlFor="ctl-rwatreasurymodal-12" className="text-[11px] font-medium text-white/70">USDC Deposit Amount</label>
               <span className="text-[10px] text-white/40 font-mono">
                 Avail: ${walletUSDC.toLocaleString()} USDC
               </span>
             </div>
             <div className="relative">
-              <input
+              <input id="ctl-rwatreasurymodal-12"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -244,13 +244,13 @@ const RWATreasuryModal: React.FC<RWATreasuryModalProps> = ({
         ) : (
           <div>
             <div className="flex justify-between items-center mb-1.5">
-              <label className="text-[11px] font-medium text-white/70">Shares to Redeem (tbUSD)</label>
+              <label htmlFor="ctl-rwatreasurymodal-13" className="text-[11px] font-medium text-white/70">Shares to Redeem (tbUSD)</label>
               <span className="text-[10px] text-white/40 font-mono">
                 Holdings: {userPosition.shares.toFixed(2)} tbUSD
               </span>
             </div>
             <div className="relative">
-              <input
+              <input id="ctl-rwatreasurymodal-13"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}

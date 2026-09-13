@@ -275,8 +275,8 @@ const RWATab: React.FC = () => {
   // Tokenize New Invoice (tokenized for yourself as the business)
   const handleTokenizeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const faceVal = parseFloat(tokenAmount);
-    const durationBlocks = parseInt(tokenTerm);
+    const faceVal = Number.parseFloat(tokenAmount);
+    const durationBlocks = Number.parseInt(tokenTerm);
 
     if (!isConnected || !address) {
       addToast('error', 'Connect Wallet', 'Connect your wallet to tokenize an invoice.');
@@ -961,11 +961,11 @@ const RWATab: React.FC = () => {
               <form onSubmit={handleTokenizeSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="text-[11px] font-medium text-white/70 block mb-1">
+                    <label htmlFor="ctl-rwatab-19" className="text-[11px] font-medium text-white/70 block mb-1">
                       Invoice Face Value (USD)
                     </label>
                     <div className="relative">
-                      <input
+                      <input id="ctl-rwatab-19"
                         type="number"
                         value={tokenAmount}
                         onChange={(e) => setTokenAmount(e.target.value)}
@@ -978,10 +978,10 @@ const RWATab: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="text-[11px] font-medium text-white/70 block mb-1">
+                    <label htmlFor="ctl-rwatab-20" className="text-[11px] font-medium text-white/70 block mb-1">
                       Payment Tenor (Blocks)
                     </label>
-                    <select
+                    <select id="ctl-rwatab-20"
                       value={tokenTerm}
                       onChange={(e) => setTokenTerm(e.target.value)}
                       className="w-full bg-slate-900 border border-white/[0.08] focus:border-cyan-500/60 rounded-xl px-3.5 py-2.5 text-white font-mono text-xs outline-none transition"
@@ -999,7 +999,7 @@ const RWATab: React.FC = () => {
                   <div>
                     <span className="text-[10px] uppercase text-white/40 block font-mono">Est. Advance to You</span>
                     <span className="text-base font-bold font-mono text-cyan-300 mt-0.5 block">
-                      ${((parseFloat(tokenAmount || '0') * calculatedAdvanceRate) / 100).toLocaleString()} USD
+                      ${((Number.parseFloat(tokenAmount || '0') * calculatedAdvanceRate) / 100).toLocaleString()} USD
                     </span>
                     <span className="text-[10px] text-white/50 font-mono">est. {calculatedAdvanceRate}% — contract computes exact</span>
                   </div>
@@ -1007,7 +1007,7 @@ const RWATab: React.FC = () => {
                   <div>
                     <span className="text-[10px] uppercase text-white/40 block font-mono">Repay at Maturity</span>
                     <span className="text-base font-bold font-mono text-emerald-400 mt-0.5 block">
-                      ${parseFloat(tokenAmount || '0').toLocaleString()} USD
+                      ${Number.parseFloat(tokenAmount || '0').toLocaleString()} USD
                     </span>
                     <span className="text-[10px] text-white/50 font-mono">Full face value due</span>
                   </div>

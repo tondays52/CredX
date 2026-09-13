@@ -6,6 +6,7 @@
  */
 
 import { ethers, BrowserProvider, JsonRpcProvider } from 'ethers';
+import { secureRandom } from './secureRandom';
 
 export const AI_HUB_ADDRESS = '0xEc1445818cF57507Ff46B8a72daa9F7A66B60a5D';
 export const CUSD_ADDRESS   = '0xdec5170C46DC63D812c699E9dFE6561FFd1BF298';
@@ -162,13 +163,13 @@ export async function fetchAIHubActivity(windowBlocks = 10_000): Promise<AIHubLi
     if (kind === 'agent') {
       summary = `agent ${shortAddr(log.topics[1])} registered`;
     } else if (kind === 'loan' || kind === 'repay') {
-      const amt = words[0] ? parseFloat(ethers.formatUnits(words[0], 18)) : 0;
+      const amt = words[0] ? Number.parseFloat(ethers.formatUnits(words[0], 18)) : 0;
       summary = `${kind === 'loan' ? 'dispatched' : 'repaid'} ${amt.toFixed(2)} cUSD — agent ${shortAddr(log.topics[1])}`;
     } else if (kind === 'escrow') {
-      const amt = words[0] ? parseFloat(ethers.formatUnits(words[0], 18)) : 0;
+      const amt = words[0] ? Number.parseFloat(ethers.formatUnits(words[0], 18)) : 0;
       summary = `escrowed ${amt.toFixed(2)} cUSD — task ${shortAddr(log.topics[1])} · provider ${shortAddr(log.topics[3])}`;
     } else if (kind === 'risk') {
-      const chain = parseInt(log.topics[1], 16);
+      const chain = Number.parseInt(log.topics[1], 16);
       const vol = words[0] ? Number(words[0]) / 100 : 0;
       const def = words[1] ? Number(words[1]) / 100 : 0;
       const apr = words[2] ? Number(words[2]) / 100 : 0;
@@ -186,8 +187,8 @@ export async function fetchAgentProfile(address: string): Promise<AIAgentProfile
   return {
     reputationScore:      Number(result.reputationScore),
     totalVerifiedProfitUSD: Number(ethers.formatUnits(result.totalVerifiedProfitUSD, 6)), // treat as USD cents
-    activeLoanAmount:     parseFloat(ethers.formatUnits(result.activeLoanAmount, 18)),
-    totalLoansRepaid:     parseFloat(ethers.formatUnits(result.totalLoansRepaid, 18)),
+    activeLoanAmount:     Number.parseFloat(ethers.formatUnits(result.activeLoanAmount, 18)),
+    totalLoansRepaid:     Number.parseFloat(ethers.formatUnits(result.totalLoansRepaid, 18)),
     isRegistered:         result.isRegistered,
   };
 }
@@ -196,7 +197,7 @@ export async function fetchCUSDBalance(address: string): Promise<number> {
   try {
     const contract = getCUSDReadContract();
     const bal = await contract.balanceOf(address);
-    return parseFloat(ethers.formatUnits(bal, 18));
+    return Number.parseFloat(ethers.formatUnits(bal, 18));
   } catch {
     return 0;
   }
@@ -280,7 +281,7 @@ export async function submitCrossChainRiskSignal(
   const contract = new ethers.Contract(AI_HUB_ADDRESS, AI_HUB_ABI, signer);
 
   // Construct a deterministic unique 32-byte event proof
-  const uniqueNonce = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const uniqueNonce = `${Date.now()}-${secureRandom().toString(36).slice(2, 10)}`;
   const mockTxHash = ethers.id(`RISK_SIGNAL_TX_${uniqueNonce}`);
   const mockBlockHash = ethers.id(`RISK_SIGNAL_BLOCK_${uniqueNonce}`);
   const rlpReceipt = ethers.hexlify(ethers.toUtf8Bytes(`USC_RISK_TELEMETRY_${sourceChainId}_${uniqueNonce}`));
@@ -289,7 +290,7 @@ export async function submitCrossChainRiskSignal(
   const proof = {
     sourceChainId: BigInt(sourceChainId),
     blockHash: mockBlockHash,
-    blockNumber: BigInt(18950000 + Math.floor(Math.random() * 100000)),
+    blockNumber: BigInt(18950000 + Math.floor(secureRandom() * 100000)),
     txHash: mockTxHash,
     txIndex: BigInt(2),
     rlpEncodedReceipt: rlpReceipt,
@@ -324,5 +325,5 @@ export function scoreToTier(score: number): { label: string; color: string; emoj
 
 /** Generate a deterministic task ID string for display/submission */
 export function generateTaskId(): string {
-  return `TASK-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`; // NOSONAR
+  return `TASK-${Date.now().toString(36).toUpperCase()}-${secureRandom().toString(36).slice(2, 7).toUpperCase()}`; // NOSONAR
 }

@@ -53,7 +53,7 @@ export const Navbar: React.FC<NavbarProps> = ({ currentRoute, onNavigate }) => {
         <div
           className="flex items-center space-x-3 cursor-pointer group shrink-0"
           onClick={handleHomeClick}
-        >
+         role="button" tabIndex={0}>
           <div className="w-11 h-11 rounded-xl bg-black border border-[#00FF66]/30 flex items-center justify-center shadow-[0_0_15px_rgba(0,255,102,0.25)] group-hover:scale-105 group-hover:border-[#00FF66] group-hover:shadow-[0_0_20px_rgba(0,255,102,0.45)] transition-all duration-300 relative overflow-hidden">
             <img
               src="/images/credx-butterfly-logo.png"

@@ -620,7 +620,7 @@ export const CredXGeoOrbitView: React.FC = () => {
                       ? 'bg-amber-500/10 border-amber-500/40 shadow-lg shadow-amber-500/10'
                       : 'bg-black/40 border-white/[0.06] hover:border-white/20 hover:bg-white/[0.02]'
                   }`}
-                >
+                 role="button" tabIndex={0}>
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
                       <span className="text-base">{hex.countryFlag}</span>

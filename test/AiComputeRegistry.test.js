@@ -100,7 +100,7 @@ describe("AiComputeRegistry: real on-chain AI compute Data-DAO ledger", function
 
   it("accrues and claims rewards exactly once", async function () {
     const p0 = await registry.providers(alice.address);
-    expect(p0.totalRewardUnits - p0.claimedUnits).to.equal(RPM() * 23n);
+    expect(BigInt(p0.totalRewardUnits - p0.claimedUnits)).to.equal(RPM() * 23n);
 
     await expect(registry.connect(alice).claimRewards())
       .to.emit(registry, "RewardsClaimed")

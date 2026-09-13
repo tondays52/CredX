@@ -56,8 +56,8 @@ export const GPULeaseModal: React.FC<GPULeaseModalProps> = ({ isOpen, onClose, c
 
         {/* Cluster Selection */}
         <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-300">Select Compute Cluster:</label>
-          <div className="grid grid-cols-3 gap-2">
+          <label id="ctl-gpuleasemodal-cluster" className="text-xs font-bold text-slate-300">Select Compute Cluster:</label>
+          <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="ctl-gpuleasemodal-cluster">
             {[
               { name: '4x NVIDIA A100 (80GB)', cost: 25000, benchmark: '16 PFLOPS FP16', label: '4x A100' },
               { name: '8x NVIDIA H100 (80GB)', cost: 50000, benchmark: '32 PFLOPS FP8', label: '8x H100 🔥' },

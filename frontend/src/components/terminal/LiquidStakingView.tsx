@@ -45,7 +45,7 @@ import {
 const ROOT_WALLET = DEMO_WALLET_VAULT.find((w) => w.id === 'credx-root');
 
 const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
-  v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
+  v == null || !Number.isFinite(Number(v)) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
 
 const fmtAddr = (a: string): string => (a ? `${a.slice(0, 8)}…${a.slice(-6)}` : '—');
 
@@ -436,7 +436,7 @@ export const LiquidStakingView: React.FC = () => {
   };
 
   const runStake = async () => {
-    const amt = parseFloat(vAmount);
+    const amt = Number.parseFloat(vAmount);
     if (!amt || amt <= 0) {
       showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
       return;
@@ -470,7 +470,7 @@ export const LiquidStakingView: React.FC = () => {
   };
 
   const runUnstake = async () => {
-    const amt = parseFloat(vAmount);
+    const amt = Number.parseFloat(vAmount);
     if (!amt || amt <= 0) {
       showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
       return;
@@ -596,7 +596,7 @@ export const LiquidStakingView: React.FC = () => {
 
   const runVStake = async () => {
     if (!modal || modal.kind !== 'vstake') return;
-    const amt = parseFloat(vAmount);
+    const amt = Number.parseFloat(vAmount);
     if (!amt || amt <= 0) {
       showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
       return;
@@ -632,7 +632,7 @@ export const LiquidStakingView: React.FC = () => {
 
   const runVUnstake = async () => {
     if (!modal || modal.kind !== 'vunstake') return;
-    const amt = parseFloat(vAmount);
+    const amt = Number.parseFloat(vAmount);
     if (!amt || amt <= 0) {
       showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
       return;
@@ -1408,11 +1408,11 @@ export const LiquidStakingView: React.FC = () => {
             setModal(null);
             playSound('click');
           }}
-        >
+         role="button" tabIndex={0}>
           <div
             className="w-full max-w-md rounded-3xl p-6 bg-[#03131c] border border-cyan-500/30 shadow-2xl space-y-4"
-            onClick={(e) => e.stopPropagation()}
-          >
+onClick={(e) => e.stopPropagation()}
+          role="dialog" tabIndex={-1}>
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
                 {modal.kind === 'stake' && <Lock className="w-4 h-4 text-cyan-400" />}
@@ -1453,9 +1453,9 @@ export const LiquidStakingView: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Amount</label>
+              <label htmlFor="ctl-liquidstakingview-9" className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Amount</label>
               <div className="flex items-center gap-2">
-                <input
+                <input id="ctl-liquidstakingview-9"
                   type="number"
                   min="0"
                   value={vAmount}

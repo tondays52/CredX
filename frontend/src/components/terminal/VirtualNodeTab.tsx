@@ -405,8 +405,8 @@ export const VirtualNodeTab: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Session Duration (Minutes)</label>
-                  <input
+                  <label htmlFor="ctl-virtualnodetab-3" className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Session Duration (Minutes)</label>
+                  <input id="ctl-virtualnodetab-3"
                     type="number"
                     min="1"
                     max="1440"
@@ -416,8 +416,8 @@ export const VirtualNodeTab: React.FC = () => {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Quality Tier (1-4)</label>
-                  <select
+                  <label htmlFor="ctl-virtualnodetab-4" className="text-[10px] text-slate-400 uppercase font-mono block mb-1">Quality Tier (1-4)</label>
+                  <select id="ctl-virtualnodetab-4"
                     value={qualityGrade}
                     onChange={(e) => setQualityGrade(Number(e.target.value))}
                     className="w-full px-3 py-1.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-cyan-500"

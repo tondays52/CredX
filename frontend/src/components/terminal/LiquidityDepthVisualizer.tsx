@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationBadge } from '../common/SimulationBadge';
+import { secureRandom } from '../../utils/secureRandom';
 import {
   Activity,
   Layers,
@@ -74,7 +75,7 @@ export const LiquidityDepthVisualizer: React.FC<LiquidityDepthVisualizerProps> =
       const p = basePrice * (1 - (i / count) * spreadPct);
       // Concentrated liquidity density profile with Gaussian peak around mid-market
       const normDist = (count - i) / (count * 0.4);
-      const density = Math.exp(-Math.pow(normDist, 1.8)) * 480000 + Math.random() * 45000; // NOSONAR
+      const density = Math.exp(-Math.pow(normDist, 1.8)) * 480000 + secureRandom() * 45000; // NOSONAR
       runningBid += density;
       bins.push({
         price: p,
@@ -98,7 +99,7 @@ export const LiquidityDepthVisualizer: React.FC<LiquidityDepthVisualizerProps> =
     for (let i = 1; i <= count; i++) {
       const p = basePrice * (1 + (i / count) * spreadPct);
       const normDist = i / (count * 0.4);
-      const density = Math.exp(-Math.pow(normDist, 1.8)) * 450000 + Math.random() * 42000; // NOSONAR
+      const density = Math.exp(-Math.pow(normDist, 1.8)) * 450000 + secureRandom() * 42000; // NOSONAR
       runningAsk += density;
       bins.push({
         price: p,

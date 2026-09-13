@@ -148,13 +148,13 @@ const AITab: React.FC = () => {
       addToast('error', 'Connect Wallet', 'Connect your wallet to broadcast real-time on-chain risk telemetry.');
       return;
     }
-    const volDelta = parseInt(signalVolDelta, 10);
-    const defDelta = parseInt(signalDefDelta, 10);
-    if (isNaN(volDelta) || volDelta < 0 || volDelta > 5000) {
+    const volDelta = Number.parseInt(signalVolDelta, 10);
+    const defDelta = Number.parseInt(signalDefDelta, 10);
+    if (Number.isNaN(volDelta) || volDelta < 0 || volDelta > 5000) {
       addToast('error', 'Invalid Volatility Delta', 'Volatility delta must be between 0 and 5000 bps (50%).');
       return;
     }
-    if (isNaN(defDelta) || defDelta < 0 || defDelta > 5000) {
+    if (Number.isNaN(defDelta) || defDelta < 0 || defDelta > 5000) {
       addToast('error', 'Invalid Default Delta', 'Default rate delta must be between 0 and 5000 bps (50%).');
       return;
     }
@@ -281,8 +281,8 @@ const AITab: React.FC = () => {
 
   const handleBorrow = async () => {
     if (!isConnected) { addToast('error', 'Connect Wallet', 'Connect your wallet first.'); return; }
-    const amt = parseFloat(loanAmount);
-    if (isNaN(amt) || amt <= 0) { addToast('error', 'Invalid Amount', 'Enter a valid cUSD amount.'); return; }
+    const amt = Number.parseFloat(loanAmount);
+    if (Number.isNaN(amt) || amt <= 0) { addToast('error', 'Invalid Amount', 'Enter a valid cUSD amount.'); return; }
     setBorrowing(true);
     appendLog(`[TX] triggerAutonomousAgentLoan(${amt} cUSD) — signing…`);
     try {
@@ -326,8 +326,8 @@ const AITab: React.FC = () => {
   const handleDepositEscrow = async () => {
     if (!isConnected) { addToast('error', 'Connect Wallet', 'Connect your wallet first.'); return; }
     if (!gpuProvider || !/^0x[0-9a-fA-F]{40}$/.test(gpuProvider)) { addToast('error', 'Invalid Address', 'Enter a valid 0x GPU provider address.'); return; }
-    const amt = parseFloat(escrowAmount);
-    if (isNaN(amt) || amt <= 0) { addToast('error', 'Invalid Amount', 'Enter a valid cUSD amount.'); return; }
+    const amt = Number.parseFloat(escrowAmount);
+    if (Number.isNaN(amt) || amt <= 0) { addToast('error', 'Invalid Amount', 'Enter a valid cUSD amount.'); return; }
     setDepositing(true);
     appendLog(`[TX] depositComputeEscrow(${taskId}, ${gpuProvider.slice(0, 8)}…, ${amt} cUSD) — approving + signing…`);
     try {
@@ -597,11 +597,11 @@ const AITab: React.FC = () => {
               <div className="lg:col-span-7 space-y-4">
                 {/* Source Chain */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-mono text-gray-500 uppercase flex items-center justify-between">
+                  <label id="ctl-aittab-sourcechain" className="text-[10px] font-mono text-gray-500 uppercase flex items-center justify-between">
                     <span>Source Network (Attestation Origin)</span>
                     <span className="text-cyan-400">Chain ID: {signalChainId}</span>
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-labelledby="ctl-aittab-sourcechain">
                     {[
                       { name: 'Sepolia', id: 11155111 },
                       { name: 'Ethereum', id: 1 },
@@ -627,7 +627,7 @@ const AITab: React.FC = () => {
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[10px] font-mono">
                     <span className="text-gray-400 uppercase">Volatility Index Delta (+bps)</span>
-                    <span className="text-red-400 font-bold">+{signalVolDelta} bps (+{(parseInt(signalVolDelta || '0', 10) / 100).toFixed(2)}%)</span>
+                    <span className="text-red-400 font-bold">+{signalVolDelta} bps (+{(Number.parseInt(signalVolDelta || '0', 10) / 100).toFixed(2)}%)</span>
                   </div>
                   <input
                     type="range"
@@ -644,7 +644,7 @@ const AITab: React.FC = () => {
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[10px] font-mono">
                     <span className="text-gray-400 uppercase">Default Rate Delta (+bps)</span>
-                    <span className="text-amber-400 font-bold">+{signalDefDelta} bps (+{(parseInt(signalDefDelta || '0', 10) / 100).toFixed(2)}%)</span>
+                    <span className="text-amber-400 font-bold">+{signalDefDelta} bps (+{(Number.parseInt(signalDefDelta || '0', 10) / 100).toFixed(2)}%)</span>
                   </div>
                   <input
                     type="range"
@@ -703,20 +703,20 @@ const AITab: React.FC = () => {
                   <div className="flex justify-between py-1 border-b border-white/[0.04]">
                     <span className="text-gray-500">Projected Volatility</span>
                     <span className="font-bold text-red-400">
-                      {riskMetrics ? ((riskMetrics.volatilityIndex + parseInt(signalVolDelta || '0', 10)) / 100).toFixed(2) : '—'}%
+                      {riskMetrics ? ((riskMetrics.volatilityIndex + Number.parseInt(signalVolDelta || '0', 10)) / 100).toFixed(2) : '—'}%
                     </span>
                   </div>
                   <div className="flex justify-between py-1 border-b border-white/[0.04]">
                     <span className="text-gray-500">Projected Default Rate</span>
                     <span className="font-bold text-amber-400">
-                      {riskMetrics ? ((riskMetrics.defaultRateBps + parseInt(signalDefDelta || '0', 10)) / 100).toFixed(2) : '—'}%
+                      {riskMetrics ? ((riskMetrics.defaultRateBps + Number.parseInt(signalDefDelta || '0', 10)) / 100).toFixed(2) : '—'}%
                     </span>
                   </div>
                   <div className="flex justify-between py-1.5 bg-cyan-500/10 px-2 rounded-lg">
                     <span className="text-cyan-300 font-bold">Projected New APR</span>
                     <span className="font-bold text-cyan-400 text-sm">
                       {riskMetrics
-                        ? (Math.min(3000, 500 + Math.floor((riskMetrics.volatilityIndex + parseInt(signalVolDelta || '0', 10)) / 10) + (riskMetrics.defaultRateBps + parseInt(signalDefDelta || '0', 10))) / 100).toFixed(2)
+                        ? (Math.min(3000, 500 + Math.floor((riskMetrics.volatilityIndex + Number.parseInt(signalVolDelta || '0', 10)) / 10) + (riskMetrics.defaultRateBps + Number.parseInt(signalDefDelta || '0', 10))) / 100).toFixed(2)
                         : '—'}%
                     </span>
                   </div>
@@ -971,9 +971,9 @@ const AITab: React.FC = () => {
 
               {/* Task ID */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-gray-500 uppercase">Task ID</label>
+                <label htmlFor="ctl-aitab-5" className="text-[10px] font-mono text-gray-500 uppercase">Task ID</label>
                 <div className="flex gap-2">
-                  <input
+                  <input id="ctl-aitab-5"
                     value={taskId}
                     readOnly
                     className="flex-1 bg-black/40 border border-white/[0.06] rounded-xl px-4 py-2.5 text-white/70 font-mono text-xs outline-none"
@@ -989,8 +989,8 @@ const AITab: React.FC = () => {
 
               {/* GPU Provider */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-gray-500 uppercase">GPU Provider Address (0x…)</label>
-                <input
+                <label htmlFor="ctl-aitab-6" className="text-[10px] font-mono text-gray-500 uppercase">GPU Provider Address (0x…)</label>
+                <input id="ctl-aitab-6"
                   type="text"
                   value={gpuProvider}
                   onChange={e => setGpuProvider(e.target.value)}
@@ -1001,9 +1001,9 @@ const AITab: React.FC = () => {
 
               {/* Amount */}
               <div className="space-y-1.5">
-                <label className="text-[10px] font-mono text-gray-500 uppercase">Escrow Amount (cUSD)</label>
+                <label htmlFor="ctl-aitab-7" className="text-[10px] font-mono text-gray-500 uppercase">Escrow Amount (cUSD)</label>
                 <div className="relative">
-                  <input
+                  <input id="ctl-aitab-7"
                     type="number"
                     value={escrowAmount}
                     onChange={e => setEscrowAmount(e.target.value)}

@@ -32,7 +32,7 @@ async function readSymbol(provider, addr) {
   try {
     const raw = await provider.call({ to: addr, data: "0x95d89b41" });
     if (!raw || raw === "0x" || raw.length < 66) return null;
-    const len = parseInt(raw.slice(2 + 64, 2 + 128), 16);
+    const len = Number.parseInt(raw.slice(2 + 64, 2 + 128), 16);
     const hasOffset = raw.slice(2, 2 + 64) === "0".repeat(63) + "20";
     let body = raw.slice(2 + 128);
     if (hasOffset && body.length >= len * 2) body = body.slice(0, len * 2);
@@ -178,7 +178,7 @@ async function main() {
   const q2 = await amm.getAmountOut(ethers.parseEther("1"), token1Addr, deployerAddr);
   console.log("--- final state (block", blockNow + ") ---");
   console.log("reserves:", ethers.formatEther(fr0), "cUSD /", ethers.formatEther(fr1), "DEPIN");
-  console.log("DEPIN price (cUSD/DEPIN):", parseFloat((Number(fr0) / Number(fr1)).toFixed(6)));
+  console.log("DEPIN price (cUSD/DEPIN):", Number.parseFloat((Number(fr0) / Number(fr1)).toFixed(6)));
   console.log("LP held (deployer):", ethers.formatEther(await amm.balanceOf(deployerAddr)));
   console.log("getAmountOut(1 cUSD) =", ethers.formatEther(q1), "DEPIN");
   console.log("getAmountOut(1 DEPIN) =", ethers.formatEther(q2), "cUSD");

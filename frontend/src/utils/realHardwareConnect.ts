@@ -1,3 +1,5 @@
+import { secureRandom } from './secureRandom';
+
 /**
  * Real Hardware & IoT Device Connectors for CredX DePIN
  * 
@@ -215,7 +217,7 @@ export async function scanRealBluetoothDevice(): Promise<{
     optionalServices: ['battery_service', 'device_information']
   });
 
-  const rawRssi = -55 - Math.floor(Math.random() * 25); // NOSONAR
+  const rawRssi = -55 - Math.floor(secureRandom() * 25); // NOSONAR
   const name = device.name || 'BLE Physical Beacon';
 
   let category = 'Asset Tag';

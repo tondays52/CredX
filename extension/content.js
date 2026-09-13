@@ -4,16 +4,19 @@
  */
 
 // 1. Direct window message listener (runs in content script world)
+// Only respond to messages from the app page we are injected into (same-origin) (SonarCloud S2819).
 window.addEventListener('message', (event) => {
+  if (event.origin !== window.location.origin) return;
   if (event.data && event.data.type === 'CREDX_PING_EXTENSION') {
-    window.postMessage({
+    // Deliver the pong back to the exact sender frame.
+    (event.source || window).postMessage({
       type: 'CREDX_PONG_EXTENSION',
       version: '2.0.0',
       active: true,
       chain: 'Creditcoin Testnet (102031)',
       precompile: '0x0FD2',
       timestamp: Date.now()
-    }, '*');
+    }, window.location.origin);
   }
 });
 

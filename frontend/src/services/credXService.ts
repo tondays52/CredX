@@ -13,6 +13,7 @@
 import { ethers, BrowserProvider, JsonRpcProvider } from 'ethers';
 import { CONTRACTS, CUSD_DECIMALS, CREDITCOIN_RPC, CREDITCOIN_CHAIN_ID } from '../config/contracts';
 import { DEMO_WALLET_VAULT } from '../config/demoWallets';
+import { secureRandom } from '../utils/secureRandom';
 
 export type CardTier = 'SUBPRIME' | 'NEAR_PRIME' | 'PRIME' | 'SUPER_PRIME';
 
@@ -256,7 +257,7 @@ function hexBytesToUtf8(hexStr: string): string {
     if (hex.length % 2 !== 0) return '';
     const bytes: number[] = [];
     for (let i = 0; i < hex.length; i += 2) {
-      const b = parseInt(hex.slice(i, i + 2), 16);
+      const b = Number.parseInt(hex.slice(i, i + 2), 16);
       if (b === 0) break; // null-terminated
       bytes.push(b);
     }
@@ -456,15 +457,15 @@ export async function fetchBorrowerProfile(address: string): Promise<BorrowerPro
     ]);
     return {
       creditScore: Number(basic.creditScore),
-      totalVerifiedVolumeUSD: parseFloat(ethers.formatUnits(basic.totalVerifiedVolumeUSD, 18)),
+      totalVerifiedVolumeUSD: Number.parseFloat(ethers.formatUnits(basic.totalVerifiedVolumeUSD, 18)),
       totalAttestationsCount: Number(basic.totalAttestationsCount),
-      maxCreditLineUSD: parseFloat(ethers.formatUnits(basic.maxCreditLineUSD, 18)),
+      maxCreditLineUSD: Number.parseFloat(ethers.formatUnits(basic.maxCreditLineUSD, 18)),
       requiredCollateralRatioBps: Number(basic.requiredCollateralRatioBps),
       lastAttestationTimestamp: Number(basic.lastAttestationTimestamp),
       isMainnetActive: extended.isMainnetActive,
       protocolDiversityCount: Number(extended.protocolDiversityCount),
       chainDiversityCount: Number(extended.chainDiversityCount),
-      weightedActionScore: parseFloat(ethers.formatUnits(extended.weightedActionScore, 18)),
+      weightedActionScore: Number.parseFloat(ethers.formatUnits(extended.weightedActionScore, 18)),
     };
   } catch {
     return null;
@@ -485,7 +486,7 @@ export async function fetchEngineRates(score: number): Promise<{
   return {
     collateralRatioBps: Number(ratio),
     interestRateBps: Number(rate),
-    maxCreditLineUSD: parseFloat(ethers.formatUnits(maxLine, 18)),
+    maxCreditLineUSD: Number.parseFloat(ethers.formatUnits(maxLine, 18)),
   };
 }
 
@@ -499,8 +500,8 @@ export async function fetchUserLoans(address: string): Promise<PoolLoan[]> {
         return {
           loanId: id.toString(),
           borrower: loan.borrower,
-          principalUSD: parseFloat(ethers.formatUnits(loan.principalUSD, 18)),
-          collateralCTC: parseFloat(ethers.formatUnits(loan.collateralCTC, 18)),
+          principalUSD: Number.parseFloat(ethers.formatUnits(loan.principalUSD, 18)),
+          collateralCTC: Number.parseFloat(ethers.formatUnits(loan.collateralCTC, 18)),
           borrowedAtBlock: Number(loan.borrowedAtBlock),
           dueBlock: Number(loan.dueBlock),
           interestRateBps: Number(loan.interestRateBps),
@@ -539,7 +540,7 @@ export async function fetchArenaStats(address: string): Promise<ArenaStats | nul
   try {
     const stats = await arenaRead().userStats(address);
     return {
-      paperBalance: parseFloat(ethers.formatUnits(stats.paperBalance, 18)),
+      paperBalance: Number.parseFloat(ethers.formatUnits(stats.paperBalance, 18)),
       currentWinStreak: Number(stats.currentWinStreak),
       longestWinStreak: Number(stats.longestWinStreak),
       totalWins: Number(stats.totalWins),
@@ -554,7 +555,7 @@ export async function fetchArenaStats(address: string): Promise<ArenaStats | nul
 export async function fetchCUSDBalance(address: string): Promise<number> {
   try {
     const bal = await withReadGate(() => withRetry(() => readContract(CONTRACTS.cUSD, CUSD_ABI).balanceOf(address)));
-    return parseFloat(ethers.formatUnits(bal, CUSD_DECIMALS));
+    return Number.parseFloat(ethers.formatUnits(bal, CUSD_DECIMALS));
   } catch {
     return 0;
   }
@@ -566,7 +567,7 @@ export async function fetchTokenBalance(user: string, tokenAddress: string): Pro
     const meta = await tokenMeta(tokenAddress);
     const tok = new ethers.Contract(tokenAddress, CUSD_ABI, readProvider());
     const b = await tok.balanceOf(user);
-    return parseFloat(ethers.formatUnits(b, meta.decimals));
+    return Number.parseFloat(ethers.formatUnits(b, meta.decimals));
   } catch {
     return 0;
   }
@@ -800,17 +801,17 @@ export async function fetchAMMState(user: string): Promise<{
           from.address,
           user || ethers.ZeroAddress
         );
-        return parseFloat(ethers.formatUnits(q, to.decimals));
+        return Number.parseFloat(ethers.formatUnits(q, to.decimals));
       } catch {
         return null;
       }
     };
     return {
       token0, token1,
-      reserve0: parseFloat(ethers.formatUnits(r0, token0.decimals)),
-      reserve1: parseFloat(ethers.formatUnits(r1, token1.decimals)),
-      lpTotalSupply: parseFloat(ethers.formatUnits(ts, 18)),
-      lpBalance: parseFloat(ethers.formatUnits(lb, 18)),
+      reserve0: Number.parseFloat(ethers.formatUnits(r0, token0.decimals)),
+      reserve1: Number.parseFloat(ethers.formatUnits(r1, token1.decimals)),
+      lpTotalSupply: Number.parseFloat(ethers.formatUnits(ts, 18)),
+      lpBalance: Number.parseFloat(ethers.formatUnits(lb, 18)),
       quote0To1: await quote(token0, token1),
       quote1To0: await quote(token1, token0),
     };
@@ -927,7 +928,7 @@ export async function fetchYieldVaultEvents(limit = 30): Promise<YieldVaultEvent
       const type = typeByTopic.get(String(l.topics[0])) ?? 'Staked';
       let amount: number | null = null;
       try {
-        if (l.data && String(l.data).length >= 66) amount = parseFloat(ethers.formatUnits(String(l.data).startsWith('0x') ? BigInt(l.data) : BigInt('0x' + l.data), 18));
+        if (l.data && String(l.data).length >= 66) amount = Number.parseFloat(ethers.formatUnits(String(l.data).startsWith('0x') ? BigInt(l.data) : BigInt('0x' + l.data), 18));
       } catch {
         /* non-numeric or empty data */
       }
@@ -967,7 +968,7 @@ export async function fetchVaultPool(): Promise<{ cusd: number | null; depin: nu
     const bal = async (c: ethers.Contract, decimals: number): Promise<number | null> => {
       try {
         const v = await withReadGate(() => withRetry(() => c.balanceOf(vaultAddr), 1, 600));
-        return parseFloat(ethers.formatUnits(v, decimals));
+        return Number.parseFloat(ethers.formatUnits(v, decimals));
       } catch {
         return null;
       }
@@ -1143,10 +1144,10 @@ export async function fetchYieldVaultState(user: string): Promise<{
       // The deployed vault has no global total-staked getter — surface null so the
       // UI shows the honest "not globally readable" caption instead of a fake value.
       totalStaked: null,
-      stakedByUser: parseFloat(ethers.formatUnits(st[0], stakingToken.decimals)),
+      stakedByUser: Number.parseFloat(ethers.formatUnits(st[0], stakingToken.decimals)),
       lastRewardBlock: Number(st[1]),
       // stake converts to RAW reward units — display capped at 18-decimals of DEPIN.
-      pendingRewards: parseFloat(ethers.formatUnits(st[2], rewardToken.decimals)),
+      pendingRewards: Number.parseFloat(ethers.formatUnits(st[2], rewardToken.decimals)),
       // Credit oracle selector (0x21cccd01) reverts on the testnet hub, so the
       // vault falls back to the default 20 multiplier (score < 48 branch).
       creditMult: 20,
@@ -1239,7 +1240,7 @@ export async function fetchTreasuryState(user: string): Promise<{
     } catch { /* oracle read unavailable */ }
     return {
       treasuryMeta: tm,
-      tbBalance: parseFloat(ethers.formatUnits(tb, tm.decimals)),
+      tbBalance: Number.parseFloat(ethers.formatUnits(tb, tm.decimals)),
       lastDepositBlock: Number(ldb),
       currentBlock: Number(cb),
       bonusVestBlocks: Number(bvb),
@@ -1305,8 +1306,8 @@ export async function fetchInvoices(): Promise<InvoiceView[]> {
           invoiceId: i,
           business: inv.business,
           funder: inv.funder,
-          faceValue: parseFloat(ethers.formatUnits(inv.faceValue, CUSD_DECIMALS)),
-          fundedAmount: parseFloat(ethers.formatUnits(inv.fundedAmount, CUSD_DECIMALS)),
+          faceValue: Number.parseFloat(ethers.formatUnits(inv.faceValue, CUSD_DECIMALS)),
+          fundedAmount: Number.parseFloat(ethers.formatUnits(inv.fundedAmount, CUSD_DECIMALS)),
           durationBlocks: Number(inv.durationBlocks),
           createdBlock: Number(inv.createdBlock),
           isFunded: inv.isFunded,
@@ -1382,7 +1383,7 @@ export async function fetchDePINState(user: string, operator: string | null): Pr
       readProvider().getBlockNumber(),
     ]);
     const meta = await tokenMeta(depinAddr);
-    const balance = parseFloat(ethers.formatUnits(await readContract(depinAddr, CUSD_ABI).balanceOf(user), meta.decimals));
+    const balance = Number.parseFloat(ethers.formatUnits(await readContract(depinAddr, CUSD_ABI).balanceOf(user), meta.decimals));
     let delegation = 0;
     if (operator) {
       delegation = Number(await hub.delegations(user, operator));
@@ -1390,7 +1391,7 @@ export async function fetchDePINState(user: string, operator: string | null): Pr
     return {
       depinToken: meta,
       depinBalance: balance,
-      maxHardwareLoanAmount: parseFloat(ethers.formatUnits(maxLoan, 18)),
+      maxHardwareLoanAmount: Number.parseFloat(ethers.formatUnits(maxLoan, 18)),
       loanAmount: Number(loan),
       loanDueBlock: Number(due),
       delegationAmount: delegation,
@@ -1467,7 +1468,7 @@ export async function fetchGamingState(user: string): Promise<{
     return {
       gameToken: gtm,
       gameItem: gim,
-      gameBalance: parseFloat(ethers.formatUnits(balance, gtm.decimals)),
+      gameBalance: Number.parseFloat(ethers.formatUnits(balance, gtm.decimals)),
       nftCount: Number(nftCount),
       lastGatherBlock: Number(lg),
       lastLootboxBlock: Number(ll),
@@ -1679,9 +1680,9 @@ export async function fetchPurposeFundState(): Promise<PurposeFundState | null> 
     ]);
     return {
       nextRecordId: Number(nextRecordId),
-      totalLiquidityUSD: parseFloat(ethers.formatUnits(totalLiquidityUSD, 18)),
-      totalBorrowedUSD: parseFloat(ethers.formatUnits(totalBorrowedUSD, 18)),
-      ctcPriceUSD: parseFloat(ethers.formatUnits(ctcPriceUSD, 18)),
+      totalLiquidityUSD: Number.parseFloat(ethers.formatUnits(totalLiquidityUSD, 18)),
+      totalBorrowedUSD: Number.parseFloat(ethers.formatUnits(totalBorrowedUSD, 18)),
+      ctcPriceUSD: Number.parseFloat(ethers.formatUnits(ctcPriceUSD, 18)),
       verifier: String(verifier),
     };
   } catch {
@@ -1736,9 +1737,9 @@ export async function fetchPurposeRecords(user: string): Promise<PurposeRecordVi
         allowlistedRecipient: r.allowlistedRecipient,
         purposeCode: Number(r.purposeCode),
         covenantHash: r.covenantHash,
-        approvedUSD: parseFloat(ethers.formatUnits(r.approvedUSD, 18)),
-        drawnUSD: parseFloat(ethers.formatUnits(r.drawnUSD, 18)),
-        collateralCTC: parseFloat(ethers.formatUnits(r.collateralCTC, 18)),
+        approvedUSD: Number.parseFloat(ethers.formatUnits(r.approvedUSD, 18)),
+        drawnUSD: Number.parseFloat(ethers.formatUnits(r.drawnUSD, 18)),
+        collateralCTC: Number.parseFloat(ethers.formatUnits(r.collateralCTC, 18)),
         borrowedAtBlock: Number(r.borrowedAtBlock),
         dueBlock: Number(r.dueBlock),
         interestRateBps: Number(r.interestRateBps),
@@ -1810,23 +1811,23 @@ export async function fetchMeterRegistryState(
       meters[key] = m.exists
         ? {
             exists: m.exists,
-            windowCapUnits: parseFloat(ethers.formatUnits(m.windowCapUnits, 18)),
-            usedUnitsThisWindow: parseFloat(ethers.formatUnits(m.usedUnitsThisWindow, 18)),
+            windowCapUnits: Number.parseFloat(ethers.formatUnits(m.windowCapUnits, 18)),
+            usedUnitsThisWindow: Number.parseFloat(ethers.formatUnits(m.usedUnitsThisWindow, 18)),
             windowStartBlock: Number(m.windowStartBlock),
             windowDurationBlocks: Number(m.windowDurationBlocks),
-            unitPriceUSD: parseFloat(ethers.formatUnits(m.unitPriceUSD, 18)),
-            outstandingDebtUSD: parseFloat(ethers.formatUnits(m.outstandingDebtUSD, 18)),
+            unitPriceUSD: Number.parseFloat(ethers.formatUnits(m.unitPriceUSD, 18)),
+            outstandingDebtUSD: Number.parseFloat(ethers.formatUnits(m.outstandingDebtUSD, 18)),
           }
         : (DEFAULT_ACTION_METERS[key] || null);
     }
     const totalDebtRaw = await contract.getTotalOutstandingDebt(user);
-    const debt = parseFloat(ethers.formatUnits(totalDebtRaw, 18));
+    const debt = Number.parseFloat(ethers.formatUnits(totalDebtRaw, 18));
     return {
       state: {
         settlementToken: String(settlementToken || CONTRACTS.cUSD),
         verifier: String(verifier || CONTRACTS.attestationVerifier),
-        prepaidBalance: parseFloat(ethers.formatUnits(prepaidBalance, 18)) || 500,
-        prepaidSpent: parseFloat(ethers.formatUnits(prepaidSpent, 18)) || 120,
+        prepaidBalance: Number.parseFloat(ethers.formatUnits(prepaidBalance, 18)) || 500,
+        prepaidSpent: Number.parseFloat(ethers.formatUnits(prepaidSpent, 18)) || 120,
       },
       meters,
       totalDebt: debt > 0 ? debt : 5.075,
@@ -1901,7 +1902,7 @@ export async function fetchEscrowState(): Promise<EscrowState | null> {
     ]);
     return {
       escrowCount: Number(count),
-      totalLockedUSD: parseFloat(ethers.formatUnits(locked, 18)),
+      totalLockedUSD: Number.parseFloat(ethers.formatUnits(locked, 18)),
       verifier: String(verifier),
     };
   } catch {
@@ -1947,7 +1948,7 @@ export async function fetchEscrowJobs(user: string): Promise<EscrowView[]> {
         depositor: r.depositor,
         seller: r.seller,
         orderRef: r.orderRef.slice(0, 10) + '…',
-        amountUSD: parseFloat(ethers.formatUnits(r.amountUSD, 18)),
+        amountUSD: Number.parseFloat(ethers.formatUnits(r.amountUSD, 18)),
         deadlineBlock: Number(r.deadlineBlock),
         released: r.released,
         refunded: r.refunded,
@@ -2090,12 +2091,12 @@ export async function fetchGeoOrbitState(): Promise<GeoOrbitState | null> {
     return {
       owner: String(owner),
       paused: Boolean(paused),
-      rewardPerTelemetry: parseFloat(ethers.formatUnits(rpt, 18)),
+      rewardPerTelemetry: Number.parseFloat(ethers.formatUnits(rpt, 18)),
       minTelemetryIntervalBlocks: Number(minInt),
       maxSpeedMps: Number(maxSpeed),
       stationCount: Number(count),
       totalTelemetryAnchored: Number(tel),
-      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+      totalRewardUnitsIssued: Number.parseFloat(ethers.formatUnits(units, 18)),
     };
   } catch {
     return null;
@@ -2172,8 +2173,8 @@ export async function fetchGeoOrbitStation(user: string): Promise<GeoOrbitStatio
       operator: String(s.operator),
       hexId: String(s.hexId),
       telemetryCount: Number(s.telemetryCount),
-      totalRewardUnits: parseFloat(ethers.formatUnits(s.totalRewardUnits, 18)),
-      claimedUnits: parseFloat(ethers.formatUnits(s.claimedUnits, 18)),
+      totalRewardUnits: Number.parseFloat(ethers.formatUnits(s.totalRewardUnits, 18)),
+      claimedUnits: Number.parseFloat(ethers.formatUnits(s.claimedUnits, 18)),
       lastFix: {
         latE7: Number(s.lastFix.fix.latE7),
         lngE7: Number(s.lastFix.fix.lngE7),
@@ -2265,7 +2266,7 @@ export async function fetchGeoOrbitStations(limit = 200): Promise<GeoOrbitStatio
         return {
           operator: ethers.getAddress('0x' + log.topics[1].slice(26)),
           stationId: Number(log.topics[2]),
-          hexId: Array.from(new Uint8Array((data[0] as string).slice(2).padStart(8, '0').match(/../g)!.map((h) => parseInt(h, 16))))
+          hexId: Array.from(new Uint8Array((data[0] as string).slice(2).padStart(8, '0').match(/../g)!.map((h) => Number.parseInt(h, 16))))
             .map((b) => b.toString(16).padStart(2, '0'))
             .join(''),
           latE7: Number(data[1]),
@@ -2394,8 +2395,8 @@ export async function fetchFlashLoanState(initiator: string): Promise<FlashLoanS
     const profile = profileRes.status === 'fulfilled' ? profileRes.value : null;
     const feeBps = feeBpsRes.status === 'fulfilled' ? Number(feeBpsRes.value) : (profile && profile.creditScore >= 750 ? 1 : 5);
     const block = blockRes.status === 'fulfilled' ? Number(blockRes.value) : fallbackState.currentBlock;
-    const capacity = capRes.status === 'fulfilled' ? parseFloat(ethers.formatUnits(capRes.value, token.decimals)) : fallbackState.capacity;
-    const floatNum = floatRes.status === 'fulfilled' ? parseFloat(ethers.formatUnits(floatRes.value, token.decimals)) : fallbackState.float;
+    const capacity = capRes.status === 'fulfilled' ? Number.parseFloat(ethers.formatUnits(capRes.value, token.decimals)) : fallbackState.capacity;
+    const floatNum = floatRes.status === 'fulfilled' ? Number.parseFloat(ethers.formatUnits(floatRes.value, token.decimals)) : fallbackState.float;
 
     return {
       token,
@@ -2444,9 +2445,9 @@ export async function projectFlashRoundTrip(amountNumber: number, initiator: str
     const onChainFeeBps = Number(await borrower.reputationFeeBps(initiator).catch(() => 1));
     const fee = (amountWei * BigInt(onChainFeeBps)) / 10000n;
     const [depinOutWei, cusdBackWei] = await borrower.projectRoundTrip(amountWei);
-    const depinOutReal = parseFloat(ethers.formatUnits(depinOutWei, token.decimals));
-    const cusdBackReal = parseFloat(ethers.formatUnits(cusdBackWei, token.decimals));
-    const feeReal = parseFloat(ethers.formatUnits(fee, token.decimals));
+    const depinOutReal = Number.parseFloat(ethers.formatUnits(depinOutWei, token.decimals));
+    const cusdBackReal = Number.parseFloat(ethers.formatUnits(cusdBackWei, token.decimals));
+    const feeReal = Number.parseFloat(ethers.formatUnits(fee, token.decimals));
     if (depinOutReal > 0) {
       return {
         depinOut: depinOutReal,
@@ -2496,8 +2497,8 @@ export async function fetchFlashLoanLedger(limit = 30): Promise<FlashLoanLedgerE
         const { receiver, amount, fee, score } = decoded.args as any;
         out.push({
           receiver: String(receiver),
-          amount: parseFloat(ethers.formatUnits(amount, 18)),
-          fee: parseFloat(ethers.formatUnits(fee, 18)),
+          amount: Number.parseFloat(ethers.formatUnits(amount, 18)),
+          fee: Number.parseFloat(ethers.formatUnits(fee, 18)),
           score: Number(score),
           txHash: String(l.transactionHash),
           block: Number(l.blockNumber),
@@ -2554,7 +2555,7 @@ export async function executeFlashLoan(
         .map((l: any) => (l.address.toLowerCase() === CONTRACTS.reputationFlashLoan.toLowerCase() ? new ethers.Interface(FLASH_LOAN_ABI).parseLog(l) : null))
         .find((p: any) => p && p.name === 'FlashLoan');
       if (parsed) {
-        fee = parseFloat(ethers.formatUnits(parsed.args.fee, token.decimals));
+        fee = Number.parseFloat(ethers.formatUnits(parsed.args.fee, token.decimals));
         score = Number(parsed.args.score);
       }
     } catch {
@@ -2573,7 +2574,7 @@ export async function executeFlashLoan(
       throw err;
     }
     // Mode 0 fallback confirmation
-    const pseudoHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+    const pseudoHash = '0x' + Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join('');
     return {
       txHash: pseudoHash,
       block: 5482055,
@@ -2655,14 +2656,14 @@ export async function fetchPulseState(): Promise<PulseState | null> {
     return {
       owner: String(owner),
       paused: Boolean(paused),
-      rewardPerEpoch: parseFloat(ethers.formatUnits(rpe, 18)),
+      rewardPerEpoch: Number.parseFloat(ethers.formatUnits(rpe, 18)),
       maxBandwidthMB: Number(maxBw),
       epochDurationSeconds: Number(dur),
       genesisTime: Number(genesis),
       nodeCount: Number(count),
       totalEpochsSettled: Number(epochs),
       totalBandwidthMB: Number(bw),
-      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+      totalRewardUnitsIssued: Number.parseFloat(ethers.formatUnits(units, 18)),
       currentEpoch: Number(cur),
     };
   } catch {
@@ -2683,8 +2684,8 @@ export async function fetchPulseNode(user: string): Promise<PulseNodeView | null
       lastEpoch: Number(n.lastEpoch),
       lastBandwidthMB: Number(n.lastBandwidthMB),
       lastQualityGrade: Number(n.lastQualityGrade),
-      totalRewardUnits: parseFloat(ethers.formatUnits(n.totalRewardUnits, 18)),
-      claimedUnits: parseFloat(ethers.formatUnits(n.claimedUnits, 18)),
+      totalRewardUnits: Number.parseFloat(ethers.formatUnits(n.totalRewardUnits, 18)),
+      claimedUnits: Number.parseFloat(ethers.formatUnits(n.claimedUnits, 18)),
       registeredAt: Number(n.registeredAt),
       lastAnchorHash: String(n.lastAnchorHash),
     };
@@ -2711,7 +2712,7 @@ export async function fetchPulseLedger(limit = 40): Promise<PulseLedgerEntry[]> 
         anchorHash: String(log.topics[3]),
         bandwidthMB: Number(data[0]),
         qualityGrade: Number(data[1]),
-        rewardUnits: parseFloat(ethers.formatUnits(data[2], 18)),
+        rewardUnits: Number.parseFloat(ethers.formatUnits(data[2], 18)),
         timestamp: Number(data[3]),
         blockNumber: Number(log.blockNumber),
       });
@@ -2814,13 +2815,13 @@ export async function fetchNexusState(): Promise<NexusState | null> {
     return {
       owner: String(owner),
       paused: Boolean(paused),
-      rewardPerDetection: parseFloat(ethers.formatUnits(rpd, 18)),
+      rewardPerDetection: Number.parseFloat(ethers.formatUnits(rpd, 18)),
       maxDetectionsPerBatch: Number(maxB),
       minSecondsBetweenBatches: Number(cooldown),
       edgeCount: Number(edges),
       totalBatchesSettled: Number(batches),
       totalDetectionsAnchored: Number(detections),
-      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+      totalRewardUnitsIssued: Number.parseFloat(ethers.formatUnits(units, 18)),
     };
   } catch {
     return null;
@@ -2842,8 +2843,8 @@ export async function fetchNexusEdge(user: string): Promise<NexusEdgeView | null
       lastQualityGrade: Number(e.lastQualityGrade),
       lastMerkleRoot: String(e.lastMerkleRoot),
       totalDetections: Number(e.totalDetections),
-      totalRewardUnits: parseFloat(ethers.formatUnits(e.totalRewardUnits, 18)),
-      claimedUnits: parseFloat(ethers.formatUnits(e.claimedUnits, 18)),
+      totalRewardUnits: Number.parseFloat(ethers.formatUnits(e.totalRewardUnits, 18)),
+      claimedUnits: Number.parseFloat(ethers.formatUnits(e.claimedUnits, 18)),
       lastBatchTime: Number(e.lastBatchTime),
       lastAnchorHash: String(e.lastAnchorHash),
     };
@@ -2870,7 +2871,7 @@ export async function fetchNexusLedger(limit = 40): Promise<NexusBatchEntry[]> {
         merkleRoot: String(log.topics[3]),
         detectionsCount: Number(data[0]),
         qualityGrade: Number(data[1]),
-        rewardUnits: parseFloat(ethers.formatUnits(data[2], 18)),
+        rewardUnits: Number.parseFloat(ethers.formatUnits(data[2], 18)),
         timestamp: Number(data[3]),
         blockNumber: Number(log.blockNumber),
       });
@@ -2975,14 +2976,14 @@ export async function fetchAiComputeState(): Promise<AiComputeState | null> {
     return {
       owner: String(owner),
       paused: Boolean(paused),
-      rewardUnitsPerMinute: parseFloat(ethers.formatUnits(rpm, 18)),
+      rewardUnitsPerMinute: Number.parseFloat(ethers.formatUnits(rpm, 18)),
       maxGrade: Number(maxG),
       minSecondsBetweenSessions: Number(cooldown),
       maxSessionMinutes: Number(maxMin),
       providerCount: Number(count),
       totalSessionsSettled: Number(sessions),
       totalSessionMinutes: Number(minutes),
-      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+      totalRewardUnitsIssued: Number.parseFloat(ethers.formatUnits(units, 18)),
     };
   } catch {
     return null;
@@ -3002,8 +3003,8 @@ export async function fetchAiComputeProvider(user: string): Promise<AiComputePro
       tflops: Number(p.tflops),
       sessionSeq: Number(p.sessionSeq),
       totalSessionMinutes: Number(p.totalSessionMinutes),
-      totalRewardUnits: parseFloat(ethers.formatUnits(p.totalRewardUnits, 18)),
-      claimedUnits: parseFloat(ethers.formatUnits(p.claimedUnits, 18)),
+      totalRewardUnits: Number.parseFloat(ethers.formatUnits(p.totalRewardUnits, 18)),
+      claimedUnits: Number.parseFloat(ethers.formatUnits(p.claimedUnits, 18)),
       lastSettledAt: Number(p.lastSettledAt),
       lastAnchorHash: String(p.lastAnchorHash),
     };
@@ -3032,8 +3033,8 @@ export async function fetchAiComputeProviders(limit = 50): Promise<AiComputeProv
           tflops: Number(p.tflops),
           sessionSeq: Number(p.sessionSeq),
           totalSessionMinutes: Number(p.totalSessionMinutes),
-          totalRewardUnits: parseFloat(ethers.formatUnits(p.totalRewardUnits, 18)),
-          claimedUnits: parseFloat(ethers.formatUnits(p.claimedUnits, 18)),
+          totalRewardUnits: Number.parseFloat(ethers.formatUnits(p.totalRewardUnits, 18)),
+          claimedUnits: Number.parseFloat(ethers.formatUnits(p.claimedUnits, 18)),
           lastSettledAt: Number(p.lastSettledAt),
           lastAnchorHash: String(p.lastAnchorHash),
         };
@@ -3080,7 +3081,7 @@ export async function fetchAiComputeLedger(limit = 40): Promise<AiComputeSession
         merkleRoot: String(log.topics[3]),
         sessionMinutes: Number(data[0]),
         qualityGrade: Number(data[1]),
-        rewardUnits: parseFloat(ethers.formatUnits(data[2], 18)),
+        rewardUnits: Number.parseFloat(ethers.formatUnits(data[2], 18)),
         timestamp: Number(data[3]),
         blockNumber: Number(log.blockNumber),
       });
@@ -3191,13 +3192,13 @@ export async function fetchValidatorStakingState(): Promise<ValidatorStakingStat
     return {
       owner: String(owner),
       paused: Boolean(paused),
-      rewardPerBlock: parseFloat(ethers.formatUnits(rpb, 18)),
+      rewardPerBlock: Number.parseFloat(ethers.formatUnits(rpb, 18)),
       minOperatorScore: Number(minScore),
       maxCommissionBps: Number(maxBps),
       validatorCount: Number(count),
-      totalStaked: parseFloat(ethers.formatUnits(staked, 18)),
-      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(issued, 18)),
-      totalCommissionClaimed: parseFloat(ethers.formatUnits(claimed, 18)),
+      totalStaked: Number.parseFloat(ethers.formatUnits(staked, 18)),
+      totalRewardUnitsIssued: Number.parseFloat(ethers.formatUnits(issued, 18)),
+      totalCommissionClaimed: Number.parseFloat(ethers.formatUnits(claimed, 18)),
     };
   } catch {
     return null;
@@ -3226,12 +3227,12 @@ export async function fetchValidatorStakingValidators(account: string, limit = 5
           operator: ethers.getAddress(String(p.operator)),
           nodeTag: String(p.nodeTag),
           commissionBps: Number(p.commissionBps),
-          totalStaked: parseFloat(ethers.formatUnits(p.totalStaked, 18)),
-          claimedCommission: parseFloat(ethers.formatUnits(p.claimedCommission, 18)),
+          totalStaked: Number.parseFloat(ethers.formatUnits(p.totalStaked, 18)),
+          claimedCommission: Number.parseFloat(ethers.formatUnits(p.claimedCommission, 18)),
           registeredAt: Number(p.registeredAt),
-          myStake: parseFloat(ethers.formatUnits(myStake, 18)),
-          myPendingRewards: parseFloat(ethers.formatUnits(myPending, 18)),
-          pendingCommission: parseFloat(ethers.formatUnits(pendingCommission, 18)),
+          myStake: Number.parseFloat(ethers.formatUnits(myStake, 18)),
+          myPendingRewards: Number.parseFloat(ethers.formatUnits(myPending, 18)),
+          pendingCommission: Number.parseFloat(ethers.formatUnits(pendingCommission, 18)),
         };
       })
     );
@@ -3291,7 +3292,7 @@ export async function fetchValidatorStakingLedger(limit = 50): Promise<StakingEv
           kind: 'staked',
           user: ethers.getAddress('0x' + log.topics[1].slice(26)),
           operator: ethers.getAddress('0x' + log.topics[2].slice(26)),
-          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          amount: Number.parseFloat(ethers.formatUnits(d[0], 18)),
           timestamp: 0,
           blockNumber: Number(log.blockNumber),
         });
@@ -3301,7 +3302,7 @@ export async function fetchValidatorStakingLedger(limit = 50): Promise<StakingEv
           kind: 'unstaked',
           user: ethers.getAddress('0x' + log.topics[1].slice(26)),
           operator: ethers.getAddress('0x' + log.topics[2].slice(26)),
-          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          amount: Number.parseFloat(ethers.formatUnits(d[0], 18)),
           timestamp: 0,
           blockNumber: Number(log.blockNumber),
         });
@@ -3311,7 +3312,7 @@ export async function fetchValidatorStakingLedger(limit = 50): Promise<StakingEv
           kind: 'rewards',
           user: ethers.getAddress('0x' + log.topics[1].slice(26)),
           operator: ethers.getAddress('0x' + log.topics[2].slice(26)),
-          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          amount: Number.parseFloat(ethers.formatUnits(d[0], 18)),
           timestamp: 0,
           blockNumber: Number(log.blockNumber),
         });
@@ -3320,7 +3321,7 @@ export async function fetchValidatorStakingLedger(limit = 50): Promise<StakingEv
         entries.push({
           kind: 'commission',
           operator: op,
-          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          amount: Number.parseFloat(ethers.formatUnits(d[0], 18)),
           timestamp: 0,
           blockNumber: Number(log.blockNumber),
         });
@@ -3514,7 +3515,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         chainId: Number(data[1]),
         blockNumber: Number(log.blockNumber),
         verified: true,
-        amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+        amountUSD: Number.parseFloat(ethers.formatUnits(data[0], 18)),
       });
     }
 
@@ -3528,7 +3529,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         chainId: Number(data[1]),
         blockNumber: Number(log.blockNumber),
         verified: true,
-        amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+        amountUSD: Number.parseFloat(ethers.formatUnits(data[0], 18)),
       });
     }
 
@@ -3542,7 +3543,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         chainId: Number(data[1]),
         blockNumber: Number(log.blockNumber),
         verified: true,
-        amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+        amountUSD: Number.parseFloat(ethers.formatUnits(data[0], 18)),
       });
     }
 
@@ -3570,7 +3571,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         chainId: CREDITCOIN_CHAIN_ID,
         blockNumber: Number(log.blockNumber),
         verified: true,
-        amountUSD: parseFloat(ethers.formatUnits(data[2], 18)),
+        amountUSD: Number.parseFloat(ethers.formatUnits(data[2], 18)),
       });
     }
 

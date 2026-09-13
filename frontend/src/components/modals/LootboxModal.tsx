@@ -50,7 +50,7 @@ export const LootboxModal: React.FC<LootboxModalProps> = ({ isOpen, onClose }) =
               className={`w-28 h-28 mx-auto rounded-3xl bg-amber-500/10 border-2 border-amber-500/40 flex items-center justify-center text-6xl cursor-pointer hover:scale-105 transition-transform ${
                 shaking ? 'animate-bounce' : ''
               }`}
-            >
+             role="button" tabIndex={0}>
               📦
             </div>
             <p className="text-xs text-slate-300 font-medium">Tap the chest to break seal and reveal item drop!</p>

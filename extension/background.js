@@ -3,6 +3,17 @@
  * Handles background telemetry accrual, alarm tickers, badge status, and message routing.
  */
 
+// CSPRNG-backed replacement for Math.random() (SonarCloud S2245).
+function secureRandom() {
+  try {
+    const buf = new Uint32Array(1);
+    (globalThis.crypto || window.crypto).getRandomValues(buf);
+    return buf[0] / 4294967296;
+  } catch {
+    return 0.5;
+  }
+}
+
 const DEFAULT_STATE = {
   isNodeActive: true,
   uptimeSeconds: 41706,
@@ -48,9 +59,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "nodeTickAlarm") {
     const data = await chrome.storage.local.get(null);
     if (data.isNodeActive) {
-      const addedBandwidth = Number((Math.random() * 0.8 + 0.2).toFixed(2));
-      const addedPoints = Number((Math.random() * 5 + 3.5).toFixed(1));
-      const addedProofs = Math.floor(Math.random() * 2) + 1;
+      const addedBandwidth = Number((secureRandom() * 0.8 + 0.2).toFixed(2));
+      const addedPoints = Number((secureRandom() * 5 + 3.5).toFixed(1));
+      const addedProofs = Math.floor(secureRandom() * 2) + 1;
 
       const newState = {
         ...data,

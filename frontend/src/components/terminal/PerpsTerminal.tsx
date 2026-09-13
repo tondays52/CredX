@@ -37,6 +37,7 @@ import { useProtocol } from '../../context/ProtocolContext';
 import { useWeb3 } from '../../context/Web3Context';
 import posthog, { isPostHogEnabled } from '../../posthog';
 import { fetchLiveMarketPrices, generateTimeframeCandles } from '../../utils/cryptoPriceService';
+import { secureRandom } from '../../utils/secureRandom';
 
 export interface PerpPositionItem {
   id: string;
@@ -397,7 +398,7 @@ export const PerpsTerminal: React.FC = () => {
     const hist = Math.round((macd - signal) * 100) / 100;
 
     setIndicatorData({
-      rsi: isNaN(rsi) ? 54.2 : rsi,
+      rsi: Number.isNaN(rsi) ? 54.2 : rsi,
       macd,
       signal,
       hist,
@@ -500,11 +501,11 @@ export const PerpsTerminal: React.FC = () => {
             const raw = await res.json();
             if (Array.isArray(raw) && raw.length > 0 && !isCancelled) {
               const parsed: Candle[] = raw.map((k: any) => ({
-                open: parseFloat(k[5]),
-                high: parseFloat(k[3]),
-                low: parseFloat(k[4]),
-                close: parseFloat(k[2]),
-                volume: parseFloat(k[1]) || 100,
+                open: Number.parseFloat(k[5]),
+                high: Number.parseFloat(k[3]),
+                low: Number.parseFloat(k[4]),
+                close: Number.parseFloat(k[2]),
+                volume: Number.parseFloat(k[1]) || 100,
               }));
               candlesRef.current = parsed;
               computeRealIndicators(candlesRef.current);
@@ -518,11 +519,11 @@ export const PerpsTerminal: React.FC = () => {
           const raw = await res.json();
           if (Array.isArray(raw) && raw.length > 0 && !isCancelled) {
             const parsed: Candle[] = raw.map((k: any) => ({
-              open: parseFloat(k[1]),
-              high: parseFloat(k[2]),
-              low: parseFloat(k[3]),
-              close: parseFloat(k[4]),
-              volume: parseFloat(k[5]) || 100,
+              open: Number.parseFloat(k[1]),
+              high: Number.parseFloat(k[2]),
+              low: Number.parseFloat(k[3]),
+              close: Number.parseFloat(k[4]),
+              volume: Number.parseFloat(k[5]) || 100,
             }));
 
             const lastClose = parsed[parsed.length - 1].close;
@@ -556,17 +557,17 @@ export const PerpsTerminal: React.FC = () => {
           if (!isCancelled && depthData.bids && depthData.asks) {
             let cumAsk = 0;
             const asks: OrderbookEntry[] = depthData.asks.slice(0, 5).map(([p, q]: [string, string]) => {
-              const price = parseFloat(p);
-              const size = parseFloat(q);
+              const price = Number.parseFloat(p);
+              const size = Number.parseFloat(q);
               cumAsk += size;
-              return { price, size: parseFloat(size.toFixed(4)), total: parseFloat(cumAsk.toFixed(4)) };
+              return { price, size: Number.parseFloat(size.toFixed(4)), total: Number.parseFloat(cumAsk.toFixed(4)) };
             });
             let cumBid = 0;
             const bids: OrderbookEntry[] = depthData.bids.slice(0, 5).map(([p, q]: [string, string]) => {
-              const price = parseFloat(p);
-              const size = parseFloat(q);
+              const price = Number.parseFloat(p);
+              const size = Number.parseFloat(q);
               cumBid += size;
-              return { price, size: parseFloat(size.toFixed(4)), total: parseFloat(cumBid.toFixed(4)) };
+              return { price, size: Number.parseFloat(size.toFixed(4)), total: Number.parseFloat(cumBid.toFixed(4)) };
             });
             setOrderbook({ asks, bids });
           }
@@ -586,11 +587,11 @@ export const PerpsTerminal: React.FC = () => {
             const formatted: MarketTrade[] = tradesData.reverse().map((t: any) => {
               const tDate = new Date(t.time || Date.now());
               const timeStr = `${tDate.getHours().toString().padStart(2, '0')}:${tDate.getMinutes().toString().padStart(2, '0')}:${tDate.getSeconds().toString().padStart(2, '0')}`;
-              const sizeVal = parseFloat(t.qty);
+              const sizeVal = Number.parseFloat(t.qty);
               return {
                 id: String(t.id),
-                price: parseFloat(t.price),
-                size: sizeVal < 1 ? parseFloat(sizeVal.toFixed(4)) : parseFloat(sizeVal.toFixed(2)),
+                price: Number.parseFloat(t.price),
+                size: sizeVal < 1 ? Number.parseFloat(sizeVal.toFixed(4)) : Number.parseFloat(sizeVal.toFixed(2)),
                 side: t.isBuyerMaker ? 'SELL' : 'BUY',
                 time: timeStr,
               };
@@ -654,8 +655,8 @@ export const PerpsTerminal: React.FC = () => {
 
           // 1. Real-Time Market Trade Stream
           if (stream.endsWith('@trade') && d.p) {
-            const tradePrice = parseFloat(d.p);
-            const tradeQty = parseFloat(d.q);
+            const tradePrice = Number.parseFloat(d.p);
+            const tradeQty = Number.parseFloat(d.q);
             const isSell = Boolean(d.m);
             const tDate = new Date(d.T || Date.now());
             const timeStr = `${tDate.getHours().toString().padStart(2, '0')}:${tDate.getMinutes().toString().padStart(2, '0')}:${tDate.getSeconds().toString().padStart(2, '0')}`;
@@ -664,7 +665,7 @@ export const PerpsTerminal: React.FC = () => {
               {
                 id: `tr-${d.t || Date.now()}`,
                 price: tradePrice,
-                size: tradeQty < 1 ? parseFloat(tradeQty.toFixed(4)) : parseFloat(tradeQty.toFixed(2)),
+                size: tradeQty < 1 ? Number.parseFloat(tradeQty.toFixed(4)) : Number.parseFloat(tradeQty.toFixed(2)),
                 side: isSell ? 'SELL' : 'BUY',
                 time: timeStr,
               },
@@ -676,28 +677,28 @@ export const PerpsTerminal: React.FC = () => {
           if (stream.endsWith('@depth10@100ms') && d.bids && d.asks) {
             let cumAsk = 0;
             const asks: OrderbookEntry[] = d.asks.slice(0, 5).map(([p, q]: [string, string]) => {
-              const price = parseFloat(p);
-              const size = parseFloat(q);
+              const price = Number.parseFloat(p);
+              const size = Number.parseFloat(q);
               cumAsk += size;
-              return { price, size: parseFloat(size.toFixed(4)), total: parseFloat(cumAsk.toFixed(4)) };
+              return { price, size: Number.parseFloat(size.toFixed(4)), total: Number.parseFloat(cumAsk.toFixed(4)) };
             });
             let cumBid = 0;
             const bids: OrderbookEntry[] = d.bids.slice(0, 5).map(([p, q]: [string, string]) => {
-              const price = parseFloat(p);
-              const size = parseFloat(q);
+              const price = Number.parseFloat(p);
+              const size = Number.parseFloat(q);
               cumBid += size;
-              return { price, size: parseFloat(size.toFixed(4)), total: parseFloat(cumBid.toFixed(4)) };
+              return { price, size: Number.parseFloat(size.toFixed(4)), total: Number.parseFloat(cumBid.toFixed(4)) };
             });
             setOrderbook({ asks, bids });
           }
 
           // 3. Real-Time Ticker & Mark-to-Market Risk Engine
           if (stream.endsWith('@ticker') && d.c) {
-            const currentPrice = parseFloat(d.c);
-            const high = parseFloat(d.h || selectedMarket.high24h.toString());
-            const low = parseFloat(d.l || selectedMarket.low24h.toString());
-            const change = parseFloat(d.P || selectedMarket.priceChange24h.toString());
-            const vol = parseFloat(d.q || selectedMarket.vol24hUSD.toString());
+            const currentPrice = Number.parseFloat(d.c);
+            const high = Number.parseFloat(d.h || selectedMarket.high24h.toString());
+            const low = Number.parseFloat(d.l || selectedMarket.low24h.toString());
+            const change = Number.parseFloat(d.P || selectedMarket.priceChange24h.toString());
+            const vol = Number.parseFloat(d.q || selectedMarket.vol24hUSD.toString());
 
             const prevPrice = selectedMarketRef.current.price;
             if (currentPrice !== prevPrice) {
@@ -747,7 +748,7 @@ export const PerpsTerminal: React.FC = () => {
                   markPrice: markP,
                   unrealizedPnl: pnl,
                   roiPct: roi,
-                  marginRatio: parseFloat(dynMarginRatio.toFixed(2)),
+                  marginRatio: Number.parseFloat(dynMarginRatio.toFixed(2)),
                 };
               })
             );
@@ -756,11 +757,11 @@ export const PerpsTerminal: React.FC = () => {
           // 4. Real-Time Candlestick Updates
           if (stream.includes('@kline') && d.k) {
             const k = d.k;
-            let rawClose = parseFloat(k.c);
-            let rawOpen = parseFloat(k.o);
-            let rawHigh = parseFloat(k.h);
-            let rawLow = parseFloat(k.l);
-            let rawVol = parseFloat(k.v) || 100;
+            let rawClose = Number.parseFloat(k.c);
+            let rawOpen = Number.parseFloat(k.o);
+            let rawHigh = Number.parseFloat(k.h);
+            let rawLow = Number.parseFloat(k.l);
+            let rawVol = Number.parseFloat(k.v) || 100;
 
             if (candlesRef.current.length > 0) {
               const last = candlesRef.current[candlesRef.current.length - 1];
@@ -812,7 +813,7 @@ export const PerpsTerminal: React.FC = () => {
       if (!isWsConnected || selectedMarketRef.current.symbol === 'CTCUSDT') {
         tickCounterRef.current++;
         const m = selectedMarketRef.current;
-        const jitter = (Math.random() - 0.49) * (m.price * 0.0005);
+        const jitter = (secureRandom() - 0.49) * (m.price * 0.0005);
         const newPrice = Math.max(0.000001, m.price + jitter);
 
         setOrderbook(buildDepthFromPrice(newPrice));
@@ -825,14 +826,14 @@ export const PerpsTerminal: React.FC = () => {
           computeRealIndicators(candlesRef.current);
 
           // Simulated live trade stream
-          const isBuy = Math.random() > 0.48;
+          const isBuy = secureRandom() > 0.48;
           const tDate = new Date();
           const timeStr = `${tDate.getHours().toString().padStart(2, '0')}:${tDate.getMinutes().toString().padStart(2, '0')}:${tDate.getSeconds().toString().padStart(2, '0')}`;
           setRecentTrades((prev) => [
             {
-              id: `tr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+              id: `tr-${Date.now()}-${secureRandom().toString(36).slice(2, 6)}`,
               price: newPrice,
-              size: m.price > 1000 ? parseFloat((Math.random() * 0.8 + 0.05).toFixed(4)) : parseFloat((Math.random() * 450 + 20).toFixed(2)),
+              size: m.price > 1000 ? Number.parseFloat((secureRandom() * 0.8 + 0.05).toFixed(4)) : Number.parseFloat((secureRandom() * 450 + 20).toFixed(2)),
               side: isBuy ? 'BUY' : 'SELL',
               time: timeStr,
             },
@@ -1057,13 +1058,13 @@ export const PerpsTerminal: React.FC = () => {
 
   // Open Position
   const handleOpenOrder = () => {
-    const size = parseFloat(orderSizeUSDT);
-    if (isNaN(size) || size <= 0) {
+    const size = Number.parseFloat(orderSizeUSDT);
+    if (Number.isNaN(size) || size <= 0) {
       showToast('Invalid Amount', 'Please enter a valid margin amount in USDT.', 'error');
       return;
     }
 
-    const price = parseFloat(orderPrice) || selectedMarket.price;
+    const price = Number.parseFloat(orderPrice) || selectedMarket.price;
     const sizeUSD = size * leverage;
     const sizeTokens = sizeUSD / price;
     const liqPrice = orderSide === 'BUY'
@@ -1085,8 +1086,8 @@ export const PerpsTerminal: React.FC = () => {
       liqPrice,
       unrealizedPnl: 0,
       roiPct: 0,
-      takeProfit: parseFloat(tpValue) || undefined,
-      stopLoss: parseFloat(slValue) || undefined,
+      takeProfit: Number.parseFloat(tpValue) || undefined,
+      stopLoss: Number.parseFloat(slValue) || undefined,
       timestamp: Date.now(),
     };
 
@@ -1687,7 +1688,7 @@ export const PerpsTerminal: React.FC = () => {
           <div className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-1 text-[10px] font-mono text-slate-400">
             <div className="flex justify-between">
               <span>Position Size:</span>
-              <span className="text-white font-bold">${(parseFloat(orderSizeUSDT || '0') * leverage).toLocaleString()} USDT</span>
+              <span className="text-white font-bold">${(Number.parseFloat(orderSizeUSDT || '0') * leverage).toLocaleString()} USDT</span>
             </div>
             <div className="flex justify-between">
               <span>Est. Liquidation Price:</span>
@@ -2150,12 +2151,12 @@ export const PerpsTerminal: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-slate-400 flex justify-between">
+                <label htmlFor="ctl-perpsterminal-1" className="text-xs text-slate-400 flex justify-between">
                   <span>Take Profit Price (TP)</span>
                   <span className="text-emerald-400 font-bold">Target Gain</span>
                 </label>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-black/60 border border-emerald-500/30">
-                  <input
+                  <input id="ctl-perpsterminal-1"
                     type="number"
                     value={tpslModal.tp}
                     onChange={(e) => setTpslModal({ ...tpslModal, tp: e.target.value })}
@@ -2167,12 +2168,12 @@ export const PerpsTerminal: React.FC = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs text-slate-400 flex justify-between">
+                <label htmlFor="ctl-perpsterminal-2" className="text-xs text-slate-400 flex justify-between">
                   <span>Stop Loss Price (SL)</span>
                   <span className="text-rose-400 font-bold">Risk Guard</span>
                 </label>
                 <div className="flex items-center justify-between p-3 rounded-xl bg-black/60 border border-rose-500/30">
-                  <input
+                  <input id="ctl-perpsterminal-2"
                     type="number"
                     value={tpslModal.sl}
                     onChange={(e) => setTpslModal({ ...tpslModal, sl: e.target.value })}
@@ -2192,8 +2193,8 @@ export const PerpsTerminal: React.FC = () => {
                 </button>
                 <button
                   onClick={() => {
-                    const tpVal = parseFloat(tpslModal.tp) || undefined;
-                    const slVal = parseFloat(tpslModal.sl) || undefined;
+                    const tpVal = Number.parseFloat(tpslModal.tp) || undefined;
+                    const slVal = Number.parseFloat(tpslModal.sl) || undefined;
                     setPositions(
                       positions.map((p) =>
                         p.id === tpslModal.id ? { ...p, takeProfit: tpVal, stopLoss: slVal } : p

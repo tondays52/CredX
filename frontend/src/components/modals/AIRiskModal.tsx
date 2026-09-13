@@ -27,7 +27,7 @@ const AIRiskModal: React.FC<AIRiskModalProps> = ({ isOpen, onClose, vector }) =>
       setBenchmark(res);
       // Derived real-time confidence based on hardware pass
       const derivedConf = Math.min(99.9, Math.max(95.0, 97.0 + (res.tensorFLOPS > 5 ? 2.5 : 1.2)));
-      setConfidence(parseFloat(derivedConf.toFixed(2)));
+      setConfidence(Number.parseFloat(derivedConf.toFixed(2)));
       addToast('success', 'Audit Complete', `Real-time tensor audit passed: ${res.tokensPerSecond} tok/s (${res.tensorFLOPS} GFLOPS, ${res.embeddingLatencyMs}ms).`);
     } catch (err: any) {
       addToast('error', 'Audit Failed', err.message || 'GPU benchmark error');

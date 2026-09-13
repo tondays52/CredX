@@ -47,7 +47,7 @@ export const OrderTicket: React.FC<OrderTicketProps> = ({
   const potentialPayout = (amount * multiplier).toFixed(2);
 
   const formatPriceValue = (val: number | undefined | null) => {
-    if (val === undefined || val === null || isNaN(val)) return '--';
+    if (val === undefined || val === null || Number.isNaN(val)) return '--';
     if (val < 0.0001) return val.toFixed(8);
     if (val < 0.01) return val.toFixed(6);
     if (val < 1) return val.toFixed(4);
@@ -187,7 +187,7 @@ export const OrderTicket: React.FC<OrderTicketProps> = ({
             <input
               type="number"
               value={amount}
-              onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+              onChange={(e) => setAmount(Number.parseFloat(e.target.value) || 0)}
               className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-cyan-500/60 rounded-xl px-4 py-2.5 text-white font-mono text-base font-semibold outline-none transition"
               placeholder="50"
             />

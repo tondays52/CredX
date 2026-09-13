@@ -1,3 +1,5 @@
+import { secureRandom } from './secureRandom';
+
 /**
  * Crypto Price & Real Market Data Service
  * Integrates FreeCrypto API (key: dyegtedxxox83d5ems8i) with Binance & CoinGecko fallbacks.
@@ -67,12 +69,12 @@ export async function fetchLiveMarketPrices(): Promise<Record<string, TickerData
       if (data && data.status === 'success' && Array.isArray(data.symbols)) {
         for (const item of data.symbols) {
           const sym = item.symbol?.toUpperCase();
-          const p = parseFloat(item.last);
-          const chg = parseFloat(item.daily_change_percentage) || 0;
-          const low = parseFloat(item.lowest) || p * 0.98;
-          const high = parseFloat(item.highest) || p * 1.02;
+          const p = Number.parseFloat(item.last);
+          const chg = Number.parseFloat(item.daily_change_percentage) || 0;
+          const low = Number.parseFloat(item.lowest) || p * 0.98;
+          const high = Number.parseFloat(item.highest) || p * 1.02;
 
-          if (sym && !isNaN(p) && p > 0) {
+          if (sym && !Number.isNaN(p) && p > 0) {
             results[sym] = {
               price: p,
               change24h: chg,
@@ -110,11 +112,11 @@ export async function fetchLiveMarketPrices(): Promise<Record<string, TickerData
         for (const item of binanceList) {
           const target = map[item.symbol];
           if (target && !results[target]) {
-            const p = parseFloat(item.lastPrice);
-            const chg = parseFloat(item.priceChangePercent);
-            const high = parseFloat(item.highPrice);
-            const low = parseFloat(item.lowPrice);
-            const vol = parseFloat(item.quoteVolume);
+            const p = Number.parseFloat(item.lastPrice);
+            const chg = Number.parseFloat(item.priceChangePercent);
+            const high = Number.parseFloat(item.highPrice);
+            const low = Number.parseFloat(item.lowPrice);
+            const vol = Number.parseFloat(item.quoteVolume);
             results[target] = {
               price: p,
               change24h: chg,
@@ -251,7 +253,7 @@ export function generateTimeframeCandles(
   for (let i = candleCount - 1; i >= 0; i--) {
     const candleTime = now - i * stepMs;
     const wave = Math.sin((i / candleCount) * Math.PI * 2.5) * (volatility * basePrice);
-    const noise = (Math.random() - 0.49) * volatility * basePrice; // NOSONAR
+    const noise = (secureRandom() - 0.49) * volatility * basePrice; // NOSONAR
     
     // Close is open + movement
     const movement = (i === 0) ? (basePrice - currentOpen) : (wave * 0.4 + noise);
@@ -260,8 +262,8 @@ export function generateTimeframeCandles(
     // High and Low wicks
     const maxOC = Math.max(currentOpen, close);
     const minOC = Math.min(currentOpen, close);
-    const wickTop = Math.random() * (volatility * 0.7 * basePrice); // NOSONAR
-    const wickBottom = Math.random() * (volatility * 0.7 * basePrice); // NOSONAR
+    const wickTop = secureRandom() * (volatility * 0.7 * basePrice); // NOSONAR
+    const wickBottom = secureRandom() * (volatility * 0.7 * basePrice); // NOSONAR
     const high = maxOC + wickTop;
     const low = Math.max(0.000001, minOC - wickBottom);
     
@@ -273,7 +275,7 @@ export function generateTimeframeCandles(
       high,
       low,
       close,
-      volume: Math.floor(Math.random() * 80 + 30), // NOSONAR
+      volume: Math.floor(secureRandom() * 80 + 30), // NOSONAR
       isUp
     });
 

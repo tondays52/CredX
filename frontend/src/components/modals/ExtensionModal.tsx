@@ -121,7 +121,7 @@ export const ExtensionModal: React.FC<ExtensionModalProps> = ({ isOpen, onClose 
                   {downloading ? 'Generating ZIP…' : 'Download CredX Extension (.zip)'}
                 </button>
                 <div className="text-[10px] text-gray-500 font-sans">
-                  Or load directly from the repository directory: <code className="text-cyan-400 bg-cyan-500/10 px-1 py-0.5 rounded">chrome-extension/</code>
+                  Or load directly from the repository directory: <code className="text-cyan-400 bg-cyan-500/10 px-1 py-0.5 rounded">extension/</code>
                 </div>
               </div>
             </div>
@@ -155,7 +155,7 @@ export const ExtensionModal: React.FC<ExtensionModalProps> = ({ isOpen, onClose 
               <div className="space-y-1">
                 <div className="text-white font-sans font-medium text-xs">Click <strong className="text-emerald-400">"Load unpacked"</strong> &amp; select the extracted folder</div>
                 <div className="text-[10px] text-gray-500 font-sans">
-                  Select the unzipped <code className="text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">CredX-Virtual-Node-Extension-v1.1.0</code> (or <code className="text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">chrome-extension/</code>) folder. The CredX Virtual Node icon will appear in your Chrome toolbar!
+                  Select the unzipped <code className="text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">CredX-Virtual-Node-Extension-v1.1.0</code> (or <code className="text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded">extension/</code>) folder. The CredX Virtual Node icon will appear in your Chrome toolbar!
                 </div>
               </div>
             </div>

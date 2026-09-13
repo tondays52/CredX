@@ -116,7 +116,7 @@ describe("GeoOrbitRegistry: live Proof-of-Space-Time telemetry anchor", function
   it("accrues and claims rewards exactly once", async function () {
     const s0 = await orbit.stations(bob.address);
     const unpaid0 = s0.totalRewardUnits - s0.claimedUnits;
-    expect(unpaid0).to.equal(2n * RPT());
+    expect(BigInt(unpaid0)).to.equal(2n * RPT());
 
     await expect(orbit.connect(bob).claimRewards())
       .to.emit(orbit, "RewardsClaimed")

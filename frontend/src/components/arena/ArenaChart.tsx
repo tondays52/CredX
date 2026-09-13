@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AssetSymbol, Timeframe, PredictionRound, TechnicalSignals, UserBet } from '../../types/arena';
 import { calculateTechnicalSignals } from '../../utils/technicalSignals';
+import { secureRandom } from '../../utils/secureRandom';
 import {
   CandleBar,
   generateTimeframeCandles,
@@ -102,7 +103,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
   ];
 
   const formatPriceValue = (val: number | undefined | null) => {
-    if (val === undefined || val === null || isNaN(val)) return '--';
+    if (val === undefined || val === null || Number.isNaN(val)) return '--';
     if (val < 0.0001) return val.toFixed(8);
     if (val < 0.01) return val.toFixed(6);
     if (val < 1) return val.toFixed(4);
@@ -156,7 +157,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         high: Math.max(lastCandle.close, currentPrice),
         low: Math.min(lastCandle.close, currentPrice),
         close: currentPrice,
-        volume: Math.floor(Math.random() * 50 + 20), // NOSONAR
+        volume: Math.floor(secureRandom() * 50 + 20), // NOSONAR
         isUp: currentPrice >= lastCandle.close,
       };
       candles.push(newCandle);

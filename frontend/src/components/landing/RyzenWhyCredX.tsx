@@ -98,7 +98,7 @@ export const RyzenWhyCredX: React.FC<RyzenWhyCredXProps> = ({ onLaunchApp }) => 
               key={feat.title}
               onClick={onLaunchApp}
               className="p-6 rounded-3xl bg-[#090b0e] border border-white/[0.08] hover:border-[#00FF66]/50 transition-all duration-300 space-y-4 hover:shadow-[0_0_30px_rgba(0,255,102,0.1)] group cursor-pointer flex flex-col justify-between"
-            >
+             role="button" tabIndex={0}>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-2xl bg-[#00FF66]/10 border border-[#00FF66]/20 flex items-center justify-center text-[#00FF66] group-hover:scale-110 group-hover:bg-[#00FF66]/20 transition-all duration-300">

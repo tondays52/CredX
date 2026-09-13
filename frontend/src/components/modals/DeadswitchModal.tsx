@@ -160,7 +160,7 @@ export const DeadswitchModal: React.FC<DeadswitchModalProps> = ({ isOpen, onClos
                       : 'bg-cyan-500/10 border-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.25)]'
                     : 'bg-white/[0.02] border-white/[0.08] hover:border-white/20'
                 }`}
-              >
+               role="button" tabIndex={0}>
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-[10px] text-white/50">{cov.id}</span>
                   <span

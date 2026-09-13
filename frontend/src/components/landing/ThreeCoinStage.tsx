@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import * as THREE from 'three';
+import { secureRandom } from '../../utils/secureRandom';
 
 interface ThreeCoinStageProps {
   className?: string;
@@ -101,7 +102,7 @@ export const ThreeCoinStage: React.FC<ThreeCoinStageProps> = ({ className = '' }
     }
 
     for (let i = 0; i < count; i++) {
-      const radius = 0.85 + Math.random() * 0.5; // NOSONAR
+      const radius = 0.85 + secureRandom() * 0.5; // NOSONAR
       const depth = 0.14;
       const geo = new THREE.CylinderGeometry(radius, radius, depth, 40);
       const symbol = symbols[i % symbols.length];
@@ -118,21 +119,21 @@ export const ThreeCoinStage: React.FC<ThreeCoinStageProps> = ({ className = '' }
 
       const spread = 5.4;
       coin.position.set(
-        (Math.random() - 0.5) * spread * 2.2, // NOSONAR
-        (Math.random() - 0.5) * spread * 1.1, // NOSONAR
-        (Math.random() - 0.5) * 4.0 // NOSONAR
+        (secureRandom() - 0.5) * spread * 2.2, // NOSONAR
+        (secureRandom() - 0.5) * spread * 1.1, // NOSONAR
+        (secureRandom() - 0.5) * 4.0 // NOSONAR
       );
       coin.rotation.set(
-        Math.random() * Math.PI, // NOSONAR
-        Math.random() * Math.PI, // NOSONAR
-        Math.random() * Math.PI // NOSONAR
+        secureRandom() * Math.PI, // NOSONAR
+        secureRandom() * Math.PI, // NOSONAR
+        secureRandom() * Math.PI // NOSONAR
       );
 
       coin.userData = {
-        spinX: (Math.random() - 0.5) * 0.006, // NOSONAR
-        spinY: 0.004 + Math.random() * 0.006, // NOSONAR
-        floatSpeed: 0.4 + Math.random() * 0.5, // NOSONAR
-        floatOffset: Math.random() * Math.PI * 2, // NOSONAR
+        spinX: (secureRandom() - 0.5) * 0.006, // NOSONAR
+        spinY: 0.004 + secureRandom() * 0.006, // NOSONAR
+        floatSpeed: 0.4 + secureRandom() * 0.5, // NOSONAR
+        floatOffset: secureRandom() * Math.PI * 2, // NOSONAR
         baseY: coin.position.y
       };
 

@@ -18,7 +18,7 @@
 - ⚔️ **PredictBay Binary Trading Arena**: [https://credx-protocol.vercel.app/#/arena](https://credx-protocol.vercel.app/#/arena)
 - 🎥 **Full Video Walkthrough**: [https://youtu.be/BG1BrVYFH7o](https://youtu.be/BG1BrVYFH7o)
 - 🔍 **Blockscout Explorer**: [https://creditcoin-testnet.blockscout.com](https://creditcoin-testnet.blockscout.com)
-- 🧩 **Chrome Extension**: Unpacked Manifest V3 daemon in [`chrome-extension/`](chrome-extension/) & [`extension/`](extension/)
+- 🧩 **Chrome Extension**: Unpacked Manifest V3 daemon in [`extension/`](extension/)
 
 ---
 
@@ -200,7 +200,7 @@ Open [http://localhost:5173](http://localhost:5173) (or `http://localhost:5175`)
 ### 4. Running the Chrome Extension (Manifest V3)
 1. Open Chrome and navigate to `chrome://extensions/`.
 2. Enable **Developer mode** in the top-right corner.
-3. Click **Load unpacked** and select the `chrome-extension/` (or `extension/`) directory.
+3. Click **Load unpacked** and select the `extension/` directory.
 4. Open the extension popup to access the 60 FPS 3D interactive stage, live hardware probe, and 0x0FD2 daemon telemetry.
 
 ---

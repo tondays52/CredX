@@ -62,6 +62,7 @@ import {
 } from '../../services/credXService';
 import { DEMO_WALLET_VAULT } from '../../config/demoWallets';
 import { AutopilotEngine, type AgentId, type EngineSnapshot } from '../../services/autopilotEngine';
+import { secureRandom } from '../../utils/secureRandom';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 export interface VaultAsset {
@@ -178,10 +179,10 @@ async function fetchGateKlines(pair: string, tf: MarketTimeframe, limit = 100): 
     if (!Array.isArray(raw) || raw.length === 0) return null;
     return raw.map((k: any) => ({
       time: Number(k[0]) * 1000,
-      open: parseFloat(k[5]),
-      high: parseFloat(k[3]),
-      low: parseFloat(k[4]),
-      close: parseFloat(k[2])
+      open: Number.parseFloat(k[5]),
+      high: Number.parseFloat(k[3]),
+      low: Number.parseFloat(k[4]),
+      close: Number.parseFloat(k[2])
     })).sort((a: Candle, b: Candle) => a.time - b.time);
   } catch {
     return null;
@@ -198,10 +199,10 @@ async function fetchMexcKlines(symbol: string, tf: MarketTimeframe, limit = 100)
     if (!Array.isArray(raw) || raw.length === 0) return null;
     return raw.map((k: any) => ({
       time: Number(k[0]),
-      open: parseFloat(k[1]),
-      high: parseFloat(k[2]),
-      low: parseFloat(k[3]),
-      close: parseFloat(k[4])
+      open: Number.parseFloat(k[1]),
+      high: Number.parseFloat(k[2]),
+      low: Number.parseFloat(k[3]),
+      close: Number.parseFloat(k[4])
     })).sort((a: Candle, b: Candle) => a.time - b.time);
   } catch {
     return null;
@@ -220,8 +221,8 @@ async function fetchGateTickers(): Promise<Ticker[] | null> {
       if (match) {
         out.push({
           symbol: `${f.key}USDT`,
-          lastPrice: parseFloat(match.last),
-          changePct: parseFloat(match.change_percentage)
+          lastPrice: Number.parseFloat(match.last),
+          changePct: Number.parseFloat(match.change_percentage)
         });
       }
     }
@@ -264,7 +265,7 @@ async function fetchRapidKlines(symbol: string, interval: string, limit: number)
   if (!res.ok) return null;
   const raw = await res.json();
   if (!Array.isArray(raw) || raw.length === 0) return null;
-  return raw.map((k: any) => ({ time: Number(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
+  return raw.map((k: any) => ({ time: Number(k[0]), open: Number.parseFloat(k[1]), high: Number.parseFloat(k[2]), low: Number.parseFloat(k[3]), close: Number.parseFloat(k[4]) }));
 }
 
 async function fetchBinanceKlines(symbol: string, interval: string, limit: number): Promise<Candle[] | null> {
@@ -272,7 +273,7 @@ async function fetchBinanceKlines(symbol: string, interval: string, limit: numbe
   if (!res.ok) return null;
   const raw = await res.json();
   if (!Array.isArray(raw) || raw.length === 0) return null;
-  return raw.map((k: any) => ({ time: Number(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
+  return raw.map((k: any) => ({ time: Number(k[0]), open: Number.parseFloat(k[1]), high: Number.parseFloat(k[2]), low: Number.parseFloat(k[3]), close: Number.parseFloat(k[4]) }));
 }
 
 async function fetchRapidTickers(): Promise<Ticker[] | null> {
@@ -283,7 +284,7 @@ async function fetchRapidTickers(): Promise<Ticker[] | null> {
   if (!res.ok) return null;
   const raw = await res.json();
   if (!Array.isArray(raw)) return null;
-  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }));
+  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: Number.parseFloat(t.lastPrice), changePct: Number.parseFloat(t.priceChangePercent) }));
 }
 
 async function fetchBinanceTickers(): Promise<Ticker[] | null> {
@@ -291,7 +292,7 @@ async function fetchBinanceTickers(): Promise<Ticker[] | null> {
   if (!res.ok) return null;
   const raw = await res.json();
   if (!Array.isArray(raw)) return null;
-  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }));
+  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: Number.parseFloat(t.lastPrice), changePct: Number.parseFloat(t.priceChangePercent) }));
 }
 
 async function fetchFreeTickers(): Promise<Ticker[] | null> {
@@ -304,7 +305,7 @@ async function fetchFreeTickers(): Promise<Ticker[] | null> {
       const json = await res.json();
       const sym = json && json.symbols && json.symbols[0];
       if (!sym) continue;
-      out.push({ symbol: `${f.key}USDT`, lastPrice: parseFloat(sym.last), changePct: parseFloat(sym.daily_change_percentage) });
+      out.push({ symbol: `${f.key}USDT`, lastPrice: Number.parseFloat(sym.last), changePct: Number.parseFloat(sym.daily_change_percentage) });
     } catch {
       // skip unreachable symbol
     }
@@ -386,7 +387,7 @@ function macdSeries(values: number[]): { line: number[]; signal: number[]; hist:
 }
 
 const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
-  v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
+  v == null || !Number.isFinite(Number(v)) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
 
 /** Bundled CC3 testnet wallet that seeded the ReputationYieldVault (25,250 cUSD staked → live on-chain). */
 const DEMO_ROOT_WALLET = DEMO_WALLET_VAULT.find((v) => v.id === 'credx-root');
@@ -2007,8 +2008,8 @@ export const YieldVaultsView: React.FC = () => {
   };
 
   const handleExecuteDeposit = async () => {
-    const amountNum = parseFloat(depositAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = Number.parseFloat(depositAmount);
+    if (Number.isNaN(amountNum) || amountNum <= 0) {
       showToast('Invalid Amount', 'Please enter a valid deposit amount.', 'error');
       return;
     }
@@ -2020,7 +2021,7 @@ export const YieldVaultsView: React.FC = () => {
     }
     setStakingAction('stake');
     try {
-      let hash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+      let hash = `0x${Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join('')}`;
       if (currentVault.id === 'ctc-cusd' || currentVault.id === 'cusd-market') {
         try {
           hash = await vaultStake(amountNum, demoSigner ?? undefined);
@@ -2069,8 +2070,8 @@ export const YieldVaultsView: React.FC = () => {
   };
 
   const handleExecuteWithdraw = async () => {
-    const amountNum = parseFloat(withdrawAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = Number.parseFloat(withdrawAmount);
+    if (Number.isNaN(amountNum) || amountNum <= 0) {
       showToast('Invalid Amount', 'Please enter a valid withdraw amount.', 'error');
       return;
     }
@@ -2081,7 +2082,7 @@ export const YieldVaultsView: React.FC = () => {
     }
     setStakingAction('unstake');
     try {
-      let hash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+      let hash = `0x${Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join('')}`;
       if (currentVault.id === 'ctc-cusd' || currentVault.id === 'cusd-market') {
         try {
           hash = await vaultUnstake(amountNum, demoSigner ?? undefined);
@@ -2136,7 +2137,7 @@ export const YieldVaultsView: React.FC = () => {
     }
     setStakingAction('claim');
     try {
-      let hash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+      let hash = `0x${Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join('')}`;
       try {
         hash = await vaultClaimRewards(demoSigner ?? undefined);
       } catch (e: any) {
@@ -3098,7 +3099,7 @@ export const YieldVaultsView: React.FC = () => {
                           className={`hover:bg-white/5 transition cursor-pointer ${
                             isSelected ? 'bg-cyan-950/20 border-l-2 border-cyan-400' : ''
                           }`}
-                        >
+                         role="button" tabIndex={0}>
                           <td className="py-3.5 px-4">
                             <div className="flex items-center gap-3">
                               <div
@@ -3939,7 +3940,7 @@ export const YieldVaultsView: React.FC = () => {
                         ? 'bg-purple-950/90 border-2 border-purple-400 shadow-[0_0_24px_rgba(192,132,252,0.4)] scale-110 z-20'
                         : 'bg-black/80 border border-white/15 hover:border-purple-400/60 hover:scale-105 z-10'
                     }`}
-                  >
+                   role="button" tabIndex={0}>
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: sector.color }} />
                       <span className="text-xs font-bold text-white whitespace-nowrap">{sector.name}</span>
@@ -4078,7 +4079,7 @@ export const YieldVaultsView: React.FC = () => {
                         ? 'bg-cyan-950/40 border-cyan-400 shadow-[0_0_20px_rgba(0,242,254,0.2)] scale-[1.02]'
                         : 'bg-black/50 border-white/10 hover:border-white/20 hover:bg-white/5'
                     }`}
-                  >
+                   role="button" tabIndex={0}>
                     <div className="flex items-center justify-between pb-2">
                       <div className="flex items-center gap-2">
                         <div
@@ -4217,7 +4218,7 @@ export const YieldVaultsView: React.FC = () => {
                   max={100}
                   step={5}
                   value={capitalAllocationPct}
-                  onChange={(e) => setCapitalAllocationPct(parseInt(e.target.value))}
+                  onChange={(e) => setCapitalAllocationPct(Number.parseInt(e.target.value))}
                   className="w-full accent-cyan-400 cursor-pointer pt-2"
                 />
               </div>
@@ -4412,7 +4413,7 @@ export const YieldVaultsView: React.FC = () => {
                   max={50}
                   step={0.5}
                   value={targetApy}
-                  onChange={(e) => setTargetApy(parseFloat(e.target.value))}
+                  onChange={(e) => setTargetApy(Number.parseFloat(e.target.value))}
                   className="w-full accent-purple-400 cursor-pointer pt-1"
                 />
               </div>
@@ -4430,7 +4431,7 @@ export const YieldVaultsView: React.FC = () => {
                   max={10}
                   step={0.5}
                   value={maxDrawdown}
-                  onChange={(e) => setMaxDrawdown(parseFloat(e.target.value))}
+                  onChange={(e) => setMaxDrawdown(Number.parseFloat(e.target.value))}
                   className="w-full accent-cyan-400 cursor-pointer pt-1"
                 />
               </div>

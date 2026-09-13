@@ -8,6 +8,17 @@
  * 5. Instant In-Extension Token Swap Widget (CTC ↔ cUSD ↔ CTS) with dynamic balance updates.
  */
 
+// CSPRNG-backed replacement for secureRandom() (SonarCloud S2245).
+function secureRandom() {
+  try {
+    const buf = new Uint32Array(1);
+    (globalThis.crypto || window.crypto).getRandomValues(buf);
+    return buf[0] / 4294967296;
+  } catch {
+    return 0.5;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   // DOM Elements - Navigation & Headers
   const modeTabs = document.querySelectorAll('.mode-tab');
@@ -230,11 +241,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     const particles = Array.from({ length: 18 }, () => ({
-      theta: Math.random() * Math.PI * 2,
-      phi: Math.random() * Math.PI,
-      speed: (Math.random() * 0.02 + 0.01) * (Math.random() > 0.5 ? 1 : -1),
-      dist: radius * (1.1 + Math.random() * 0.35),
-      size: Math.random() * 1.8 + 1.2
+      theta: secureRandom() * Math.PI * 2,
+      phi: secureRandom() * Math.PI,
+      speed: (secureRandom() * 0.02 + 0.01) * (secureRandom() > 0.5 ? 1 : -1),
+      dist: radius * (1.1 + secureRandom() * 0.35),
+      size: secureRandom() * 1.8 + 1.2
     }));
 
     canvas3D.addEventListener('mousedown', (e) => {
@@ -379,7 +390,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (qualityPercent) qualityPercent.innerText = `${quality}%`;
       if (qualityBar) qualityBar.style.width = `${quality}%`;
     } catch {
-      const fallbackPing = Math.floor(Math.random() * 10) + 16;
+      const fallbackPing = Math.floor(secureRandom() * 10) + 16;
       if (hwPingValue) hwPingValue.innerText = `${fallbackPing} ms (rpc.cc3-testnet)`;
       if (qualityPercent) qualityPercent.innerText = '98%';
       if (qualityBar) qualityBar.style.width = '98%';
@@ -559,8 +570,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           'Creditcoin OCCR Loan Repay • 1,200 cUSD',
           'Morpho Blue Vault Repay • 3.2 wstETH'
         ];
-        const hash = sampleHashes[Math.floor(Math.random() * sampleHashes.length)];
-        const protocol = protocols[Math.floor(Math.random() * protocols.length)];
+        const hash = sampleHashes[Math.floor(secureRandom() * sampleHashes.length)];
+        const protocol = protocols[Math.floor(secureRandom() * protocols.length)];
 
         if (proofStreamList) {
           const item = document.createElement('div');
@@ -636,7 +647,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       signAuthTokenBtn.innerText = 'Signing OCCR Auth Proof...';
 
       setTimeout(() => {
-        const randHex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+        const randHex = Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join('');
         const sig = `0x${randHex}`;
 
         signAuthTokenBtn.disabled = false;
@@ -695,7 +706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function calculateSwapOutput() {
     const from = swapFromToken.value;
     const to = swapToToken.value;
-    const inputVal = parseFloat(swapInputAmount.value) || 0;
+    const inputVal = Number.parseFloat(swapInputAmount.value) || 0;
 
     if (from === to) {
       if (swapOutputAmount) swapOutputAmount.value = inputVal.toFixed(2);
@@ -729,8 +740,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     executeSwapBtn.addEventListener('click', () => {
       const from = swapFromToken.value;
       const to = swapToToken.value;
-      const inAmt = parseFloat(swapInputAmount.value) || 0;
-      const outAmt = parseFloat(swapOutputAmount.value) || 0;
+      const inAmt = Number.parseFloat(swapInputAmount.value) || 0;
+      const outAmt = Number.parseFloat(swapOutputAmount.value) || 0;
 
       if (inAmt <= 0) {
         showToast('⚠️ Please enter a valid swap amount', 'info');

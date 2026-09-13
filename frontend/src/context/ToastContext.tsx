@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { secureRandom } from '../utils/secureRandom';
 
 export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'fanfare';
 
@@ -75,7 +76,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const showToast = useCallback((title: string, message: string, type: ToastType = 'info', duration: number = 4000) => {
-    const id = Math.random().toString(36).substring(2, 9); // NOSONAR
+    const id = secureRandom().toString(36).substring(2, 9); // NOSONAR
     setToasts(prev => {
       if (prev.some(t => t.title === title && t.message === message)) return prev;
       return [...prev.slice(-2), { id, title, message, type, duration }];

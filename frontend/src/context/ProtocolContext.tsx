@@ -3,6 +3,7 @@ import { CreditTier, OCCRFactor, LoanPosition, HardwareTelemetry } from '../type
 import { useToast } from './ToastContext';
 import { useWeb3 } from './Web3Context';
 import posthog, { isPostHogEnabled } from '../posthog';
+import { secureRandom } from '../utils/secureRandom';
 import {
   fetchBorrowerProfile,
   fetchEngineRates,
@@ -21,9 +22,16 @@ import {
   NexusGeoLocation,
   resolveRealNexusLocation,
   calculateRssiFromDistance,
+  calculateH3HexIndex,
   sha256Hex,
   computeMerkleRoot
 } from '../utils/nexusTelemetry';
+import {
+  detectDeviceAndOS,
+  detectGpuSpecs,
+  detectRealClientIP,
+  measureLivePingMs
+} from '../utils/deviceDetection';
 import {
   NMEAGGAData,
   SatelliteChannel,
@@ -87,9 +95,10 @@ export interface ProtocolContextType {
   pulseTier: string;
   pulseTierPoints: number;
   pulseLevelProgressPct: number;
-  pulseRealIP: string;
-  pulseCountryFlag: string;
-  pulseCountryName: string;
+  pulseRealIP: string | null;
+  pulseCountryFlag: string | null;
+  pulseCountryName: string | null;
+  pulseDeviceName: string | null;
   pulseComputeThroughputMhash: number;
   pulseSessionSeconds: number;
   pulseNetworks: Array<{
@@ -252,13 +261,18 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   ]);
 
-  const [hardware, setHardware] = useState<HardwareTelemetry>({
-    cpuCores: navigator.hardwareConcurrency || 8,
-    deviceMemoryGB: (navigator as unknown as { deviceMemory?: number }).deviceMemory || 16,
-    gpuRenderer: 'NVIDIA GeForce RTX Accelerated Hub',
-    pingMs: 18,
-    cores: navigator.hardwareConcurrency || 8,
-    ramGB: (navigator as unknown as { deviceMemory?: number }).deviceMemory || 16
+  const [hardware, setHardware] = useState<HardwareTelemetry>(() => {
+    const { gpuClean } = detectGpuSpecs();
+    const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency || 8 : 8;
+    const ram = typeof navigator !== 'undefined' ? (navigator as unknown as { deviceMemory?: number }).deviceMemory || 16 : 16;
+    return {
+      cpuCores: cores,
+      deviceMemoryGB: ram,
+      gpuRenderer: gpuClean,
+      pingMs: 18,
+      cores,
+      ramGB: ram
+    };
   });
 
   const [virtualNodeActive, setVirtualNodeActive] = useState<boolean>(false);
@@ -307,7 +321,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       setBorrowApr(apr);
       setOccrFactors(deriveFactors(profile, profile.creditScore));
       setActiveLoans(loans.map(mapLoanToPosition));
-      setSbtTokenId(sbt ? parseInt(sbt.tokenId, 10) : 0);
+      setSbtTokenId(sbt ? Number.parseInt(sbt.tokenId, 10) : 0);
       setSbtCommitment(sbt ? sbt.commitmentHash : '0x0000000000000000000000000000000000000000000000000000000000000000');
       setSbtMinted(!!sbt);
       setDataSource('chain');
@@ -330,25 +344,6 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
   }, [isConnected, address, refreshFromChain]);
 
-  // Detect real GPU via WebGL
-  useEffect(() => {
-    try {
-      const canvas = document.createElement('canvas');
-      const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
-      if (gl) {
-        const dbg = (gl as WebGLRenderingContext).getExtension('WEBGL_debug_renderer_info');
-        if (dbg) {
-          const renderer = (gl as WebGLRenderingContext).getParameter(dbg.UNMASKED_RENDERER_WEBGL);
-          if (renderer) {
-            setHardware(prev => ({ ...prev, gpuRenderer: renderer }));
-          }
-        }
-      }
-    } catch {
-      // Fallback
-    }
-  }, []);
-
   // Node telemetry timer
   useEffect(() => {
     let interval: NodeJS.Timeout | null = null;
@@ -364,8 +359,9 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     };
   }, [virtualNodeActive]);
 
-  // CredX Pulse DePIN State (Renamed & Epoch 0 Genesis)
-  const [pulseConnected, setPulseConnected] = useState<boolean>(true);
+  // CredX Pulse DePIN State (Renamed & Epoch 0 Genesis) — device telemetry
+  // and IP stay null until the user explicitly connects a device.
+  const [pulseConnected, setPulseConnected] = useState<boolean>(false);
   const [pulseEpoch] = useState<number>(0); // Epoch 0 (Genesis Launch)
   const [pulseNetworkQuality, setPulseNetworkQuality] = useState<number>(75); // 75% dynamically based on real latency probe
   const [pulseUptimePoints, setPulseUptimePoints] = useState<number>(41706.69);
@@ -378,14 +374,15 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [pulseTierPoints, setPulseTierPoints] = useState<number>(177360);
   const [pulseLevelProgressPct] = useState<number>(47.33);
 
-  // Real Machine & Network Telemetry
-  const [pulseRealIP, setPulseRealIP] = useState<string>('103.187.95.62');
-  const [pulseCountryFlag] = useState<string>('🇧🇩');
-  const [pulseCountryName] = useState<string>('Bangladesh');
+  // Real Machine & Dynamic Network Telemetry
+  const [pulseDeviceName, setPulseDeviceName] = useState<string | null>(null);
+  const [pulseRealIP, setPulseRealIP] = useState<string | null>(null);
+  const [pulseCountryFlag, setPulseCountryFlag] = useState<string | null>(null);
+  const [pulseCountryName, setPulseCountryName] = useState<string | null>(null);
   const [pulseComputeThroughputMhash, setPulseComputeThroughputMhash] = useState<number>(184.2);
-  const [pulseSessionSeconds, setPulseSessionSeconds] = useState<number>(3783); // 1 day, 1 hr, 3 mins
+  const [pulseSessionSeconds, setPulseSessionSeconds] = useState<number>(3783);
 
-  // Networks List (Matching User's Real Screenshot)
+  // Networks List (Dynamically populated with detected client specs)
   const [pulseNetworks, setPulseNetworks] = useState<Array<{
     id: string;
     name: string;
@@ -395,12 +392,14 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     score: number;
     points: number;
     status: 'Connected' | 'Not Connected';
-  }>>([
-    { id: 'dev-1', name: 'Primary Desktop Node', ip: '103.187.95.62', flag: '🇧🇩', timeConnected: '1 day, 1 hr, 3 mins', score: 75, points: 737.5625, status: 'Connected' },
-    { id: 'dev-2', name: 'Mobile Edge Relay', ip: '103.187.95.55', flag: '🇧🇩', timeConnected: '0 day, 9 hrs, 56 mins', score: 75, points: 329.5417, status: 'Not Connected' },
-    { id: 'dev-3', name: 'Home WiFi Beacon', ip: '103.187.95.51', flag: '🇧🇩', timeConnected: '0 day, 3 hrs, 51 mins', score: 75, points: 214.9375, status: 'Not Connected' },
-    { id: 'dev-4', name: 'Office Fiber Bridge', ip: '103.187.95.50', flag: '🇧🇩', timeConnected: '0 day, 20 hrs, 25 mins', score: 75, points: 1057.6875, status: 'Not Connected' }
-  ]);
+  }>>(() => {
+    return [
+      { id: 'dev-1', name: 'Local Node', ip: '—', flag: '🌐', timeConnected: 'Not connected', score: 95, points: 737.5625, status: 'Not Connected' },
+      { id: 'dev-2', name: 'Mobile Edge Relay', ip: '10.0.0.55', flag: '🌐', timeConnected: '0 day, 9 hrs, 56 mins', score: 82, points: 329.5417, status: 'Not Connected' },
+      { id: 'dev-3', name: 'Home WiFi Beacon', ip: '10.0.0.51', flag: '🌐', timeConnected: '0 day, 3 hrs, 51 mins', score: 75, points: 214.9375, status: 'Not Connected' },
+      { id: 'dev-4', name: 'Office Fiber Bridge', ip: '10.0.0.50', flag: '🌐', timeConnected: '0 day, 20 hrs, 25 mins', score: 88, points: 1057.6875, status: 'Not Connected' }
+    ];
+  });
 
   const renamePulseNetwork = useCallback((id: string, newName: string) => {
     if (!newName.trim()) return;
@@ -408,19 +407,48 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     addToast('success', 'Device Renamed', `Network device renamed to "${newName.trim()}".`);
   }, [addToast]);
 
-  // Real IP Detection via client fetch
+  // Dynamic Telemetry & Real Geo-IP Detection Engine
   useEffect(() => {
-    fetch('https://api.ipify.org?format=json')
-      .then(res => res.json())
-      .then(data => {
-        if (data.ip) {
-          setPulseRealIP(data.ip);
-          setPulseNetworks(prev => prev.map((dev, i) => i === 0 ? { ...dev, ip: data.ip } : dev));
-        }
-      })
-      .catch(() => {
-        // Fallback to detected Bangladesh IP
-      });
+    let isMounted = true;
+
+    // 1. Detect Real Hardware & GPU Model (device name/IP reveal only after connect)
+    const { gpuClean } = detectGpuSpecs();
+    setHardware(prev => ({
+      ...prev,
+      gpuRenderer: gpuClean,
+      cpuCores: navigator.hardwareConcurrency || prev.cpuCores || 8,
+      deviceMemoryGB: (navigator as unknown as { deviceMemory?: number }).deviceMemory || prev.deviceMemoryGB || 16,
+    }));
+
+    // 2. Detect Real Client IP & Geolocation — IP/country surface only after the
+    //    user connects a device (togglePulseNode); Nexus geo still opens at mount.
+    detectRealClientIP().then(geo => {
+      if (!isMounted) return;
+
+      if (geo.lat && geo.lng) {
+        setNexusRealGeo({
+          lat: geo.lat,
+          lng: geo.lng,
+          city: geo.city || 'Edge Gateway',
+          country: geo.countryName,
+          countryFlag: geo.countryFlag,
+          h3Hex: calculateH3HexIndex(geo.lat, geo.lng),
+          densityMultiplier: 1.65,
+          accuracyMeters: 25
+        });
+        setNexusH3Hex(calculateH3HexIndex(geo.lat, geo.lng));
+      }
+    });
+
+    // 3. Live Edge Latency Measurement
+    measureLivePingMs().then(ping => {
+      if (!isMounted) return;
+      setHardware(prev => ({ ...prev, pingMs: ping }));
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Real Processing Power Benchmark: WebCrypto SHA-256 Micro-Hashing
@@ -443,17 +471,28 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, []);
 
   const togglePulseNode = useCallback(() => {
-    setPulseConnected(prev => {
-      const next = !prev;
-      setPulseNetworks(devs => devs.map((dev, i) => i === 0 ? { ...dev, status: next ? 'Connected' : 'Not Connected' } : dev));
-      addToast(
-        next ? 'success' : 'info',
-        next ? 'CredX Pulse Connected' : 'CredX Pulse Suspended',
-        next ? 'Routing residential bandwidth and earning Epoch 0 points...' : 'Bandwidth sharing paused.'
-      );
-      return next;
-    });
-  }, [addToast]);
+    const next = !pulseConnected;
+    setPulseConnected(next);
+    setPulseNetworks(devs => devs.map((dev, i) => i === 0 ? { ...dev, status: next ? 'Connected' : 'Not Connected' } : dev));
+    if (next) {
+      // Connect: reveal the real device actually running this browser + its IP.
+      const { deviceName } = detectDeviceAndOS();
+      setPulseDeviceName(deviceName);
+      detectRealClientIP().then(geo => {
+        setPulseRealIP(geo.ip);
+        setPulseCountryFlag(geo.countryFlag);
+        setPulseCountryName(geo.countryName);
+        addToast('success', 'CredX Pulse Connected', `Live device linked: ${deviceName} · ${geo.city || 'Edge Gateway'}, ${geo.countryName}`);
+      });
+    } else {
+      // Disconnect: clear personal device + IP telemetry back to null.
+      setPulseDeviceName(null);
+      setPulseRealIP(null);
+      setPulseCountryFlag(null);
+      setPulseCountryName(null);
+      addToast('info', 'CredX Pulse Suspended', 'Bandwidth sharing paused and device telemetry cleared.');
+    }
+  }, [pulseConnected, addToast]);
 
   // Real-time Pulse Telemetry Ticker & Hardware Compute Benchmark
   useEffect(() => {
@@ -731,7 +770,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
       // Jitter satellite SNRs slightly for real-time physics tracking realism
       setOrbitSatellites(prev => prev.map(sat => {
-        const jitter = +((Math.random() - 0.5) * 0.4).toFixed(1); // NOSONAR
+        const jitter = +((secureRandom() - 0.5) * 0.4).toFixed(1); // NOSONAR
         const newSnr = Math.min(54, Math.max(38, +(sat.snrDbHz + jitter).toFixed(1)));
         return { ...sat, snrDbHz: newSnr };
       }));
@@ -789,7 +828,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const syncOrbitAttestation = useCallback(async () => {
     playSound('fanfare');
-    const randomHex = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''); // NOSONAR
+    const randomHex = Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join(''); // NOSONAR
     const newHash = `0x${randomHex}`;
     setOrbitLastAttestationHash(newHash);
     setOrbitPoSTProofsCount(c => c + 1);
@@ -814,7 +853,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       })();
       return;
     }
-    const newId = `LN-${Math.floor(1000 + Math.random() * 9000)}`; // NOSONAR
+    const newId = `LN-${Math.floor(1000 + secureRandom() * 9000)}`; // NOSONAR
     const newLoan: LoanPosition = {
       id: newId,
       amount: amountUSD,
@@ -976,6 +1015,7 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         pulseRealIP,
         pulseCountryFlag,
         pulseCountryName,
+        pulseDeviceName,
         pulseComputeThroughputMhash,
         pulseSessionSeconds,
         pulseNetworks,

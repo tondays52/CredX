@@ -17,6 +17,7 @@ import {
 } from '../../services/credXService';
 import { CREDITCOIN_BLOCKSCOUT, CONTRACTS } from '../../config/contracts';
 import { DEMO_WALLET_VAULT } from '../../config/demoWallets';
+import { secureRandom } from '../../utils/secureRandom';
 import {
   ArrowLeftRight,
   Settings,
@@ -417,7 +418,7 @@ export const DexAmmView: React.FC = () => {
   };
 
   // Exact Real-Time Swap Math
-  const fromAmtNum = parseFloat(fromAmount) || 0;
+  const fromAmtNum = Number.parseFloat(fromAmount) || 0;
   const swapFeeRate = 0.0025; // 0.25% AMM fee (discounted to 0.05% for high CTS)
   
   const estimatedReceiveNum = useMemo(() => {
@@ -496,8 +497,8 @@ export const DexAmmView: React.FC = () => {
           // Check Binance data first
           const bMatch = binanceData.find((b) => b.symbol === `${c.symbol}USDT`);
           if (bMatch) {
-            p = parseFloat(bMatch.lastPrice) || p;
-            ch = parseFloat(bMatch.priceChangePercent) || ch;
+            p = Number.parseFloat(bMatch.lastPrice) || p;
+            ch = Number.parseFloat(bMatch.priceChangePercent) || ch;
           }
 
           // Check CryptoCompare data (especially for CTC)
@@ -541,7 +542,7 @@ export const DexAmmView: React.FC = () => {
         prev.map((c) => {
           if (c.symbol === 'cUSD' || c.symbol === 'USDC') return c;
           // Natural live micro-fluctuation (0.02% - 0.05%)
-          const jitter = (Math.random() - 0.495) * 0.0004 * c.priceUSD;
+          const jitter = (secureRandom() - 0.495) * 0.0004 * c.priceUSD;
           const nextP = Math.max(0.0001, c.priceUSD + jitter);
           return {
             ...c,
@@ -593,11 +594,11 @@ export const DexAmmView: React.FC = () => {
             const rawKlines = await res.json();
             const parsed: Candle[] = rawKlines.map((k: any) => ({
               time: Number(k[0]),
-              open: parseFloat(k[1]),
-              high: parseFloat(k[2]),
-              low: parseFloat(k[3]),
-              close: parseFloat(k[4]),
-              volume: parseFloat(k[5]),
+              open: Number.parseFloat(k[1]),
+              high: Number.parseFloat(k[2]),
+              low: Number.parseFloat(k[3]),
+              close: Number.parseFloat(k[4]),
+              volume: Number.parseFloat(k[5]),
             }));
             if (parsed.length > 10) {
               setRealCandles(parsed);
@@ -643,11 +644,11 @@ export const DexAmmView: React.FC = () => {
       const volatility = basePrice * 0.007;
       const open = current;
       const wave = Math.sin(i * 0.45 + liveTicks * 0.05) * 0.4;
-      const delta = (wave + (Math.random() - 0.48)) * volatility;
+      const delta = (wave + (secureRandom() - 0.48)) * volatility;
       const close = Math.max(0.0001, open + delta);
-      const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-      const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-      const volume = Math.round(50000 + Math.random() * 200000);
+      const high = Math.max(open, close) + secureRandom() * volatility * 0.5;
+      const low = Math.min(open, close) - secureRandom() * volatility * 0.5;
+      const volume = Math.round(50000 + secureRandom() * 200000);
       arr.push({ time: t, open, high, low, close, volume });
       current = close;
     }
@@ -1026,7 +1027,7 @@ export const DexAmmView: React.FC = () => {
                   ? 'bg-cyan-950/40 border-cyan-500/50 shadow-lg shadow-cyan-500/10 scale-[1.02]'
                   : 'bg-[#030d12]/80 border-cyan-500/15 hover:border-cyan-500/30 hover:bg-white/[0.02]'
               }`}
-            >
+             role="button" tabIndex={0}>
               <div className="flex items-center justify-between">
                 <span className="font-extrabold font-mono text-xs text-white flex items-center gap-1.5">
                   <span

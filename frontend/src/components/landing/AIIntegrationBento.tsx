@@ -58,7 +58,7 @@ export const AIIntegrationBento: React.FC<AIIntegrationBentoProps> = ({ onSelect
             key={c.id}
             onClick={() => onSelectTrack?.(c.id)}
             className="rounded-3xl p-6 sm:p-7 bg-gradient-to-br from-[#041a22] to-[#020b0e] border border-cyan-500/25 shadow-xl space-y-4 flex flex-col justify-between hover:border-cyan-400/50 hover:translate-y-[-4px] transition-all duration-300 group cursor-pointer"
-          >
+           role="button" tabIndex={0}>
             <div className="space-y-4">
               <div className="w-full aspect-[16/10] rounded-2xl overflow-hidden border border-cyan-500/25 relative bg-[#020c10]">
                 <img

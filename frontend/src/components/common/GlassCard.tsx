@@ -19,7 +19,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({
       className={`${
         interactive ? 'glass-card-interactive cursor-pointer' : 'glass-card'
       } ${className}`}
-    >
+     role="button" tabIndex={0}>
       {children}
     </div>
   );

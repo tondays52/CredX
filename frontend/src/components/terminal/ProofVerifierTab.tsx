@@ -23,6 +23,7 @@ import { submitProofBatch, fetchBorrowerProfile, fetchUSCOracleInfo, fetchLatest
 import { CONTRACTS, CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
 import { DEMO_WALLET_VAULT } from '../../config/demoWallets';
 import { ethers } from 'ethers';
+import { secureRandom } from '../../utils/secureRandom';
 
 const ProofVerifierTab: React.FC = () => {
   const { isConnected, address, balanceCTC, openConnectModal } = useWeb3();
@@ -163,7 +164,7 @@ const ProofVerifierTab: React.FC = () => {
     addToast('info', 'Verifying Proof On-Chain', `Validating Merkle receipt ${proofInput.slice(0, 10)}… on Creditcoin testnet.`);
     try {
       const rootKey = DEMO_WALLET_VAULT.find((w) => w.id === 'credx-root')?.privateKey;
-      let txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+      let txHash = '0x' + Array.from({ length: 64 }, () => Math.floor(secureRandom() * 16).toString(16)).join('');
       if (rootKey) {
         try {
           const signer = demoWalletSigner(rootKey);
@@ -421,11 +422,11 @@ const ProofVerifierTab: React.FC = () => {
       {/* Proof Input Card */}
       <GlassCard className="p-6 space-y-4">
         <div className="space-y-2">
-          <label className="text-xs font-semibold text-white uppercase tracking-wider block">
+          <label htmlFor="ctl-proofverifiertab-18" className="text-xs font-semibold text-white uppercase tracking-wider block">
             Cryptographic Receipt Hash (USC / Merkle Receipts)
           </label>
           <div className="flex flex-col sm:flex-row gap-2">
-            <input
+            <input id="ctl-proofverifiertab-18"
               type="text"
               value={proofInput}
               onChange={(e) => setProofInput(e.target.value)}

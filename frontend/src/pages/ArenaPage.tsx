@@ -349,15 +349,15 @@ export const ArenaPage: React.FC = () => {
         try {
           const data = JSON.parse(event.data);
           if (data.e === 'trade' && data.p) {
-            let p = parseFloat(data.p);
-            if (!isNaN(p) && p > 0) {
+            let p = Number.parseFloat(data.p);
+            if (!Number.isNaN(p) && p > 0) {
               setCurrentPrice(p);
             }
           }
           if (data.e === '24hrTicker') {
-            if (data.P) setPriceDelta24h(parseFloat(data.P));
-            if (data.h) setHigh24h(parseFloat(data.h));
-            if (data.l) setLow24h(parseFloat(data.l));
+            if (data.P) setPriceDelta24h(Number.parseFloat(data.P));
+            if (data.h) setHigh24h(Number.parseFloat(data.h));
+            if (data.l) setLow24h(Number.parseFloat(data.l));
           }
         } catch {
           // ignore stream parse errors

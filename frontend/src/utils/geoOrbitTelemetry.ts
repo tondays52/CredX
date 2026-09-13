@@ -263,14 +263,14 @@ export function parseNMEAGGA(sentence: string): NMEAGGAData {
     };
   }
 
-  const rawLat = parseFloat(parts[2]);
+  const rawLat = Number.parseFloat(parts[2]);
   const latDir = (parts[3] as 'N' | 'S') || 'N';
-  const rawLng = parseFloat(parts[4]);
+  const rawLng = Number.parseFloat(parts[4]);
   const lngDir = (parts[5] as 'E' | 'W') || 'E';
-  const quality = parseInt(parts[6], 10) || 1;
-  const numSats = parseInt(parts[7], 10) || 12;
-  const hdop = parseFloat(parts[8]) || 1.2;
-  const alt = parseFloat(parts[9]) || 10.0;
+  const quality = Number.parseInt(parts[6], 10) || 1;
+  const numSats = Number.parseInt(parts[7], 10) || 12;
+  const hdop = Number.parseFloat(parts[8]) || 1.2;
+  const alt = Number.parseFloat(parts[9]) || 10.0;
 
   // Convert NMEA DDMM.MMMM format to Decimal Degrees
   const latDeg = Math.floor(rawLat / 100);
@@ -298,9 +298,9 @@ export function parseNMEAGGA(sentence: string): NMEAGGAData {
   return {
     raw: sentence,
     utcTime: parts[1] || '03:10:27',
-    lat: isNaN(lat) ? 23.8103 : +lat.toFixed(6),
+    lat: Number.isNaN(lat) ? 23.8103 : +lat.toFixed(6),
     latDirection: latDir,
-    lng: isNaN(lng) ? 90.4125 : +lng.toFixed(6),
+    lng: Number.isNaN(lng) ? 90.4125 : +lng.toFixed(6),
     lngDirection: lngDir,
     formattedCoords: `${Math.abs(lat).toFixed(4)}° ${latDir}, ${Math.abs(lng).toFixed(4)}° ${lngDir}`,
     quality,
@@ -309,8 +309,8 @@ export function parseNMEAGGA(sentence: string): NMEAGGAData {
     hdop,
     altitudeMeters: alt,
     accuracyCm,
-    geoidSeparationMeters: parseFloat(parts[11]) || -38.2,
-    correctionAgeSec: parseFloat(parts[13]) || 1.0
+    geoidSeparationMeters: Number.parseFloat(parts[11]) || -38.2,
+    correctionAgeSec: Number.parseFloat(parts[13]) || 1.0
   };
 }
 

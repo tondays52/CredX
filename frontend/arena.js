@@ -3,6 +3,17 @@
  * Live canvas ticker, multi-asset markets, timeframe controls, stake multipliers & Web3 score sync.
  */
 
+// CSPRNG-backed replacement for secureRandom() (SonarCloud S2245).
+function secureRandom() {
+  try {
+    const buf = new Uint32Array(1);
+    (globalThis.crypto || window.crypto).getRandomValues(buf);
+    return buf[0] / 4294967296;
+  } catch {
+    return 0.5;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
 
   // Assets config
@@ -76,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
     priceHistory = [];
     let p = strikePrice - (asset.volatility * 2);
     for (let i = 0; i < MAX_HISTORY_POINTS; i++) {
-      p += (Math.random() - 0.49) * asset.volatility; // NOSONAR
+      p += (secureRandom() - 0.49) * asset.volatility; // NOSONAR
       priceHistory.push(p);
     }
     currentPrice = priceHistory[priceHistory.length - 1];
@@ -177,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Price Fluctuation Simulation Loop
   function tickPrice() {
     const asset = ASSETS[activeAssetKey];
-    const delta = (Math.random() - 0.49) * (asset.volatility / 2); // NOSONAR
+    const delta = (secureRandom() - 0.49) * (asset.volatility / 2); // NOSONAR
     const maxBound = strikePrice + (asset.volatility * 6);
     const minBound = strikePrice - (asset.volatility * 6);
     currentPrice = Math.max(minBound, Math.min(maxBound, currentPrice + delta));
@@ -251,7 +262,7 @@ document.addEventListener('DOMContentLoaded', () => {
     ticketStrikeHint.innerText = `strike ${formattedStrike}`;
 
     // Randomize market ratio
-    const rAbove = Math.floor(Math.random() * 30) + 35; // NOSONAR
+    const rAbove = Math.floor(secureRandom() * 30) + 35; // NOSONAR
     const rBelow = 100 - rAbove;
     abovePct.innerText = `${rAbove}%`;
     belowPct.innerText = `${rBelow}%`;
@@ -352,7 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (customStakeBtn) {
     customStakeBtn.addEventListener('click', () => {
       const val = prompt('Enter custom stake in Paper Points ($):', selectedStake);
-      if (val && !isNaN(val) && Number(val) > 0) {
+      if (val && !Number.isNaN(val) && Number(val) > 0) {
         selectedStake = Math.min(paperBalance, Number(val));
         highlightCustomStake(`$${selectedStake}`);
       }

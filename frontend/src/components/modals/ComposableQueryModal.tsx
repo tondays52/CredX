@@ -82,9 +82,9 @@ contract ExternalDeFiOrRWA {
     <Modal isOpen={isOpen} onClose={onClose} title="Composable Cross-Contract Query" maxWidth="max-w-xl">
       <div className="space-y-4 text-xs text-white/80">
         <div>
-          <label className="text-[11px] font-medium text-white/70 block mb-1.5">Target Address or Contract</label>
+          <label htmlFor="ctl-composablequerymodal-11" className="text-[11px] font-medium text-white/70 block mb-1.5">Target Address or Contract</label>
           <div className="flex gap-2">
-            <input
+            <input id="ctl-composablequerymodal-11"
               type="text"
               value={targetAddress}
               onChange={(e) => setTargetAddress(e.target.value)}

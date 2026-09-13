@@ -44,7 +44,7 @@ export const WalletConnectModal: React.FC<WalletConnectModalProps> = ({ isOpen, 
       <div
         className="relative w-full max-w-md rounded-3xl bg-[#031117] border border-cyan-500/30 shadow-[0_0_50px_rgba(34,211,238,0.15)] overflow-hidden text-white"
         onClick={(e) => e.stopPropagation()}
-      >
+        role="dialog" tabIndex={-1}>
         {/* Ambient Top Glow */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3/4 h-[1px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent" />
         <div className="absolute -top-20 -right-20 w-48 h-48 bg-cyan-500/15 rounded-full blur-3xl pointer-events-none" />

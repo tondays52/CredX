@@ -1,3 +1,5 @@
+import { secureRandom } from './secureRandom';
+
 /**
  * nexusTelemetry.ts
  * 
@@ -51,7 +53,7 @@ export function calculateRssiFromDistance(
 ): number {
   const d = Math.max(0.5, distanceMeters);
   // Add subtle Gaussian fading jitter (-2.5 to +2.5 dB)
-  const shadowFading = (Math.random() - 0.5) * 4; // NOSONAR
+  const shadowFading = (secureRandom() - 0.5) * 4; // NOSONAR
   const rssi = -10 * pathLossExponent * Math.log10(d) + refRssi1m + shadowFading;
   return Math.round(Math.max(-98, Math.min(-35, rssi)));
 }
@@ -66,7 +68,7 @@ export function calculateDistanceFromRssi(
 ): number {
   const ratio = (refRssi1m - rssi) / (10 * pathLossExponent);
   const distance = Math.pow(10, ratio);
-  return parseFloat(distance.toFixed(1));
+  return Number.parseFloat(distance.toFixed(1));
 }
 
 /**
@@ -171,23 +173,29 @@ export async function computeMerkleRoot(leaves: string[]): Promise<string> {
 }
 
 /**
+ * Converts ISO 3166-1 alpha-2 country code to emoji flag
+ */
+function toCountryFlag(code?: string): string {
+  if (!code || code.length !== 2) return '🌐';
+  return String.fromCodePoint(...code.toUpperCase().split('').map(c => 127397 + c.charCodeAt(0)));
+}
+
+/**
  * Queries real machine geolocation or public IP coordinates
  */
 export async function resolveRealNexusLocation(): Promise<NexusGeoLocation> {
-  // Default fallback: Dhaka, Bangladesh coordinates (anchoring to user's real context)
   const fallback: NexusGeoLocation = {
-    lat: 23.8103,
-    lng: 90.4125,
-    city: 'Dhaka',
-    country: 'Bangladesh',
-    countryFlag: '🇧🇩',
-    h3Hex: '8861892543fffff',
-    densityMultiplier: 1.65, // Pioneer frontier multiplier
-    accuracyMeters: 15
+    lat: 37.7749,
+    lng: -122.4194,
+    city: 'Global Edge Station',
+    country: 'Global Network',
+    countryFlag: '🌐',
+    h3Hex: calculateH3HexIndex(37.7749, -122.4194),
+    densityMultiplier: 1.65,
+    accuracyMeters: 50
   };
 
   try {
-    // Try public IP location service
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 2500);
     const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
@@ -197,12 +205,13 @@ export async function resolveRealNexusLocation(): Promise<NexusGeoLocation> {
       const data = await res.json();
       if (data.latitude && data.longitude) {
         const h3 = calculateH3HexIndex(data.latitude, data.longitude);
+        const code = data.country_code || 'US';
         return {
           lat: data.latitude,
           lng: data.longitude,
-          city: data.city || 'Dhaka',
-          country: data.country_name || 'Bangladesh',
-          countryFlag: '🇧🇩',
+          city: data.city || 'Edge Gateway',
+          country: data.country_name || 'Global Edge',
+          countryFlag: toCountryFlag(code),
           h3Hex: h3,
           densityMultiplier: 1.65,
           accuracyMeters: 500
@@ -210,8 +219,33 @@ export async function resolveRealNexusLocation(): Promise<NexusGeoLocation> {
       }
     }
   } catch {
-    // Silent fallback to standard anchor
+    // Try secondary provider
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch('https://ipwho.is/', { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.latitude && data.longitude) {
+          const h3 = calculateH3HexIndex(data.latitude, data.longitude);
+          return {
+            lat: data.latitude,
+            lng: data.longitude,
+            city: data.city || 'Edge Gateway',
+            country: data.country || 'Global Edge',
+            countryFlag: data.flag?.emoji || toCountryFlag(data.country_code),
+            h3Hex: h3,
+            densityMultiplier: 1.65,
+            accuracyMeters: 500
+          };
+        }
+      }
+    } catch {
+      // Fallback
+    }
   }
 
   return fallback;
 }
+

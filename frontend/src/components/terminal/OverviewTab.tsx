@@ -38,6 +38,7 @@ import SBTModal from '../modals/SBTModal';
 import SBTPassportTab from './SBTPassportTab';
 import { LoanPosition } from '../../types/protocol';
 import { CONTRACTS, CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
+import { secureRandom } from '../../utils/secureRandom';
 
 // ─────────────────────────────────────────────────────────────
 // Types & Interfaces
@@ -116,7 +117,7 @@ function generateChartPoints(
 
   const prices: number[] = [basePrice];
   for (let i = 1; i < cfg.count; i++) {
-    const drift = (Math.random() - 0.48) * cfg.volatility; // NOSONAR
+    const drift = (secureRandom() - 0.48) * cfg.volatility; // NOSONAR
     prices.push(Math.max(0.01, prices[prices.length - 1] * (1 + drift)));
   }
 
@@ -246,15 +247,15 @@ export const OverviewTab: React.FC = () => {
         if (gateRes.ok) {
           const gData = await gateRes.json();
           if (Array.isArray(gData) && gData[0]) {
-            const p = parseFloat(gData[0].last) || 1.87;
-            const ch = parseFloat(gData[0].change_percentage) || 4.23;
+            const p = Number.parseFloat(gData[0].last) || 1.87;
+            const ch = Number.parseFloat(gData[0].change_percentage) || 4.23;
             setPriceData({
               price: p,
               change24h: ch,
-              high24h: parseFloat(gData[0].high_24h) || (p * 1.04),
-              low24h: parseFloat(gData[0].low_24h) || (p * 0.95),
+              high24h: Number.parseFloat(gData[0].high_24h) || (p * 1.04),
+              low24h: Number.parseFloat(gData[0].low_24h) || (p * 0.95),
               marketCap: 428_200_000,
-              volume24h: parseFloat(gData[0].base_volume) * p || 32_011_000,
+              volume24h: Number.parseFloat(gData[0].base_volume) * p || 32_011_000,
               loading: false,
               error: false,
               lastUpdated: new Date(),
@@ -775,7 +776,7 @@ export const OverviewTab: React.FC = () => {
 
                 {/* Volume bars */}
                 {showVolume && chartPoints.map((p, i) => {
-                  const barH = 15 + Math.random() * 20; // NOSONAR
+                  const barH = 15 + secureRandom() * 20; // NOSONAR
                   return (
                     <rect
                       key={i}
@@ -1094,7 +1095,7 @@ export const OverviewTab: React.FC = () => {
                       key={vault.id}
                       onClick={() => navigateToTab(vault.targetTabHash)}
                       className="grid grid-cols-12 gap-2 py-4 px-2 items-center hover:bg-white/[0.03] transition-all rounded-xl group cursor-pointer"
-                    >
+                     role="button" tabIndex={0}>
                       {/* Name & Badge */}
                       <div className="col-span-4 flex items-center gap-3">
                         <div className="flex items-center -space-x-2 shrink-0">
@@ -1183,7 +1184,7 @@ export const OverviewTab: React.FC = () => {
                       key={token.id}
                       onClick={() => navigateToTab('#defi')}
                       className="grid grid-cols-12 gap-2 py-4 px-2 items-center hover:bg-white/[0.03] transition-all rounded-xl group cursor-pointer"
-                    >
+                     role="button" tabIndex={0}>
                       {/* Token Info */}
                       <div className="col-span-4 flex items-center gap-3">
                         <div
@@ -1286,7 +1287,6 @@ export const OverviewTab: React.FC = () => {
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-gray-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
-                  autoFocus
                   type="text"
                   placeholder="Search by vault, strategy or token..."
                   value={searchQuery}

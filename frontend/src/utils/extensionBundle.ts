@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { secureRandom } from './secureRandom';
 
 export interface ExtensionDetectionResult {
   installed: boolean;
@@ -31,6 +32,8 @@ export function pingExtension(): Promise<ExtensionDetectionResult> {
     let timeoutId: any;
 
     const listener = (event: MessageEvent) => {
+      // Only accept pongs from the current page origin (SonarCloud S2819).
+      if (event.origin !== window.location.origin) return;
       if (event.data && event.data.type === 'CREDX_PONG_EXTENSION') {
         clearTimeout(timeoutId);
         window.removeEventListener('message', listener);
@@ -44,7 +47,7 @@ export function pingExtension(): Promise<ExtensionDetectionResult> {
     };
 
     window.addEventListener('message', listener);
-    window.postMessage({ type: 'CREDX_PING_EXTENSION' }, '*');
+    window.postMessage({ type: 'CREDX_PING_EXTENSION' }, window.location.origin);
 
     timeoutId = setTimeout(() => {
       window.removeEventListener('message', listener);
@@ -126,7 +129,7 @@ export async function downloadExtensionZip(): Promise<void> {
     },
     content_scripts: [
       {
-        matches: ["http://*/*", "https://*/*"],
+        matches: ["https://*/*"],
         js: ["content.js"],
         run_at: "document_idle"
       }
@@ -143,6 +146,16 @@ export async function downloadExtensionZip(): Promise<void> {
  * CredX Quantum Node & Attestcoin Daemon - Background Service Worker (Manifest V3)
  * Handles background telemetry accrual, alarm tickers, badge status, and message routing.
  */
+
+function secureRandom() {
+  try {
+    const buf = new Uint32Array(1);
+    (globalThis.crypto || window.crypto).getRandomValues(buf);
+    return buf[0] / 4294967296;
+  } catch {
+    return 0.5;
+  }
+}
 
 const DEFAULT_STATE = {
   isNodeActive: true,
@@ -180,9 +193,9 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   if (alarm.name === "nodeTickAlarm") {
     const data = await chrome.storage.local.get(null);
     if (data.isNodeActive) {
-      const addedBandwidth = Number((Math.random() * 0.8 + 0.2).toFixed(2));
-      const addedPoints = Number((Math.random() * 5 + 3.5).toFixed(1));
-      const addedProofs = Math.floor(Math.random() * 2) + 1;
+      const addedBandwidth = Number((secureRandom() * 0.8 + 0.2).toFixed(2));
+      const addedPoints = Number((secureRandom() * 5 + 3.5).toFixed(1));
+      const addedProofs = Math.floor(secureRandom() * 2) + 1;
 
       const newState = {
         ...data,
@@ -236,15 +249,16 @@ try {
     window.__CREDX_EXTENSION_RPC__ = "https://rpc.cc3-testnet.creditcoin.network";
     
     window.addEventListener('message', (event) => {
+      if (event.origin !== window.location.origin) return;
       if (event.data && event.data.type === 'CREDX_PING_EXTENSION') {
-        window.postMessage({
+        (event.source || window).postMessage({
           type: 'CREDX_PONG_EXTENSION',
           version: '2.0.0',
           active: true,
           chain: 'Creditcoin Testnet (102031)',
           precompile: '0x0FD2',
           timestamp: Date.now()
-        }, '*');
+        }, window.location.origin);
       }
     });
   \`;
@@ -768,7 +782,17 @@ body {
 `);
 
   // 6. popup/popup.js
-  zip.file('popup/popup.js', `document.addEventListener('DOMContentLoaded', async () => {
+  zip.file('popup/popup.js', `function secureRandom() {
+  try {
+    const buf = new Uint32Array(1);
+    (globalThis.crypto || window.crypto).getRandomValues(buf);
+    return buf[0] / 4294967296;
+  } catch {
+    return 0.5;
+  }
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
   const modeTabs = document.querySelectorAll('.mode-tab');
   const tabViews = {
     node: document.getElementById('viewNode'),
@@ -905,11 +929,11 @@ body {
     }
 
     const particles = Array.from({ length: 16 }, () => ({
-      theta: Math.random() * Math.PI * 2,
-      phi: Math.random() * Math.PI,
-      speed: (Math.random() * 0.02 + 0.01) * (Math.random() > 0.5 ? 1 : -1),
-      dist: radius * (1.1 + Math.random() * 0.3),
-      size: Math.random() * 1.6 + 1.2
+      theta: secureRandom() * Math.PI * 2,
+      phi: secureRandom() * Math.PI,
+      speed: (secureRandom() * 0.02 + 0.01) * (secureRandom() > 0.5 ? 1 : -1),
+      dist: radius * (1.1 + secureRandom() * 0.3),
+      size: secureRandom() * 1.6 + 1.2
     }));
 
     function render3D() {
@@ -1037,7 +1061,7 @@ body {
         if (proofStreamList) {
           const it = document.createElement('div');
           it.className = 'stream-item';
-          it.innerHTML = '<div class="stream-top"><span class="stream-hash font-mono">0x' + Math.random().toString(16).slice(2, 6) + '...' + Math.random().toString(16).slice(2, 6) + '</span><span class="stream-badge text-green font-mono">VERIFIED</span></div><div class="stream-sub">Creditcoin OCCR Loan Repay • 1,200 cUSD • Merkle Leaf Proven</div>';
+          it.innerHTML = '<div class="stream-top"><span class="stream-hash font-mono">0x' + secureRandom().toString(16).slice(2, 6) + '...' + secureRandom().toString(16).slice(2, 6) + '</span><span class="stream-badge text-green font-mono">VERIFIED</span></div><div class="stream-sub">Creditcoin OCCR Loan Repay • 1,200 cUSD • Merkle Leaf Proven</div>';
           proofStreamList.prepend(it);
         }
         auditNowBtn.disabled = false;
@@ -1115,7 +1139,7 @@ body {
   function calculateSwapOutput() {
     const from = swapFromToken.value;
     const to = swapToToken.value;
-    const inAmt = parseFloat(swapInputAmount.value) || 0;
+    const inAmt = Number.parseFloat(swapInputAmount.value) || 0;
     if (from === to) {
       if (swapOutputAmount) swapOutputAmount.value = inAmt.toFixed(2);
       if (swapRateLabel) swapRateLabel.innerText = "1 " + from + " = 1 " + to;
@@ -1143,8 +1167,8 @@ body {
     executeSwapBtn.addEventListener('click', () => {
       const from = swapFromToken.value;
       const to = swapToToken.value;
-      const inAmt = parseFloat(swapInputAmount.value) || 0;
-      const outAmt = parseFloat(swapOutputAmount.value) || 0;
+      const inAmt = Number.parseFloat(swapInputAmount.value) || 0;
+      const outAmt = Number.parseFloat(swapOutputAmount.value) || 0;
       if (inAmt <= 0) return;
       executeSwapBtn.disabled = true;
       executeSwapBtn.innerText = "Executing AMM Swap...";

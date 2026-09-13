@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SimulationBadge } from '../common/SimulationBadge';
+import { secureRandom } from '../../utils/secureRandom';
 import {
   Radio,
   Flame,
@@ -166,7 +167,7 @@ export const LiquidationRadar: React.FC<LiquidationRadarProps> = ({ activeSymbol
 
       ws.onopen = () => {
         setIsConnected(true);
-        setLatencyMs(Math.floor(Math.random() * 15 + 18)); // NOSONAR
+        setLatencyMs(Math.floor(secureRandom() * 15 + 18)); // NOSONAR
       };
 
       ws.onmessage = (msg) => {
@@ -175,10 +176,10 @@ export const LiquidationRadar: React.FC<LiquidationRadarProps> = ({ activeSymbol
           if (data && data.o) {
             const o = data.o;
             const side: 'LONG' | 'SHORT' = o.S === 'BUY' ? 'SHORT' : 'LONG'; // Buy order = short liquidated
-            const price = parseFloat(o.ap || o.p);
-            const qty = parseFloat(o.q);
+            const price = Number.parseFloat(o.ap || o.p);
+            const qty = Number.parseFloat(o.q);
             const amountUSD = price * qty;
-            const lev = Math.floor(Math.random() * 40 + 10); // NOSONAR
+            const lev = Math.floor(secureRandom() * 40 + 10); // NOSONAR
             const isWhale = amountUSD >= 80000;
 
             const sym = o.s;
@@ -189,7 +190,7 @@ export const LiquidationRadar: React.FC<LiquidationRadarProps> = ({ activeSymbol
             else if (sym.includes('BNB')) cur = 'BNB';
 
             const newEvt: LiquidationEvent = {
-              id: `liq-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`, // NOSONAR
+              id: `liq-${Date.now()}-${secureRandom().toString(36).substring(2, 6)}`, // NOSONAR
               symbol: o.s,
               currency: cur,
               side,
@@ -240,13 +241,13 @@ export const LiquidationRadar: React.FC<LiquidationRadarProps> = ({ activeSymbol
   // Periodic heartbeat & simulated Creditcoin 0x0FD2 soft-rebalance / CTC liquidations
   useEffect(() => {
     const interval = setInterval(() => {
-      setLatencyMs((prev) => Math.min(45, Math.max(16, prev + (Math.random() > 0.5 ? 2 : -2)))); // NOSONAR
+      setLatencyMs((prev) => Math.min(45, Math.max(16, prev + (secureRandom() > 0.5 ? 2 : -2)))); // NOSONAR
 
       // Generate CTC-specific soft-rebalance signals when on CTC or ALL
       if (selectedCurrency === 'CTC' || selectedCurrency === 'ALL') {
-        const isLong = Math.random() > 0.48; // NOSONAR
-        const amountUSD = Math.floor(Math.random() * 32000 + 4500); // NOSONAR
-        const price = 2.00 + (Math.random() - 0.5) * 0.02; // NOSONAR
+        const isLong = secureRandom() > 0.48; // NOSONAR
+        const amountUSD = Math.floor(secureRandom() * 32000 + 4500); // NOSONAR
+        const price = 2.00 + (secureRandom() - 0.5) * 0.02; // NOSONAR
 
         const ctcEvt: LiquidationEvent = {
           id: `ctc-${Date.now()}`,
@@ -256,7 +257,7 @@ export const LiquidationRadar: React.FC<LiquidationRadarProps> = ({ activeSymbol
           amountUSD,
           amountToken: amountUSD / price,
           price,
-          leverage: [5, 10, 15, 20][Math.floor(Math.random() * 4)], // NOSONAR
+          leverage: [5, 10, 15, 20][Math.floor(secureRandom() * 4)], // NOSONAR
           timestamp: Date.now(),
           exchange: 'CredX AMM',
           isWhale: amountUSD > 25000,

@@ -18,7 +18,7 @@ interface FlashLoanModalProps {
 
 const ROOT_WALLET = DEMO_WALLET_VAULT.find((w) => w.id === 'credx-root');
 const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
-  v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
+  v == null || !Number.isFinite(Number(v)) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
 
 export const FlashLoanModal: React.FC<FlashLoanModalProps> = ({ isOpen, onClose }) => {
   const [amount, setAmount] = useState(10000);
@@ -102,7 +102,7 @@ export const FlashLoanModal: React.FC<FlashLoanModalProps> = ({ isOpen, onClose 
         </div>
 
         <div className="space-y-2">
-          <label className="text-xs font-bold text-slate-300">Flash Loan Principal (cUSD):</label>
+          <label htmlFor="ctl-flashloanmodal-8" className="text-xs font-bold text-slate-300">Flash Loan Principal (cUSD):</label>
           <div className="grid grid-cols-4 gap-2">
             {[5000, 10000, 25000, 50000].map((val) => (
               <button
@@ -118,11 +118,11 @@ export const FlashLoanModal: React.FC<FlashLoanModalProps> = ({ isOpen, onClose 
               </button>
             ))}
           </div>
-          <input
+          <input id="ctl-flashloanmodal-8"
             type="number"
             min={0}
             value={amount}
-            onChange={(e) => setAmount(parseFloat(e.target.value) || 0)}
+            onChange={(e) => setAmount(Number.parseFloat(e.target.value) || 0)}
             className="w-full bg-black/50 border border-white/10 rounded-xl px-3 py-2.5 text-sm font-mono text-white outline-none focus:border-cyan-500/50"
           />
           {overCap && <div className="text-[10px] font-mono text-rose-400">Exceeds the lender&apos;s live cUSD balance.</div>}

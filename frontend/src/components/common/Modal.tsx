@@ -45,7 +45,7 @@ export const Modal: React.FC<ModalProps> = ({
       <div
         className={`w-full ${effectiveMaxWidth} p-6 sm:p-7 rounded-3xl glass-card border border-white/15 bg-[#090d18]/95 shadow-2xl space-y-6 transform transition-all duration-300 scale-100`}
         onClick={e => e.stopPropagation()}
-      >
+        role="dialog" tabIndex={-1}>
         <div className="flex items-center justify-between border-b border-white/10 pb-4">
           <div className="flex items-center space-x-3">
             {icon && (

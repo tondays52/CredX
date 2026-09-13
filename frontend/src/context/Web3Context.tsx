@@ -132,7 +132,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const fallbackProvider = new ethers.JsonRpcProvider(CREDITCOIN_RPC_URL);
       const balWei = await fallbackProvider.getBalance(account);
-      const balFormatted = parseFloat(ethers.formatEther(balWei));
+      const balFormatted = Number.parseFloat(ethers.formatEther(balWei));
       setBalanceCTC(Number(balFormatted.toFixed(4)));
     } catch (err) {
       console.warn('Could not fetch real-time CTC balance:', err);
@@ -262,7 +262,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
 
         try {
           const currentChainHex = await provider.request({ method: 'eth_chainId' });
-          const currentChainNum = parseInt(currentChainHex, 16);
+          const currentChainNum = Number.parseInt(currentChainHex, 16);
           setChainId(currentChainNum);
 
           if (currentChainNum !== CREDITCOIN_TESTNET_CHAIN_ID) {
@@ -331,7 +331,7 @@ export const Web3Provider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     const handleChainChanged = (chainHex: string) => {
-      const newChain = parseInt(chainHex, 16);
+      const newChain = Number.parseInt(chainHex, 16);
       setChainId(newChain);
       if (address) fetchBalance(address);
     };

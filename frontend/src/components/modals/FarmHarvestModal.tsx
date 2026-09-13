@@ -66,7 +66,7 @@ export const FarmHarvestModal: React.FC<FarmHarvestModalProps> = ({ isOpen, onCl
                     ? 'bg-emerald-950/20 border-emerald-500/20 opacity-40 grayscale cursor-default scale-95'
                     : 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 hover:scale-105 cursor-pointer shadow-sm'
                 }`}
-              >
+               role="button" tabIndex={0}>
                 <span className="text-3xl">{tile.icon}</span>
                 <span className="text-xs font-bold text-slate-200">{tile.name}</span>
                 <span className="text-[10px] text-emerald-400 font-mono">+{tile.reward} GAME</span>

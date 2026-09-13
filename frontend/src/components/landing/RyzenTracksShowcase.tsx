@@ -180,7 +180,7 @@ export const RyzenTracksShowcase: React.FC<RyzenTracksShowcaseProps> = ({ onSele
               key={t.id}
               onClick={() => onSelectTrack()}
               className="p-6 rounded-3xl bg-[#090b0e] border border-white/[0.08] hover:border-[#00FF66]/50 transition-all duration-300 space-y-4 hover:shadow-[0_0_25px_rgba(0,255,102,0.12)] group cursor-pointer flex flex-col justify-between"
-            >
+             role="button" tabIndex={0}>
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="w-12 h-12 rounded-2xl bg-black border border-white/10 flex items-center justify-center text-[#00FF66] group-hover:scale-105 group-hover:border-[#00FF66]/50 transition-all">

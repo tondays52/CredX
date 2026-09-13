@@ -8,6 +8,7 @@ import {
 } from '../../services/credXService';
 import { LiveFlightData, LiveHazardHotspot, LiveVesselData } from '../../utils/realGeoDataFeeds';
 import { NTRIPMountpoint, GlobalMinerCluster } from '../../utils/geoOrbitTelemetry';
+import { secureRandom } from '../../utils/secureRandom';
 
 interface SmartGlobePanelProps {
   planes: LiveFlightData[];
@@ -253,9 +254,9 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
     const starsGeo = new THREE.BufferGeometry();
     const starPos = new Float32Array(900);
     for (let i = 0; i < 900; i++) {
-      starPos[i * 3] = (Math.random() - 0.5) * 80;
-      starPos[i * 3 + 1] = (Math.random() - 0.5) * 80;
-      starPos[i * 3 + 2] = (Math.random() - 0.5) * 80 - 20;
+      starPos[i * 3] = (secureRandom() - 0.5) * 80;
+      starPos[i * 3 + 1] = (secureRandom() - 0.5) * 80;
+      starPos[i * 3 + 2] = (secureRandom() - 0.5) * 80 - 20;
     }
     starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
     scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: '#9fd8ff', size: 0.12, transparent: true, opacity: 0.7 })));
