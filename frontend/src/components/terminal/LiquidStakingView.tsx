@@ -1,1175 +1,650 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Coins,
-  ShieldCheck,
-  Zap,
   Activity,
-  ArrowRight,
-  TrendingUp,
-  RefreshCw,
-  Clock,
-  Layers,
-  Sparkles,
-  Lock,
-  Unlock,
-  CheckCircle2,
-  Cpu,
-  BarChart3,
-  Search,
-  Sliders,
-  CheckSquare,
-  Square,
-  Info,
-  ExternalLink,
-  ChevronRight,
-  ArrowUpRight,
+  AlertTriangle,
   ArrowDownRight,
-  Shield,
+  ArrowUpRight,
+  BarChart3,
+  CheckCircle2,
+  Clock,
+  Coins,
+  Cpu,
+  ExternalLink,
+  Info,
+  Layers,
+  Lock,
   Percent,
+  RefreshCw,
+  Search,
+  Shield,
+  ShieldCheck,
+  Sliders,
+  TrendingUp,
+  Unlock,
   Wallet,
-  Check,
-  AlertTriangle
+  Zap,
 } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
-import { useProtocol } from '../../context/ProtocolContext';
-import { useWeb3 } from '../../context/Web3Context';
-import { SimulationBadge } from '../common/SimulationBadge';
+import useLiquidStakingLive, { BLOCKS_PER_YEAR } from '../../hooks/useLiquidStakingLive';
+import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
+import { DEMO_WALLET_VAULT } from '../../config/demoWallets';
+import {
+  demoWalletSigner,
+  swapViaAMM,
+  validatorClaimRewards,
+  validatorStakeTo,
+  validatorUnstakeFrom,
+  vaultClaimRewards,
+  vaultStake,
+  vaultUnstake,
+} from '../../services/credXService';
 
-// ─── Interfaces ─────────────────────────────────────────────────────────────
-export interface StakingAsset {
-  id: string;
-  name: string;
-  nativeSymbol: string;
-  symbol: string;
-  category: 'pos' | 'defi'; // 'pos' = Proof of Stake, 'defi' = DeFi LSTs
-  categoryLabel: string;
-  chain: string;
-  rewardRate: number; // APY e.g. 7.80
-  periodChanges: {
-    '1D': number;
-    '7D': number;
-    '1M': number;
-    '1Y': number;
-  };
-  change24h: number;
-  priceUSD: number;
-  color: string;
-  walletBalance: number;
-  stakedBalance: number;
-  periodSparklines: {
-    '1D': number[];
-    '7D': number[];
-    '1M': number[];
-    '1Y': number[];
-  };
-  sparklineData: number[];
-  slashingProtection: string;
-  validatorsCount: number;
+// Bundled Creditcoin testnet wallet that seeded the ReputationYieldVault
+// (25,250 cUSD staked → live on-chain). Every write on this panel is signed by
+// it as a real testnet transaction, mirroring the DeFi vault panel.
+const ROOT_WALLET = DEMO_WALLET_VAULT.find((w) => w.id === 'credx-root');
+
+const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
+  v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
+
+const fmtAddr = (a: string): string => (a ? `${a.slice(0, 8)}…${a.slice(-6)}` : '—');
+
+function eventKind(type: string): 'stake' | 'unstake' | 'claim' {
+  if (type.toLowerCase().includes('claimed')) return 'claim';
+  if (type.toLowerCase().includes('unstaked')) return 'unstake';
+  return 'stake';
 }
 
-export interface LSTLeaderboardProtocol {
-  rank: number;
-  name: string;
-  symbol: string;
-  chain: string;
-  chainCount: string;
-  change1d: number;
-  change7d: number;
-  change1m: number;
-  tvl: string;
-  tvlNumeric: number;
-  apy: number;
-  isCredX?: boolean;
+interface LiquidEventLite {
+  type: string;
+  amount: number | null;
+  timestamp: number;
+  block: number;
+  txHash: string;
+  user: string;
+}
+
+// Real stCTC exchange-rate chart. The curve is measured from the on-chain vault
+// ledger (stake/unstake steps + claimed rewards valued at the live AMM price).
+function PegChart({
+  width,
+  series,
+  events,
+  price,
+}: {
+  width: number;
+  series: { t: number; peg: number }[];
+  events: LiquidEventLite[];
+  price: number | null;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [hover, setHover] = useState<number | null>(null);
+  const H = 300;
+
+  useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    if (!ctx) return;
+    const W = width > 0 ? width : 920;
+    const dpr = window.devicePixelRatio || 1;
+    c.width = W * dpr;
+    c.height = H * dpr;
+    c.style.width = `${W}px`;
+    c.style.height = `${H}px`;
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, W, H);
+
+    const padL = 50;
+    const padR = 16;
+    const padT = 24;
+    const padB = 36;
+    const plotW = W - padL - padR;
+    const plotH = H - padT - padB;
+
+    ctx.strokeStyle = 'rgba(148,163,184,0.12)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+      const y = padT + (plotH * i) / 4;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(W - padR, y);
+      ctx.stroke();
+    }
+
+    if (series.length < 2) {
+      ctx.fillStyle = 'rgba(148,163,184,0.4)';
+      ctx.font = '11px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(
+        'Waiting for on-chain staking events to build the stCTC exchange-rate curve…',
+        W / 2,
+        H / 2 - 10
+      );
+      ctx.textAlign = 'left';
+      if (hover !== null) setHover(null);
+      return;
+    }
+
+    const tMin = series[0].t;
+    const tMax = series[series.length - 1].t;
+    const spanT = Math.max(1, tMax - tMin);
+    const vMin = Math.min(0.999, ...series.map((p) => p.peg));
+    const vMax = Math.max(1.001, ...series.map((p) => p.peg));
+    const vPad = (vMax - vMin) * 0.15;
+    const lo = vMin - vPad;
+    const hi = vMax + vPad;
+    const xOf = (t: number) => padL + ((t - tMin) / spanT) * plotW;
+    const yOf = (v: number) => padT + plotH - ((v - lo) / (hi - lo)) * plotH;
+
+    // baseline 1.0
+    ctx.strokeStyle = 'rgba(52,211,153,0.35)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(padL, yOf(1));
+    ctx.lineTo(W - padR, yOf(1));
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(52,211,153,0.6)';
+    ctx.font = '10px ui-monospace, monospace';
+    ctx.fillText('1.0000 benchmark', padL + 4, yOf(1) - 5);
+
+    // event bars (bottom, last 14 events)
+    const bars = events.slice(-14);
+    const maxAmt = Math.max(1, ...bars.map((b) => Math.abs(b.amount ?? 0)));
+    bars.forEach((b, i) => {
+      const bw = plotW / Math.max(bars.length, 1);
+      const bx = padL + i * bw + bw * 0.18;
+      const h = (Math.abs(b.amount ?? 0) / maxAmt) * (plotH * 0.18);
+      const by = H - padB - h;
+      const kind = eventKind(b.type);
+      ctx.fillStyle =
+        kind === 'claim'
+          ? 'rgba(245,158,11,0.55)'
+          : kind === 'unstake'
+            ? 'rgba(251,113,133,0.45)'
+            : 'rgba(52,211,153,0.5)';
+      ctx.fillRect(bx, by, bw * 0.64, h);
+    });
+
+    // y labels
+    ctx.fillStyle = 'rgba(148,163,184,0.7)';
+    ctx.font = '10px ui-monospace, monospace';
+    for (let i = 0; i <= 4; i++) {
+      const v = lo + ((hi - lo) * (4 - i)) / 4;
+      const y = padT + (plotH * i) / 4;
+      const lbl = v.toFixed(4);
+      ctx.fillText(lbl, padL - 4 - ctx.measureText(lbl).width, y + 3);
+    }
+
+    // x time labels
+    for (let i = 0; i <= 3; i++) {
+      const t = tMin + (spanT * i) / 3;
+      const d = new Date(t * 1000);
+      ctx.fillText(
+        `${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}:${String(d.getUTCSeconds()).padStart(2, '0')}`,
+        xOf(t) - 20,
+        H - padB + 20
+      );
+    }
+
+    ctx.beginPath();
+    series.forEach((p, i) => (i === 0 ? ctx.moveTo(xOf(p.t), yOf(p.peg)) : ctx.lineTo(xOf(p.t), yOf(p.peg))));
+    ctx.strokeStyle = '#00f2fe';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(0,242,254,0.4)';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    if (hover !== null && hover >= 0 && hover < series.length) {
+      const p = series[hover];
+      const x = xOf(p.t);
+      const y = yOf(p.peg);
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.setLineDash([2, 3]);
+      ctx.beginPath();
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, H - padB);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(x, y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#00f2fe';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,242,254,0.6)';
+      ctx.stroke();
+      ctx.fillStyle = '#e2e8f0';
+      ctx.font = '10px ui-monospace, monospace';
+      const label = `peg ${p.peg.toFixed(4)} · Δ ${((p.peg - 1) * 100).toFixed(2)}%`;
+      ctx.fillText(label, Math.min(x + 8, W - padR - 96), padT + 12);
+    }
+  }, [width, series, events, hover, price]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full cursor-crosshair"
+      onMouseMove={(e) => {
+        const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+        const W = rect.width;
+        const px = e.clientX - rect.left;
+        if (W <= 0 || series.length < 2) return;
+        const tMin = series[0].t;
+        const tMax = series[series.length - 1].t;
+        const spanT = tMax - tMin;
+        const tTarget = tMin + (px / W) * spanT;
+        let best = 0;
+        let bestD = Number.POSITIVE_INFINITY;
+        series.forEach((p, i) => {
+          const d = Math.abs(p.t - tTarget);
+          if (d < bestD) {
+            bestD = d;
+            best = i;
+          }
+        });
+        setHover(best);
+      }}
+      onMouseLeave={() => setHover(null)}
+    />
+  );
 }
 
 export const LiquidStakingView: React.FC = () => {
   const { showToast, playSound } = useToast();
-  const { boostScore } = useProtocol();
-  const { balanceCTC } = useWeb3();
+  const live = useLiquidStakingLive();
 
-  // Active Main Tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'cryptoquant' | 'leaderboard'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'peg' | 'leaderboard'>('overview');
+  const [demoMode, setDemoMode] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [txLog, setTxLog] = useState<string[]>([]);
+  const [vAmount, setVAmount] = useState('');
+  const [modal, setModal] = useState<
+    | { kind: 'stake' | 'unstake' }
+    | { kind: 'vstake' | 'vunstake'; op: string; tag: string }
+    | null
+  >(null);
+  const [filter, setFilter] = useState('');
+  const [compare, setCompare] = useState<number[]>([]);
 
-  // Staking Dashboard Timeframe Switcher (1D, 7D, 1M, 1Y)
-  const [dashboardTimeframe, setDashboardTimeframe] = useState<'1D' | '7D' | '1M' | '1Y'>('1D');
-
-  // Multi-Asset State Map (12 Top Proof of Stake & DeFi LST Assets)
-  const [assets, setAssets] = useState<StakingAsset[]>([
-    {
-      id: 'stctc',
-      name: 'Creditcoin Sovereign L1',
-      nativeSymbol: 'CTC',
-      symbol: 'stCTC',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'Creditcoin L1',
-      rewardRate: 7.80,
-      periodChanges: { '1D': 1.85, '7D': 8.42, '1M': 26.30, '1Y': 41.10 },
-      change24h: 1.85,
-      priceUSD: 2.08,
-      color: '#00f2fe',
-      walletBalance: balanceCTC > 0 ? balanceCTC : 10000,
-      stakedBalance: 1100.41019,
-      periodSparklines: {
-        '1D': [6.8, 6.9, 7.1, 7.0, 7.2, 7.4, 7.5, 7.6, 7.7, 7.8],
-        '7D': [6.2, 6.5, 6.8, 7.1, 7.0, 7.3, 7.5, 7.6, 7.7, 7.8],
-        '1M': [5.5, 5.8, 6.1, 6.4, 6.8, 7.0, 7.2, 7.4, 7.6, 7.8],
-        '1Y': [4.8, 5.2, 5.6, 6.0, 6.4, 6.9, 7.2, 7.5, 7.7, 7.8]
-      },
-      sparklineData: [6.8, 6.9, 7.1, 7.0, 7.2, 7.4, 7.5, 7.6, 7.7, 7.8],
-      slashingProtection: '100% ($50M Sovereign L1 Reserve)',
-      validatorsCount: 142
-    },
-    {
-      id: 'steth',
-      name: 'Lido Staked Ethereum',
-      nativeSymbol: 'ETH',
-      symbol: 'stETH',
-      category: 'defi',
-      categoryLabel: 'DeFi LST',
-      chain: 'Ethereum',
-      rewardRate: 13.62,
-      periodChanges: { '1D': 2.15, '7D': 8.40, '1M': 14.80, '1Y': 32.50 },
-      change24h: 2.15,
-      priceUSD: 3485.40,
-      color: '#818cf8',
-      walletBalance: 4.50,
-      stakedBalance: 2.15,
-      periodSparklines: {
-        '1D': [12.8, 12.9, 13.1, 13.0, 13.3, 13.2, 13.4, 13.5, 13.62],
-        '7D': [11.5, 11.8, 12.2, 12.6, 12.9, 13.1, 13.3, 13.5, 13.62],
-        '1M': [10.2, 10.8, 11.4, 12.0, 12.5, 12.9, 13.2, 13.4, 13.62],
-        '1Y': [8.5, 9.2, 10.1, 11.0, 11.8, 12.4, 12.9, 13.2, 13.62]
-      },
-      sparklineData: [12.8, 12.9, 13.1, 13.0, 13.3, 13.2, 13.4, 13.5, 13.62],
-      slashingProtection: 'Lido DAO Insured Slashing Fund',
-      validatorsCount: 9200
-    },
-    {
-      id: 'jitosol',
-      name: 'Jito MEV Staked Solana',
-      nativeSymbol: 'SOL',
-      symbol: 'JitoSOL',
-      category: 'defi',
-      categoryLabel: 'DeFi LST',
-      chain: 'Solana',
-      rewardRate: 7.88,
-      periodChanges: { '1D': 3.40, '7D': 24.51, '1M': 36.41, '1Y': 84.20 },
-      change24h: 3.40,
-      priceUSD: 152.40,
-      color: '#10b981',
-      walletBalance: 28.0,
-      stakedBalance: 14.50,
-      periodSparklines: {
-        '1D': [7.1, 7.2, 7.3, 7.4, 7.6, 7.5, 7.7, 7.8, 7.88],
-        '7D': [6.4, 6.8, 7.0, 7.2, 7.3, 7.5, 7.6, 7.7, 7.88],
-        '1M': [5.8, 6.2, 6.5, 6.9, 7.2, 7.4, 7.6, 7.7, 7.88],
-        '1Y': [4.5, 5.0, 5.6, 6.2, 6.8, 7.2, 7.5, 7.7, 7.88]
-      },
-      sparklineData: [7.1, 7.2, 7.3, 7.4, 7.6, 7.5, 7.7, 7.8, 7.88],
-      slashingProtection: 'Jito Stake Pool Multi-Sig Protocol',
-      validatorsCount: 450
-    },
-    {
-      id: 'bnb',
-      name: 'BNB Chain Validator Staked',
-      nativeSymbol: 'BNB',
-      symbol: 'stBNB',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'BNB Chain',
-      rewardRate: 12.72,
-      periodChanges: { '1D': 1.41, '7D': 6.20, '1M': 18.50, '1Y': 29.80 },
-      change24h: 1.41,
-      priceUSD: 592.10,
-      color: '#f59e0b',
-      walletBalance: 6.80,
-      stakedBalance: 3.20,
-      periodSparklines: {
-        '1D': [12.1, 12.2, 12.4, 12.3, 12.5, 12.6, 12.5, 12.7, 12.72],
-        '7D': [11.2, 11.5, 11.9, 12.2, 12.4, 12.5, 12.6, 12.7, 12.72],
-        '1M': [10.5, 10.9, 11.3, 11.8, 12.1, 12.4, 12.5, 12.6, 12.72],
-        '1Y': [9.0, 9.6, 10.2, 11.0, 11.6, 12.0, 12.3, 12.5, 12.72]
-      },
-      sparklineData: [12.1, 12.2, 12.4, 12.3, 12.5, 12.6, 12.5, 12.7, 12.72],
-      slashingProtection: 'BNB Chain 21-Validator Quorum',
-      validatorsCount: 21
-    },
-    {
-      id: 'savax',
-      name: 'BENQI Liquid Staked AVAX',
-      nativeSymbol: 'AVAX',
-      symbol: 'sAVAX',
-      category: 'defi',
-      categoryLabel: 'DeFi LST',
-      chain: 'Avalanche',
-      rewardRate: 5.92,
-      periodChanges: { '1D': 2.15, '7D': 9.80, '1M': 22.80, '1Y': 38.40 },
-      change24h: 2.15,
-      priceUSD: 28.50,
-      color: '#f43f5e',
-      walletBalance: 45.0,
-      stakedBalance: 31.39686,
-      periodSparklines: {
-        '1D': [5.4, 5.5, 5.6, 5.6, 5.7, 5.8, 5.85, 5.9, 5.92],
-        '7D': [5.0, 5.2, 5.4, 5.5, 5.6, 5.7, 5.8, 5.88, 5.92],
-        '1M': [4.6, 4.8, 5.0, 5.3, 5.5, 5.7, 5.8, 5.88, 5.92],
-        '1Y': [3.9, 4.2, 4.6, 5.0, 5.3, 5.6, 5.7, 5.85, 5.92]
-      },
-      sparklineData: [5.4, 5.5, 5.6, 5.6, 5.7, 5.8, 5.85, 5.9, 5.92],
-      slashingProtection: 'BENQI Avalanche Subnet Reserve',
-      validatorsCount: 180
-    },
-    {
-      id: 'stsui',
-      name: 'Sui Network Liquid Staked',
-      nativeSymbol: 'SUI',
-      symbol: 'stSUI',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'Sui Network',
-      rewardRate: 6.45,
-      periodChanges: { '1D': 4.10, '7D': 16.40, '1M': 42.10, '1Y': 78.50 },
-      change24h: 4.10,
-      priceUSD: 2.07,
-      color: '#38bdf8',
-      walletBalance: 650.0,
-      stakedBalance: 120.0,
-      periodSparklines: {
-        '1D': [5.9, 6.0, 6.1, 6.2, 6.3, 6.35, 6.4, 6.42, 6.45],
-        '7D': [5.2, 5.5, 5.8, 6.0, 6.1, 6.25, 6.3, 6.4, 6.45],
-        '1M': [4.5, 4.9, 5.3, 5.7, 6.0, 6.2, 6.3, 6.4, 6.45],
-        '1Y': [3.5, 4.0, 4.6, 5.2, 5.7, 6.0, 6.2, 6.35, 6.45]
-      },
-      sparklineData: [5.9, 6.0, 6.1, 6.2, 6.3, 6.35, 6.4, 6.42, 6.45],
-      slashingProtection: 'Sui Consensus Pool Slashing Guard',
-      validatorsCount: 106
-    },
-    {
-      id: 'matic',
-      name: 'Polygon PoS Staked (POL)',
-      nativeSymbol: 'POL',
-      symbol: 'POL',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'Polygon',
-      rewardRate: 6.29,
-      periodChanges: { '1D': -1.17, '7D': 4.20, '1M': 12.40, '1Y': 24.50 },
-      change24h: -1.17,
-      priceUSD: 0.42,
-      color: '#ec4899',
-      walletBalance: 3500,
-      stakedBalance: 1000,
-      periodSparklines: {
-        '1D': [6.8, 6.7, 6.6, 6.5, 6.4, 6.4, 6.3, 6.3, 6.29],
-        '7D': [5.8, 6.0, 6.1, 6.3, 6.4, 6.35, 6.3, 6.32, 6.29],
-        '1M': [5.2, 5.5, 5.8, 6.0, 6.2, 6.4, 6.3, 6.32, 6.29],
-        '1Y': [4.5, 4.9, 5.3, 5.7, 6.0, 6.2, 6.3, 6.32, 6.29]
-      },
-      sparklineData: [6.8, 6.7, 6.6, 6.5, 6.4, 6.4, 6.3, 6.3, 6.29],
-      slashingProtection: 'Polygon 2.0 Validator Shield',
-      validatorsCount: 100
-    },
-    {
-      id: 'statom',
-      name: 'Cosmos Hub Stride Staked',
-      nativeSymbol: 'ATOM',
-      symbol: 'stATOM',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'Cosmos Hub',
-      rewardRate: 18.40,
-      periodChanges: { '1D': 2.80, '7D': 11.20, '1M': 28.50, '1Y': 45.00 },
-      change24h: 2.80,
-      priceUSD: 5.20,
-      color: '#a78bfa',
-      walletBalance: 140.0,
-      stakedBalance: 50.0,
-      periodSparklines: {
-        '1D': [17.5, 17.6, 17.8, 17.9, 18.0, 18.1, 18.2, 18.3, 18.4],
-        '7D': [16.2, 16.6, 17.0, 17.4, 17.8, 18.0, 18.2, 18.3, 18.4],
-        '1M': [14.8, 15.4, 16.1, 16.8, 17.4, 17.8, 18.1, 18.3, 18.4],
-        '1Y': [12.0, 13.2, 14.5, 15.8, 16.8, 17.5, 18.0, 18.2, 18.4]
-      },
-      sparklineData: [17.5, 17.6, 17.8, 17.9, 18.0, 18.1, 18.2, 18.3, 18.4],
-      slashingProtection: 'Stride Interchain Security Slashing Module',
-      validatorsCount: 180
-    },
-    {
-      id: 'stnear',
-      name: 'Meta Pool Liquid Staked NEAR',
-      nativeSymbol: 'NEAR',
-      symbol: 'stNEAR',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'Near Protocol',
-      rewardRate: 9.20,
-      periodChanges: { '1D': 3.10, '7D': 14.80, '1M': 31.20, '1Y': 62.40 },
-      change24h: 3.10,
-      priceUSD: 4.85,
-      color: '#34d399',
-      walletBalance: 220.0,
-      stakedBalance: 80.0,
-      periodSparklines: {
-        '1D': [8.6, 8.7, 8.8, 8.9, 9.0, 9.1, 9.15, 9.18, 9.20],
-        '7D': [7.9, 8.2, 8.5, 8.7, 8.9, 9.0, 9.1, 9.15, 9.20],
-        '1M': [7.1, 7.5, 8.0, 8.4, 8.7, 8.9, 9.0, 9.15, 9.20],
-        '1Y': [5.8, 6.4, 7.1, 7.8, 8.4, 8.8, 9.0, 9.15, 9.20]
-      },
-      sparklineData: [8.6, 8.7, 8.8, 8.9, 9.0, 9.1, 9.15, 9.18, 9.20],
-      slashingProtection: 'Meta Pool Decentralized Validator Quorum',
-      validatorsCount: 110
-    },
-    {
-      id: 'stapt',
-      name: 'Amnis Liquid Staked Aptos',
-      nativeSymbol: 'APT',
-      symbol: 'stAPT',
-      category: 'defi',
-      categoryLabel: 'DeFi LST',
-      chain: 'Aptos',
-      rewardRate: 11.50,
-      periodChanges: { '1D': 1.90, '7D': 9.20, '1M': 24.10, '1Y': 52.00 },
-      change24h: 1.90,
-      priceUSD: 8.40,
-      color: '#2dd4bf',
-      walletBalance: 95.0,
-      stakedBalance: 30.0,
-      periodSparklines: {
-        '1D': [10.8, 10.9, 11.0, 11.1, 11.2, 11.3, 11.4, 11.45, 11.5],
-        '7D': [9.9, 10.2, 10.5, 10.8, 11.0, 11.2, 11.3, 11.45, 11.5],
-        '1M': [8.8, 9.3, 9.8, 10.4, 10.8, 11.1, 11.3, 11.45, 11.5],
-        '1Y': [7.2, 8.0, 8.8, 9.6, 10.3, 10.9, 11.2, 11.45, 11.5]
-      },
-      sparklineData: [10.8, 10.9, 11.0, 11.1, 11.2, 11.3, 11.4, 11.45, 11.5],
-      slashingProtection: 'Amnis Finance Staking Insurance Vault',
-      validatorsCount: 125
-    },
-    {
-      id: 'sthbar',
-      name: 'SaucerSwap Liquid Staked HBAR',
-      nativeSymbol: 'HBAR',
-      symbol: 'stHBAR',
-      category: 'pos',
-      categoryLabel: 'Proof of Stake',
-      chain: 'Hedera',
-      rewardRate: 8.10,
-      periodChanges: { '1D': 2.40, '7D': 12.10, '1M': 26.50, '1Y': 48.00 },
-      change24h: 2.40,
-      priceUSD: 0.085,
-      color: '#60a5fa',
-      walletBalance: 15000,
-      stakedBalance: 4500,
-      periodSparklines: {
-        '1D': [7.6, 7.7, 7.8, 7.85, 7.9, 7.95, 8.0, 8.05, 8.1],
-        '7D': [7.0, 7.2, 7.4, 7.6, 7.8, 7.9, 8.0, 8.05, 8.1],
-        '1M': [6.2, 6.6, 7.0, 7.4, 7.7, 7.9, 8.0, 8.05, 8.1],
-        '1Y': [5.0, 5.6, 6.3, 7.0, 7.5, 7.8, 8.0, 8.05, 8.1]
-      },
-      sparklineData: [7.6, 7.7, 7.8, 7.85, 7.9, 7.95, 8.0, 8.05, 8.1],
-      slashingProtection: 'Hedera Governing Council Node Guarantee',
-      validatorsCount: 32
-    },
-    {
-      id: 'meth',
-      name: 'Mantle Liquid Staked ETH',
-      nativeSymbol: 'ETH',
-      symbol: 'mETH',
-      category: 'defi',
-      categoryLabel: 'DeFi LST',
-      chain: 'Mantle',
-      rewardRate: 7.20,
-      periodChanges: { '1D': 1.65, '7D': 7.40, '1M': 19.80, '1Y': 36.20 },
-      change24h: 1.65,
-      priceUSD: 3485.40,
-      color: '#f97316',
-      walletBalance: 2.80,
-      stakedBalance: 1.10,
-      periodSparklines: {
-        '1D': [6.8, 6.9, 6.95, 7.0, 7.05, 7.1, 7.15, 7.18, 7.2],
-        '7D': [6.3, 6.5, 6.7, 6.85, 7.0, 7.05, 7.12, 7.18, 7.2],
-        '1M': [5.6, 6.0, 6.3, 6.6, 6.85, 7.0, 7.1, 7.18, 7.2],
-        '1Y': [4.8, 5.3, 5.9, 6.4, 6.8, 7.0, 7.1, 7.18, 7.2]
-      },
-      sparklineData: [6.8, 6.9, 6.95, 7.0, 7.05, 7.1, 7.15, 7.18, 7.2],
-      slashingProtection: 'Mantle Treasury Slashing Backstop',
-      validatorsCount: 420
-    }
-  ]);
-
-  // Selected Asset ID for Active Staking
-  const [selectedAssetId, setSelectedAssetId] = useState<string>('stctc');
-  const [assetFilter, setAssetFilter] = useState<'all' | 'pos' | 'defi'>('all');
-
-  // Staking / Unstaking Input
-  const [stakeInput, setStakeInput] = useState<string>('250');
-  const [unstakeInput, setUnstakeInput] = useState<string>('100');
-  const [investmentMonths, setInvestmentMonths] = useState<number>(3);
-  const [actionModal, setActionModal] = useState<'stake' | 'unstake' | null>(null);
-
-  // Live Auto-Accrual Counter & Epoch Timer
-  const [continuousTick, setContinuousTick] = useState<number>(0.39686);
-  const [epochSecRemaining, setEpochSecRemaining] = useState<number>(860);
-
-  // CryptoQuant Canvas State
-  const [cqTimeframe, setCqTimeframe] = useState<'1D' | '7D' | '1M' | '3M' | '1Y' | 'ALL'>('3M');
-  const [cqHoverIndex, setCqHoverIndex] = useState<number | null>(null);
-  const [cqLiveTick, setCqLiveTick] = useState<number>(0);
-
-  // Leaderboard Compare & Search
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedCompare, setSelectedCompare] = useState<string[]>(['CredX Sovereign stCTC', 'Jito']);
-
-  // Selected Asset Object
-  const selectedAsset = useMemo(() => {
-    return assets.find((a) => a.id === selectedAssetId) || assets[0];
-  }, [assets, selectedAssetId]);
-
-  // Epoch Countdown
+  const chartWrapRef = useRef<HTMLDivElement>(null);
+  const [chartW, setChartW] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => {
-      setEpochSecRemaining((prev) => (prev > 0 ? prev - 1 : 900));
-    }, 1000);
-    return () => clearInterval(timer);
+    const el = chartWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setChartW(el.clientWidth));
+    ro.observe(el);
+    setChartW(el.clientWidth);
+    return () => ro.disconnect();
   }, []);
 
-  // Micro-reward continuous accrual tick & dynamic feed pulse
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setContinuousTick((prev) => prev + 0.0000042 * (selectedAsset.stakedBalance / 100));
-      setCqLiveTick((prev) => prev + 1);
-    }, 250);
-    return () => clearInterval(interval);
-  }, [selectedAsset.stakedBalance]);
+  const demoSigner = useMemo(() => (ROOT_WALLET ? demoWalletSigner(ROOT_WALLET.privateKey) : null), []);
 
-  // Filtered Assets for Top Row Cards with Live Dynamic Period Recalculation
-  const filteredAssets = useMemo(() => {
-    const list = assetFilter === 'all' ? assets : assets.filter((a) => a.category === assetFilter);
-    return list.map((a) => {
-      const activeChange = a.periodChanges ? a.periodChanges[dashboardTimeframe] : a.change24h;
-      const rawSparkline = a.periodSparklines ? a.periodSparklines[dashboardTimeframe] : a.sparklineData;
-      // Inject subtle live tick on the last point to show active streaming connection
-      const activeSparkline = [...rawSparkline];
-      const liveJitter = Math.sin(cqLiveTick * 0.4 + a.priceUSD) * 0.08;
-      activeSparkline[activeSparkline.length - 1] = parseFloat((activeSparkline[activeSparkline.length - 1] + liveJitter).toFixed(2));
+  const pushLog = (line: string) => setTxLog((prev) => [line, ...prev].slice(0, 12));
 
-      return {
-        ...a,
-        activeChange,
-        activeSparkline
-      };
+  const {
+    account,
+    vault,
+    vaultLedger,
+    amm,
+    reg,
+    validators,
+    stakingLedger,
+    cusdBal,
+    depinBal,
+    loading,
+    error,
+    liveBlock,
+    pendingNow,
+    measuredPerBlock,
+    refresh,
+  } = live;
+
+  const staked = vault?.stakedByUser ?? 0;
+  const rewardSymbol = vault?.rewardToken.symbol ?? 'DEPIN';
+  const stakeSymbol = vault?.stakingToken.symbol ?? 'cUSD';
+
+  const myVaultEvents = useMemo(
+    () =>
+      vaultLedger
+        .filter((e) => e.user?.toLowerCase() === account.toLowerCase())
+        .slice()
+        .sort((a, b) => a.block - b.block) as LiquidEventLite[],
+    [vaultLedger, account]
+  );
+
+  const claimedDEPIN = useMemo(
+    () =>
+      myVaultEvents
+        .filter((e) => eventKind(e.type) === 'claim' && e.amount != null)
+        .reduce((a, e) => a + (e.amount ?? 0), 0),
+    [myVaultEvents]
+  );
+
+  // DEPIN price implied by the live ReputationAMM reserves (real quote).
+  const depinPrice = useMemo(() => {
+    if (!amm) return null;
+    const dp = vault?.rewardToken?.address?.toLowerCase();
+    if (!dp) return null;
+    if (amm.token0.address.toLowerCase() === dp) return amm.quote0To1;
+    if (amm.token1.address.toLowerCase() === dp) return amm.quote1To0;
+    return null;
+  }, [amm, vault]);
+
+  const claimedUSD = depinPrice != null ? claimedDEPIN * depinPrice : null;
+  const pendingUSD = depinPrice != null ? pendingNow * depinPrice : null;
+  const pegNow =
+    staked > 0.0001 && claimedUSD != null && pendingUSD != null
+      ? (staked + claimedUSD + pendingUSD) / staked
+      : null;
+
+  const vaultApr =
+    measuredPerBlock > 0 && staked > 0 && depinPrice != null
+      ? ((measuredPerBlock * BLOCKS_PER_YEAR * depinPrice) / staked) * 100
+      : null;
+
+  // Real peg series from the on-chain ledger (approximated at the live AMM price).
+  const pegSeries = useMemo(() => {
+    if (depinPrice == null) return [];
+    let runStaked = 0;
+    let runClaimed = 0;
+    const pts: { t: number; peg: number }[] = [];
+    for (const e of myVaultEvents) {
+      const kind = eventKind(e.type);
+      if (kind === 'stake' && e.amount != null) runStaked += e.amount;
+      else if (kind === 'unstake' && e.amount != null) runStaked -= e.amount;
+      else if (kind === 'claim' && e.amount != null) runClaimed += e.amount;
+      if (runStaked > 0.0001 && e.timestamp > 0) {
+        pts.push({ t: e.timestamp, peg: (runStaked + runClaimed * depinPrice) / runStaked });
+      }
+    }
+    if (staked > 0.0001 && pegNow != null) {
+      pts.push({ t: Date.now() / 1000, peg: pegNow });
+    }
+    return pts;
+  }, [myVaultEvents, depinPrice, staked, pegNow]);
+
+  const ammDepthUsd = useMemo(() => {
+    if (!amm) return null;
+    if (depinPrice == null) return null;
+    const isCusd0 = amm.token0.address.toLowerCase() === vault?.stakingToken?.address?.toLowerCase();
+    return isCusd0 ? amm.reserve0 + amm.reserve1 * depinPrice : amm.reserve1 + amm.reserve0 * depinPrice;
+  }, [amm, depinPrice, vault]);
+
+  const myValidatorStake = useMemo(() => validators.reduce((a, v) => a + v.myStake, 0), [validators]);
+  const myValidatorPending = useMemo(
+    () => validators.reduce((a, v) => a + (v.myStake > 0 ? v.myPendingRewards : 0), 0),
+    [validators]
+  );
+
+  const respSigner = (): 'none' | 'demo' => {
+    if (!demoMode || !demoSigner) return 'none';
+    return 'demo';
+  };
+
+  const runStake = async () => {
+    const amt = parseFloat(vAmount);
+    if (!amt || amt <= 0) {
+      showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
+      return;
+    }
+    if (amt > cusdBal) {
+      showToast('Insufficient balance', `You hold ${fmtNum(cusdBal)} ${stakeSymbol}`, 'warning');
+      return;
+    }
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    setBusy('vault-stake');
+    setModal(null);
+    try {
+      const hash = await vaultStake(amt, demoSigner ?? undefined);
+      pushLog(`tx broadcast: stake ${fmtNum(amt)} ${stakeSymbol} → ReputationYieldVault ${hash.slice(0, 10)}…`);
+      showToast('Stake broadcast', `${fmtNum(amt)} ${stakeSymbol} staked · ${hash.slice(0, 10)}…`, 'success');
+      playSound('success');
+      setVAmount('');
+      await new Promise((r) => setTimeout(r, 1600));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`stake failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Stake failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runUnstake = async () => {
+    const amt = parseFloat(vAmount);
+    if (!amt || amt <= 0) {
+      showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
+      return;
+    }
+    if (amt > staked) {
+      showToast('Insufficient stake', `You have ${fmtNum(staked)} ${stakeSymbol} staked`, 'warning');
+      return;
+    }
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    setBusy('vault-unstake');
+    setModal(null);
+    try {
+      const hash = await vaultUnstake(amt, demoSigner ?? undefined);
+      pushLog(`tx broadcast: unstake ${fmtNum(amt)} ${stakeSymbol} ← ReputationYieldVault ${hash.slice(0, 10)}…`);
+      showToast('Unstake broadcast', `${fmtNum(amt)} ${stakeSymbol} redeemed · ${hash.slice(0, 10)}…`, 'success');
+      playSound('success');
+      setVAmount('');
+      await new Promise((r) => setTimeout(r, 1600));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`unstake failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Unstake failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runClaim = async () => {
+    if (pendingNow <= 0.000001) {
+      showToast('Nothing to claim', `No pending ${rewardSymbol} rewards`, 'warning');
+      return;
+    }
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    setBusy('vault-claim');
+    try {
+      const hash = await vaultClaimRewards(demoSigner ?? undefined);
+      pushLog(`tx broadcast: claimRewards ${fmtNum(pendingNow)} ${rewardSymbol} → ${hash.slice(0, 10)}…`);
+      showToast('Reward claim broadcast', `${fmtNum(pendingNow)} ${rewardSymbol} claimed · ${hash.slice(0, 10)}…`, 'success');
+      playSound('success');
+      await new Promise((r) => setTimeout(r, 1700));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`claim failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Claim failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runCompound = async () => {
+    const claim = pendingNow;
+    if (claim <= 0.000001) {
+      showToast('Nothing to claim', `No pending ${rewardSymbol} rewards`, 'warning');
+      return;
+    }
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    if (!amm || !vault?.rewardToken?.address) {
+      showToast('No AMM depth', 'ReputationAMM is unreachable — claim only', 'warning');
+      return;
+    }
+    const depinAddr = vault.rewardToken.address;
+    const depinReserve =
+      amm.token0.address.toLowerCase() === depinAddr.toLowerCase() ? amm.reserve0 : amm.reserve1;
+    if (claim > depinReserve * 0.08) {
+      showToast(
+        'AMM depth guard',
+        `Swap of ${fmtNum(claim)} ${rewardSymbol} exceeds 8% of real pool depth (${fmtNum(depinReserve)} ${rewardSymbol}) — claim without converting instead.`,
+        'warning'
+      );
+      return;
+    }
+    setBusy('vault-compound');
+    try {
+      const h1 = await vaultClaimRewards(demoSigner ?? undefined);
+      pushLog(`compound 1/3: claimRewards ${fmtNum(claim)} ${rewardSymbol} → ${h1.slice(0, 10)}…`);
+      await new Promise((r) => setTimeout(r, 1200));
+      await refresh();
+      const before = cusdBal;
+      const h2 = await swapViaAMM(claim, depinAddr, account, demoSigner ?? undefined);
+      pushLog(`compound 2/3: swapViaAMM ${fmtNum(claim)} ${rewardSymbol} → ${stakeSymbol} ${h2.slice(0, 10)}…`);
+      await new Promise((r) => setTimeout(r, 1400));
+      await refresh();
+      const gain = Math.max(0, cusdBal - before);
+      if (gain <= 0.000001) {
+        pushLog('compound 3/3: swap returned 0 — staking skipped (honest balance read)');
+        showToast('Compound partial', `Claimed + swapped, but 0 ${stakeSymbol} returned to stake`, 'info');
+      } else {
+        const h3 = await vaultStake(gain, demoSigner ?? undefined);
+        pushLog(`compound 3/3: re-stake ${fmtNum(gain)} ${stakeSymbol} → ${h3.slice(0, 10)}…`);
+        showToast(
+          'Compounded on-chain',
+          `Claimed ${fmtNum(claim)} ${rewardSymbol} → converted → restaked ${fmtNum(gain)} ${stakeSymbol} · ${h3.slice(0, 10)}…`,
+          'success'
+        );
+        playSound('fanfare');
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`compound failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Compound failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runVStake = async () => {
+    if (!modal || modal.kind !== 'vstake') return;
+    const amt = parseFloat(vAmount);
+    if (!amt || amt <= 0) {
+      showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
+      return;
+    }
+    if (amt > depinBal) {
+      showToast('Insufficient balance', `You hold ${fmtNum(depinBal)} ${rewardSymbol}`, 'warning');
+      return;
+    }
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    setBusy(`vstake-${modal.op}`);
+    const op = modal.op;
+    setModal(null);
+    try {
+      const hash = await validatorStakeTo(op, amt, demoSigner ?? undefined);
+      pushLog(`tx broadcast: stakeToValidator ${fmtNum(amt)} ${rewardSymbol} → ${fmtAddr(op)} ${hash.slice(0, 10)}…`);
+      showToast('Validator stake broadcast', `${fmtNum(amt)} ${rewardSymbol} delegated · ${hash.slice(0, 10)}…`, 'success');
+      playSound('success');
+      setVAmount('');
+      await new Promise((r) => setTimeout(r, 1600));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`validator stake failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Validator stake failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runVUnstake = async () => {
+    if (!modal || modal.kind !== 'vunstake') return;
+    const amt = parseFloat(vAmount);
+    if (!amt || amt <= 0) {
+      showToast('Invalid amount', 'Enter a value greater than zero', 'warning');
+      return;
+    }
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    setBusy(`vunstake-${modal.op}`);
+    const op = modal.op;
+    setModal(null);
+    try {
+      const hash = await validatorUnstakeFrom(op, amt, demoSigner ?? undefined);
+      pushLog(`tx broadcast: unstakeFromValidator ${fmtNum(amt)} ${rewardSymbol} ← ${fmtAddr(op)} ${hash.slice(0, 10)}…`);
+      showToast('Validator unstake broadcast', `${fmtNum(amt)} ${rewardSymbol} redeemed · ${hash.slice(0, 10)}…`, 'success');
+      playSound('success');
+      setVAmount('');
+      await new Promise((r) => setTimeout(r, 1600));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`validator unstake failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Validator unstake failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const runVClaim = async (op: string, tag: string) => {
+    if (respSigner() === 'none') {
+      showToast('Signing disabled', 'Enable the seeded live demo wallet to sign testnet txs', 'warning');
+      return;
+    }
+    setBusy(`vclaim-${op}`);
+    try {
+      const hash = await validatorClaimRewards(op, demoSigner ?? undefined);
+      pushLog(`tx broadcast: claimRewards → validator ${tag} ${hash.slice(0, 10)}…`);
+      showToast('Validator claim broadcast', `${tag} rewards claimed · ${hash.slice(0, 10)}…`, 'success');
+      playSound('success');
+      await new Promise((r) => setTimeout(r, 1600));
+      await refresh();
+    } catch (err: any) {
+      pushLog(`validator claim failed — ${err?.reason || err?.message || 'reverted'}`);
+      showToast('Validator claim failed', err?.reason || err?.message || 'Transaction reverted', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const toggleCompare = (id: number) => {
+    setCompare((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      return prev.length >= 2 ? prev : [...prev, id];
     });
-  }, [assets, assetFilter, dashboardTimeframe, cqLiveTick]);
-
-  // Dynamic Investment Return Calculation
-  const periodMultiplier = useMemo(() => {
-    switch (investmentMonths) {
-      case 1: return { days: 30, bonusApy: 0.0, label: '1 Month' };
-      case 3: return { days: 90, bonusApy: 0.25, label: '3 Months' };
-      case 6: return { days: 180, bonusApy: 0.62, label: '6 Months' };
-      case 12: return { days: 365, bonusApy: 1.40, label: '1 Year' };
-      default: return { days: 90, bonusApy: 0.25, label: '3 Months' };
-    }
-  }, [investmentMonths]);
-
-  const effectiveApy = selectedAsset.rewardRate + periodMultiplier.bonusApy;
-  const projectedReturnTokens = (selectedAsset.stakedBalance * (effectiveApy / 100) * (periodMultiplier.days / 365));
-  const projectedReturnUSD = projectedReturnTokens * selectedAsset.priceUSD;
-
-  // ─── Global Liquid Staking Leaderboard (Updated Real-World DefiLlama Dataset) ─
-  const lstProtocols: LSTLeaderboardProtocol[] = [
-    {
-      rank: 1,
-      name: 'CredX Sovereign stCTC',
-      symbol: 'stCTC',
-      chain: 'Creditcoin L1',
-      chainCount: '1 chain',
-      change1d: 8.42,
-      change7d: 26.30,
-      change1m: 41.10,
-      tvl: '$4,120b',
-      tvlNumeric: 4120,
-      apy: 7.80,
-      isCredX: true
-    },
-    {
-      rank: 2,
-      name: 'Lido',
-      symbol: 'stETH',
-      chain: 'Ethereum',
-      chainCount: '6 chains',
-      change1d: 2.15,
-      change7d: 8.40,
-      change1m: 14.80,
-      tvl: '$32,480b',
-      tvlNumeric: 32480,
-      apy: 3.35
-    },
-    {
-      rank: 3,
-      name: 'Jito',
-      symbol: 'JitoSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 7.88,
-      change7d: 24.51,
-      change1m: 36.41,
-      tvl: '$3,895b',
-      tvlNumeric: 3895,
-      apy: 7.88
-    },
-    {
-      rank: 4,
-      name: 'ether.fi',
-      symbol: 'weETH',
-      chain: 'Ethereum',
-      chainCount: '8 chains',
-      change1d: 3.45,
-      change7d: 14.20,
-      change1m: 29.50,
-      tvl: '$6,420b',
-      tvlNumeric: 6420,
-      apy: 3.82
-    },
-    {
-      rank: 5,
-      name: 'Binance Staked SOL',
-      symbol: 'bSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 6.18,
-      change7d: 12.94,
-      change1m: 50.45,
-      tvl: '$1,933b',
-      tvlNumeric: 1933,
-      apy: 6.95
-    },
-    {
-      rank: 6,
-      name: 'Sanctum Validator LST',
-      symbol: 'INF',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 7.23,
-      change7d: 24.16,
-      change1m: 38.51,
-      tvl: '$1,666b',
-      tvlNumeric: 1666,
-      apy: 7.40
-    },
-    {
-      rank: 7,
-      name: 'Rocket Pool',
-      symbol: 'rETH',
-      chain: 'Ethereum',
-      chainCount: '2 chains',
-      change1d: 1.80,
-      change7d: 5.60,
-      change1m: 9.40,
-      tvl: '$2,840b',
-      tvlNumeric: 2840,
-      apy: 3.12
-    },
-    {
-      rank: 8,
-      name: 'Marinade Liquid Staking',
-      symbol: 'mSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 6.86,
-      change7d: 21.70,
-      change1m: 26.47,
-      tvl: '$1,429b',
-      tvlNumeric: 1429,
-      apy: 6.82
-    },
-    {
-      rank: 9,
-      name: 'Jupiter Staked SOL',
-      symbol: 'JupSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 7.06,
-      change7d: 22.12,
-      change1m: 35.97,
-      tvl: '$1,029b',
-      tvlNumeric: 1029,
-      apy: 7.35
-    },
-    {
-      rank: 10,
-      name: 'BENQI Liquid Staking',
-      symbol: 'sAVAX',
-      chain: 'Avalanche',
-      chainCount: '1 chain',
-      change1d: 5.40,
-      change7d: 18.20,
-      change1m: 22.80,
-      tvl: '$685,40m',
-      tvlNumeric: 685.4,
-      apy: 5.92
-    },
-    {
-      rank: 11,
-      name: 'BlazeStake',
-      symbol: 'bSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 6.81,
-      change7d: 21.17,
-      change1m: 17.93,
-      tvl: '$316,34m',
-      tvlNumeric: 316.34,
-      apy: 7.12
-    },
-    {
-      rank: 12,
-      name: 'The Vault',
-      symbol: 'vSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 7.01,
-      change7d: 24.25,
-      change1m: 36.79,
-      tvl: '$290,66m',
-      tvlNumeric: 290.66,
-      apy: 6.90
-    },
-    {
-      rank: 13,
-      name: 'Bybit Staked SOL',
-      symbol: 'bbSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 9.51,
-      change7d: 40.58,
-      change1m: 63.02,
-      tvl: '$258,12m',
-      tvlNumeric: 258.12,
-      apy: 7.50
-    },
-    {
-      rank: 14,
-      name: 'Edgevana',
-      symbol: 'edgeSOL',
-      chain: 'Solana',
-      chainCount: '1 chain',
-      change1d: 7.02,
-      change7d: 21.76,
-      change1m: 34.22,
-      tvl: '$207,62m',
-      tvlNumeric: 207.62,
-      apy: 7.05
-    }
-  ];
-
-  const filteredProtocols = useMemo(() => {
-    return lstProtocols.filter(
-      (p) =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.chain.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [searchQuery]);
-
-  // ─── Dynamic CryptoQuant Data Generator (Depends on `cqTimeframe` & live ticks)
-  const cqData = useMemo(() => {
-    const points: Array<{
-      date: string;
-      pegPrice: number;
-      liquidationBufferUSD: number;
-      isAlertTrigger?: boolean;
-    }> = [];
-
-    let dateList: string[] = [];
-    let startPeg = 1.0000;
-    let endPeg = 1.0428;
-    let baseLiqMultiplier = 1.0;
-    let totalSteps = 48;
-
-    switch (cqTimeframe) {
-      case '1D':
-        dateList = ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00', 'Now'];
-        startPeg = 1.0418;
-        endPeg = 1.0428;
-        baseLiqMultiplier = 0.25;
-        totalSteps = 24;
-        break;
-      case '7D':
-        dateList = ['Day 1', 'Day 2', 'Day 3', 'Day 4', 'Day 5', 'Day 6', 'Today'];
-        startPeg = 1.0375;
-        endPeg = 1.0428;
-        baseLiqMultiplier = 0.45;
-        totalSteps = 35;
-        break;
-      case '1M':
-        dateList = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Today'];
-        startPeg = 1.0250;
-        endPeg = 1.0428;
-        baseLiqMultiplier = 0.75;
-        totalSteps = 45;
-        break;
-      case '3M':
-        dateList = ['Jan 9', 'Jan 23', 'Feb 13', 'Mar 6', 'Mar 27', 'Apr 17', 'May 8', 'Jun 5'];
-        startPeg = 1.0080;
-        endPeg = 1.0428;
-        baseLiqMultiplier = 1.0;
-        totalSteps = 60;
-        break;
-      case '1Y':
-        dateList = ['Q1 2025', 'Q2 2025', 'Q3 2025', 'Q4 2025', 'Q1 2026', 'Today'];
-        startPeg = 1.0000;
-        endPeg = 1.0428;
-        baseLiqMultiplier = 1.15;
-        totalSteps = 60;
-        break;
-      case 'ALL':
-        dateList = ['Genesis', 'Epoch 2K', 'Epoch 5K', 'Epoch 8K', 'Epoch 11K', 'Epoch 14K (Now)'];
-        startPeg = 1.0000;
-        endPeg = 1.0428;
-        baseLiqMultiplier = 1.25;
-        totalSteps = 70;
-        break;
-    }
-
-    for (let i = 0; i < totalSteps; i++) {
-      const progress = i / (totalSteps - 1);
-      const dateIdx = Math.floor(progress * (dateList.length - 1));
-      const date = dateList[dateIdx] || dateList[0];
-
-      // Dynamic curve with micro oscillations
-      const basePeg = startPeg + progress * (endPeg - startPeg);
-      const liveNoise = Math.sin(i * 0.5 + cqLiveTick * 0.05) * 0.0004;
-      const pegPrice = Math.max(startPeg - 0.001, basePeg + liveNoise);
-
-      // Liquidation bars
-      let liqBuffer = (2 + Math.abs(Math.sin(i * 0.8) * 12) + (Math.sin(i * 1.5) * 4)) * baseLiqMultiplier;
-      let isAlert = false;
-
-      // Spike triggers depending on timeframe
-      if (cqTimeframe === '3M' && (i === 18 || i === 42 || i === 56)) {
-        liqBuffer = 38.0 + (i === 18 ? 4.4 : 0);
-        isAlert = true;
-      } else if (cqTimeframe === '1M' && (i === 12 || i === 34)) {
-        liqBuffer = 26.5;
-        isAlert = true;
-      } else if (cqTimeframe === '1D' && i === 18) {
-        liqBuffer = 9.8;
-        isAlert = true;
-      }
-
-      points.push({
-        date,
-        pegPrice: parseFloat(pegPrice.toFixed(4)),
-        liquidationBufferUSD: parseFloat(Math.max(1, liqBuffer).toFixed(1)),
-        isAlertTrigger: isAlert
-      });
-    }
-
-    return points;
-  }, [cqTimeframe, cqLiveTick]);
-
-  // Real-Time Dynamic Indicators for Selected Timeframe
-  const cqTimeframeMetrics = useMemo(() => {
-    switch (cqTimeframe) {
-      case '1D':
-        return {
-          pegChangePct: '+0.12%',
-          totalVolume: '$14.28M USD',
-          peakLiquidation: '$9.80M USD',
-          eventCount: 1,
-          feedIngestion: `+$${(42 + (cqLiveTick % 5) * 1.8).toFixed(1)}K / min`,
-          stressStatus: 'Low Liquidation Volatility',
-          stressColor: 'text-emerald-400',
-          timelineLabel: 'Past 24 Hours • 5m Granularity'
-        };
-      case '7D':
-        return {
-          pegChangePct: '+0.58%',
-          totalVolume: '$48.62M USD',
-          peakLiquidation: '$18.50M USD',
-          eventCount: 3,
-          feedIngestion: `+$${(120 + (cqLiveTick % 7) * 3.2).toFixed(1)}K / hr`,
-          stressStatus: 'Moderate Stress Absorption',
-          stressColor: 'text-cyan-400',
-          timelineLabel: 'Past 7 Days • 1h Granularity'
-        };
-      case '1M':
-        return {
-          pegChangePct: '+1.85%',
-          totalVolume: '$142.80M USD',
-          peakLiquidation: '$26.50M USD',
-          eventCount: 6,
-          feedIngestion: `+$${(1.4 + (cqLiveTick % 4) * 0.05).toFixed(2)}M / day`,
-          stressStatus: '100% Slashed Debt Neutralized',
-          stressColor: 'text-emerald-400',
-          timelineLabel: 'Past 30 Days • Daily Aggregates'
-        };
-      case '3M':
-        return {
-          pegChangePct: '+3.48%',
-          totalVolume: '$385.40M USD',
-          peakLiquidation: '$42.40M USD',
-          eventCount: 12,
-          feedIngestion: `+$${(4.2 + (cqLiveTick % 6) * 0.08).toFixed(2)}M / day`,
-          stressStatus: 'Historical Stress Tests Absorbed',
-          stressColor: 'text-amber-400',
-          timelineLabel: 'Past 90 Days • Epoch Consensus'
-        };
-      case '1Y':
-        return {
-          pegChangePct: '+4.28%',
-          totalVolume: '$1.240B USD',
-          peakLiquidation: '$44.20M USD',
-          eventCount: 28,
-          feedIngestion: `+$${(18.5 + (cqLiveTick % 5) * 0.2).toFixed(1)}M / wk`,
-          stressStatus: 'Zero-Slashing Loss Monotonic Growth',
-          stressColor: 'text-emerald-400',
-          timelineLabel: 'Annual Cycle • Weekly Resolution'
-        };
-      case 'ALL':
-        return {
-          pegChangePct: '+4.28%',
-          totalVolume: '$4.120B USD',
-          peakLiquidation: '$46.80M USD',
-          eventCount: 41,
-          feedIngestion: `+$${(62.0 + (cqLiveTick % 8) * 0.5).toFixed(1)}M / mo`,
-          stressStatus: 'Genesis-to-Date 100% Invariant',
-          stressColor: 'text-purple-400',
-          timelineLabel: 'Genesis to L1 Epoch #14,291'
-        };
-    }
-  }, [cqTimeframe, cqLiveTick]);
-
-  // ─── CryptoQuant Canvas Rendering ──────────────────────────────────────────
-  const cqCanvasRef = useRef<HTMLCanvasElement | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== 'cryptoquant') return;
-    const canvas = cqCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    let animId: number;
-
-    const render = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const width = canvas.clientWidth || 800;
-      const height = canvas.clientHeight || 320;
-
-      if (width > 0 && height > 0) {
-        if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-          canvas.width = width * dpr;
-          canvas.height = height * dpr;
-        }
-
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        ctx.clearRect(0, 0, width, height);
-
-        // Dark Terminal Background
-        ctx.fillStyle = '#050a0f';
-        ctx.fillRect(0, 0, width, height);
-
-        const padL = 40;
-        const padR = 55;
-        const padT = 25;
-        const padB = 30;
-        const plotW = width - padL - padR;
-        const plotH = height - padT - padB;
-
-        const count = cqData.length;
-        if (count < 2) {
-          ctx.restore();
-          return;
-        }
-
-        const getX = (idx: number) => padL + (idx / (count - 1)) * plotW;
-
-        // Liquidation Bar Y Scale (0 to 50M USD)
-        const maxLiq = 50;
-        const getLiqY = (val: number) => padT + plotH - (val / maxLiq) * plotH;
-
-        // Peg Price Y Scale (1.000 to 1.050)
-        const minPeg = 1.000;
-        const maxPeg = 1.050;
-        const getPegY = (val: number) => padT + plotH - ((val - minPeg) / (maxPeg - minPeg)) * plotH;
-
-        // Horizontal Gridlines
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.lineWidth = 1;
-        for (let g = 0; g <= 4; g++) {
-          const y = padT + (g / 4) * plotH;
-          ctx.beginPath();
-          ctx.moveTo(padL, y);
-          ctx.lineTo(padL + plotW, y);
-          ctx.stroke();
-
-          // Left Y Axis (Liquidation Volume $M)
-          const valM = Math.round(maxLiq * (1 - g / 4));
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-          ctx.font = '8.5px monospace';
-          ctx.textAlign = 'right';
-          ctx.fillText(`${valM}M`, padL - 6, y + 3);
-
-          // Right Y Axis (Peg Price)
-          const pegVal = (minPeg + (1 - g / 4) * (maxPeg - minPeg)).toFixed(3);
-          ctx.fillStyle = 'rgba(0, 242, 254, 0.7)';
-          ctx.textAlign = 'left';
-          ctx.fillText(`${pegVal}`, padL + plotW + 6, y + 3);
-        }
-
-        // 1. Draw Green Liquidation Defense Absorption Bars
-        const barWidth = Math.max(2, (plotW / count) * 0.65);
-        cqData.forEach((pt, i) => {
-          const x = getX(i) - barWidth / 2;
-          const y = getLiqY(pt.liquidationBufferUSD);
-          const barH = padT + plotH - y;
-
-          // Gradient bar fill
-          const grad = ctx.createLinearGradient(0, y, 0, padT + plotH);
-          if (pt.isAlertTrigger) {
-            grad.addColorStop(0, '#10b981');
-            grad.addColorStop(1, 'rgba(16, 185, 129, 0.15)');
-          } else {
-            grad.addColorStop(0, 'rgba(16, 185, 129, 0.65)');
-            grad.addColorStop(1, 'rgba(16, 185, 129, 0.05)');
-          }
-
-          ctx.fillStyle = grad;
-          ctx.fillRect(x, y, barWidth, barH);
-
-          // Red Alert Rings for Historical Slashed Absorptions
-          if (pt.isAlertTrigger) {
-            ctx.save();
-            ctx.strokeStyle = 'rgba(244, 63, 94, 0.85)';
-            ctx.lineWidth = 1.8;
-            ctx.setLineDash([3, 3]);
-            ctx.beginPath();
-            ctx.arc(x + barWidth / 2, y, 7.5, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.restore();
-          }
-        });
-
-        // 2. Draw White Stepped / Smooth Peg Price Line
-        ctx.save();
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 2.4;
-        ctx.shadowColor = 'rgba(255, 255, 255, 0.75)';
-        ctx.shadowBlur = 8;
-        ctx.beginPath();
-
-        cqData.forEach((pt, i) => {
-          const x = getX(i);
-          const y = getPegY(pt.pegPrice);
-          if (i === 0) ctx.moveTo(x, y);
-          else {
-            // Smooth curve
-            const prevX = getX(i - 1);
-            const prevY = getPegY(cqData[i - 1].pegPrice);
-            const midX = (prevX + x) / 2;
-            ctx.bezierCurveTo(midX, prevY, midX, y, x, y);
-          }
-        });
-        ctx.stroke();
-        ctx.restore();
-
-        // End beacon tag on the peg line
-        if (count > 0) {
-          const lastX = getX(count - 1);
-          const lastY = getPegY(cqData[count - 1].pegPrice);
-
-          ctx.fillStyle = '#00f2fe';
-          ctx.shadowColor = '#00f2fe';
-          ctx.shadowBlur = 10;
-          ctx.beginPath();
-          ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
-          ctx.fill();
-
-          // End price tag
-          ctx.save();
-          const tagW = 56;
-          const tagH = 16;
-          ctx.fillStyle = 'rgba(0, 242, 254, 0.15)';
-          ctx.strokeStyle = '#00f2fe';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.roundRect(lastX - tagW - 6, lastY - tagH / 2, tagW, tagH, 4);
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = '#00f2fe';
-          ctx.font = 'bold 8.5px monospace';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(`$${cqData[count - 1].pegPrice.toFixed(4)} ↗`, lastX - tagW / 2 - 6, lastY);
-          ctx.restore();
-        }
-
-        // Interactive Crosshair & Tooltip
-        if (cqHoverIndex !== null && cqData[cqHoverIndex]) {
-          const hPt = cqData[cqHoverIndex];
-          const hX = getX(cqHoverIndex);
-          const hY = getPegY(hPt.pegPrice);
-
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-          ctx.setLineDash([2, 2]);
-          ctx.beginPath();
-          ctx.moveTo(hX, padT);
-          ctx.lineTo(hX, padT + plotH);
-          ctx.stroke();
-          ctx.setLineDash([]);
-
-          ctx.fillStyle = '#00f2fe';
-          ctx.beginPath();
-          ctx.arc(hX, hY, 4.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // X-Axis Timeline Labels
-        const labelInterval = Math.max(1, Math.floor(count / 6));
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.font = '9px monospace';
-        for (let idx = 0; idx < count; idx += labelInterval) {
-          if (cqData[idx]) {
-            const x = getX(idx);
-            ctx.fillText(cqData[idx].date, x - 12, height - 10);
-          }
-        }
-
-        // Live Feed Watermark
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-        ctx.font = '9px monospace';
-        ctx.fillText(`CredX Peg Telemetry [${cqTimeframe} Active Feed]`, width - 230, height - 10);
-
-        ctx.restore();
-      }
-
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-    return () => cancelAnimationFrame(animId);
-  }, [activeTab, cqData, cqHoverIndex, cqTimeframe]);
-
-  const handleCanvasMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = cqCanvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const padL = 40;
-    const padR = 55;
-    const plotW = rect.width - padL - padR;
-
-    if (x < padL || x > rect.width - padR) {
-      setCqHoverIndex(null);
-      return;
-    }
-
-    const frac = (x - padL) / plotW;
-    const idx = Math.min(cqData.length - 1, Math.max(0, Math.round(frac * (cqData.length - 1))));
-    setCqHoverIndex(idx);
   };
 
-  // ─── Real-Time Multi-Asset Staking & Unstaking Execution ───────────────────
-  const handleExecuteStake = () => {
-    const num = parseFloat(stakeInput);
-    if (isNaN(num) || num <= 0) {
-      showToast('Invalid Amount', 'Please enter a valid stake amount.', 'error');
-      return;
-    }
+  const sortedValidators = useMemo(
+    () => [...validators].sort((a, b) => b.totalStaked - a.totalStaked),
+    [validators]
+  );
 
-    if (num > selectedAsset.walletBalance) {
-      showToast('Insufficient Balance', `You have ${selectedAsset.walletBalance.toLocaleString()} ${selectedAsset.nativeSymbol} available in your wallet.`, 'error');
-      return;
-    }
+  const compareRows = compare.map((id) => sortedValidators.find((v) => v.validatorId === id)).filter(Boolean);
 
-    // Update state reactively for the specific selected asset
-    setAssets((prev) =>
-      prev.map((a) => {
-        if (a.id === selectedAsset.id) {
-          return {
-            ...a,
-            walletBalance: a.walletBalance - num,
-            stakedBalance: a.stakedBalance + num
-          };
-        }
-        return a;
-      })
-    );
-
-    playSound('fanfare');
-    boostScore(25, `${selectedAsset.symbol} Liquid Staking Mint`);
-
-    showToast(
-      'Mint Successful',
-      `Staked ${num.toLocaleString()} ${selectedAsset.nativeSymbol} and minted ${num.toLocaleString()} ${selectedAsset.symbol} (+25 CTS Points)!`,
-      'success'
-    );
-    setActionModal(null);
-  };
-
-  const handleExecuteUnstake = () => {
-    const num = parseFloat(unstakeInput);
-    if (isNaN(num) || num <= 0) {
-      showToast('Invalid Amount', 'Please enter a valid unstake amount.', 'error');
-      return;
-    }
-
-    if (num > selectedAsset.stakedBalance) {
-      showToast('Exceeds Staked Balance', `You have ${selectedAsset.stakedBalance.toLocaleString()} ${selectedAsset.symbol} staked.`, 'error');
-      return;
-    }
-
-    // Update state reactively
-    setAssets((prev) =>
-      prev.map((a) => {
-        if (a.id === selectedAsset.id) {
-          return {
-            ...a,
-            walletBalance: a.walletBalance + num,
-            stakedBalance: a.stakedBalance - num
-          };
-        }
-        return a;
-      })
-    );
-
-    playSound('success');
-    showToast(
-      'Instant 0-Slip Unstake Complete',
-      `Swapped ${num.toLocaleString()} ${selectedAsset.symbol} back to ${selectedAsset.nativeSymbol} via the 0-slippage unbonding reserve.`,
-      'info'
-    );
-    setActionModal(null);
-  };
-
-  const toggleCompare = (protocolName: string) => {
-    setSelectedCompare((prev) =>
-      prev.includes(protocolName) ? prev.filter((p) => p !== protocolName) : [...prev, protocolName]
-    );
-  };
+  const isBusy = (key: string) => busy === key;
 
   return (
     <div className="space-y-6 font-sans select-none text-slate-200">
-      {/* SIMULATED banner */}
-      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
-        <SimulationBadge
-          label="SIMULATED LIQUID STAKING"
-          note="stCTC mint, peg solvency and ledger are local simulations — no liquid staking contract is deployed on Creditcoin testnet."
-        />
+      {/* LIVE banner */}
+      <div className="flex items-start gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-emerald-200/80">
+        <ShieldCheck className="w-4 h-4 mt-0.5 shrink-0 text-emerald-400" />
         <span className="font-mono">
-          Staking amounts, APYs, epoch counts and the peg-solvency ledger are locally simulated;
-          no liquid-staking contract exists on testnet. Global leaderboard rows are a static
-          DefiLlama-inspired dataset.
+          LIVE ON-CHAIN LIQUID STAKING — all balances, peg ratio and APY are read in real time from the Creditcoin
+          testnet ReputationYieldVault, ReputationAMM and ValidatorStakingRegistry. Every Stake / Unstake / Claim
+          button broadcasts a real testnet transaction signed by the bundled seeded wallet.
         </span>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          HEADER: Master Status & Enterprise Sub-Navigation
-         ═══════════════════════════════════════════════════════════════════ */}
+      {/* HEADER */}
       <div className="p-6 rounded-3xl bg-gradient-to-r from-[#03131c] via-[#041a26] to-[#020b12] border border-cyan-500/25 shadow-2xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="space-y-1">
@@ -1183,46 +658,50 @@ export const LiquidStakingView: React.FC = () => {
                 Creditcoin L1 Consensus
               </span>
             </div>
-            <p className="text-xs text-slate-400 max-w-2xl">
-              Stake 12 multi-chain crypto assets (CTC, ETH, SOL, BNB, AVAX, SUI, POL, ATOM, NEAR, APT, HBAR, MNT) to mint liquid yield tokens, earning continuous validator consensus rewards while retaining 100% portable collateral value for zero-collateral credit loans with zero unbonding lockups.
+            <p className="text-xs text-slate-400 max-w-3xl">
+              Two real on-chain staking products: mint <b className="text-cyan-300">stCTC</b> by staking cUSD into the
+              ReputationYieldVault (real DEPIN rewards, optional AMM auto-compound), and delegate DEPIN to live
+              validators on the ValidatorStakingRegistry. No simulations — every ledger row is a real event.
             </p>
           </div>
 
-          {/* Quick Metrics & Live Epoch Countdown */}
           <div className="flex items-center gap-2.5 font-mono text-xs">
             <div className="p-2.5 rounded-xl bg-black/60 border border-cyan-500/20 text-center">
-              <span className="text-[10px] text-slate-400 block">L1 Epoch</span>
-              <span className="text-white font-bold">#14,291</span>
+              <span className="text-[10px] text-slate-400 block">Live Block</span>
+              <span className="text-white font-bold">{fmtNum(liveBlock, 0)}</span>
             </div>
             <div className="p-2.5 rounded-xl bg-black/60 border border-cyan-500/20 text-center">
-              <span className="text-[10px] text-slate-400 block">Next Epoch</span>
-              <span className="text-cyan-300 font-bold">{Math.floor(epochSecRemaining / 60)}m {epochSecRemaining % 60}s</span>
+              <span className="text-[10px] text-slate-400 block">DEPIN Price</span>
+              <span className="text-cyan-300 font-bold">{depinPrice != null ? `${depinPrice.toFixed(4)} cUSD` : '—'}</span>
             </div>
             <div className="p-2.5 rounded-xl bg-black/60 border border-emerald-500/20 text-center">
               <span className="text-[10px] text-emerald-400 block">stCTC Peg</span>
-              <span className="text-emerald-300 font-bold">1.0428 : 1.0</span>
+              <span className="text-emerald-300 font-bold">{pegNow != null ? `${pegNow.toFixed(4)} : 1.0` : '—'}</span>
             </div>
             <div className="p-2.5 rounded-xl bg-black/60 border border-purple-500/20 text-center">
-              <span className="text-[10px] text-purple-400 block">Global TVL</span>
-              <span className="text-purple-300 font-bold">$4.120B</span>
+              <span className="text-[10px] text-purple-400 block">Global Staked</span>
+              <span className="text-purple-300 font-bold">
+                {reg?.totalStaked != null ? `${fmtNum(reg.totalStaked, 0)} DEPIN` : '—'}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* View Mode Tabs */}
         <div className="flex items-center gap-2 pt-2 border-t border-cyan-500/15">
-          {[
-            { id: 'overview', label: 'Staking Dashboard & Portfolio', icon: Sliders },
-            { id: 'cryptoquant', label: 'Peg Solvency & Liquidation Defense (CryptoQuant)', icon: Activity },
-            { id: 'leaderboard', label: 'Global LST Leaderboard (DefiLlama)', icon: BarChart3 },
-          ].map((tab) => {
+          {(
+            [
+              { id: 'overview', label: 'Staking Dashboard & Portfolio', icon: Sliders },
+              { id: 'peg', label: 'Peg Solvency & Liquidity Depth', icon: Activity },
+              { id: 'leaderboard', label: 'Live Validator Leaderboard', icon: BarChart3 },
+            ] as const
+          ).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (
               <button
                 key={tab.id}
                 onClick={() => {
-                  setActiveTab(tab.id as any);
+                  setActiveTab(tab.id);
                   playSound('click');
                 }}
                 className={`px-3.5 py-2 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 cursor-pointer ${
@@ -1236,877 +715,761 @@ export const LiquidStakingView: React.FC = () => {
               </button>
             );
           })}
+          <div className="ml-auto flex items-center gap-2 text-[10px] font-mono">
+            <span className="text-slate-500">
+              Operating as <span className="text-cyan-300">{fmtAddr(account)}</span>
+            </span>
+            <button
+              onClick={() => {
+                setDemoMode((m) => !m);
+                playSound('click');
+              }}
+              className={`px-2.5 py-1 rounded-lg border transition cursor-pointer ${
+                demoMode
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                  : 'bg-white/5 border-white/15 text-slate-400'
+              }`}
+            >
+              {demoMode ? 'Demo wallet: ON (signs txs)' : 'Demo wallet: OFF'}
+            </button>
+            {error && (
+              <span className="flex items-center gap-1 text-rose-300">
+                <AlertTriangle className="w-3.5 h-3.5" /> RPC error
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION 1: TOP STAKING ASSETS & PORTFOLIO HERO CARD
-         ═══════════════════════════════════════════════════════════════════ */}
+      {/* OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          {/* Top Staking Assets Row + CredX Sovereign Vault Card */}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
-            {/* Left: Top Staking Assets Multi-Card Grid (xl:col-span-8) */}
-            <div className="xl:col-span-8 rounded-3xl p-5 bg-[#020d14] border border-cyan-500/20 shadow-xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
-                      <Sparkles className="w-4 h-4 text-cyan-400" />
-                      Top Staking Assets
-                    </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                      Live Stream ({cqLiveTick})
-                    </span>
-                  </div>
-                  <span className="text-[11px] text-slate-400">Click any asset card below to load into the active staking terminal.</span>
+            {/* Left: Wallet balances + stCTC product */}
+            <div className="xl:col-span-7 rounded-3xl p-5 bg-[#020d14] border border-cyan-500/20 shadow-xl space-y-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                    <Layers className="w-4 h-4 text-cyan-400" />
+                    stCTC — cUSD Yield Vault
+                  </h3>
+                  <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                    Live on-chain
+                  </span>
                 </div>
+                <button
+                  onClick={() => {
+                    playSound('click');
+                    refresh();
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] font-mono text-slate-300 hover:text-white transition cursor-pointer flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              </div>
 
-                {/* Controls: Category Filter + Timeframe Switcher */}
-                <div className="flex flex-wrap items-center gap-2 font-mono text-[10px]">
-                  {/* Category Filter */}
-                  <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10">
-                    <button
-                      onClick={() => setAssetFilter('all')}
-                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                        assetFilter === 'all'
-                          ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      All ({assets.length})
-                    </button>
-                    <button
-                      onClick={() => setAssetFilter('pos')}
-                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                        assetFilter === 'pos'
-                          ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      Proof of Stake ({assets.filter((a) => a.category === 'pos').length})
-                    </button>
-                    <button
-                      onClick={() => setAssetFilter('defi')}
-                      className={`px-2.5 py-1 rounded-lg transition cursor-pointer ${
-                        assetFilter === 'defi'
-                          ? 'bg-cyan-500 text-slate-950 font-black shadow-md'
-                          : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      DeFi LSTs ({assets.filter((a) => a.category === 'defi').length})
-                    </button>
-                  </div>
-
-                  {/* Dynamic Timeframe Switcher for Staking Dashboard */}
-                  <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10">
-                    {(['1D', '7D', '1M', '1Y'] as const).map((tf) => (
-                      <button
-                        key={tf}
-                        onClick={() => {
-                          setDashboardTimeframe(tf);
-                          playSound('click');
-                        }}
-                        className={`px-2 py-1 rounded-lg transition cursor-pointer ${
-                          dashboardTimeframe === tf
-                            ? 'bg-emerald-500 text-slate-950 font-black shadow-md'
-                            : 'text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {tf === '1D' ? '24h' : tf}
-                      </button>
-                    ))}
-                  </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="p-3 rounded-2xl bg-black/50 border border-emerald-500/20">
+                  <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
+                    <Wallet className="w-3 h-3" /> Staked
+                  </span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(staked, 2)}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">{stakeSymbol}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-black/50 border border-amber-500/20">
+                  <span className="text-[10px] text-amber-400 flex items-center gap-1 font-mono">
+                    <Clock className="w-3 h-3" /> Claimable
+                  </span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(pendingNow, 2)}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">{rewardSymbol}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-black/50 border border-cyan-500/20">
+                  <span className="text-[10px] text-cyan-400 flex items-center gap-1 font-mono">
+                    <CheckCircle2 className="w-3 h-3" /> Claimed (ledger)
+                  </span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(claimedDEPIN, 2)}</span>
+                  <span className="block text-[10px] text-slate-400 font-mono">{rewardSymbol}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-black/50 border border-purple-500/20">
+                  <span className="text-[10px] text-purple-400 flex items-center gap-1 font-mono">
+                    <Percent className="w-3 h-3" /> Measured APY
+                  </span>
+                  <span className="text-lg font-bold text-white font-mono">
+                    {vaultApr != null ? `${vaultApr.toFixed(2)}%` : '—'}
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-mono">from live reward accrual</span>
                 </div>
               </div>
 
-              {/* Asset Cards Grid (Clickable to switch active staking position) */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 max-h-[520px] overflow-y-auto pr-1">
-                {filteredAssets.map((asset) => {
-                  const isSelected = selectedAssetId === asset.id;
-                  return (
-                    <div
-                      key={asset.id}
-                      onClick={() => {
-                        setSelectedAssetId(asset.id);
-                        setStakeInput((asset.walletBalance * 0.25).toFixed(2));
-                        setUnstakeInput((asset.stakedBalance * 0.25).toFixed(2));
-                        playSound('click');
-                        showToast(
-                          'Active Staking Asset Selected',
-                          `Loaded ${asset.name} (${asset.symbol}) into the active staking terminal.`,
-                          'info'
-                        );
-                      }}
-                      className={`p-4 rounded-2xl transition-all cursor-pointer relative overflow-hidden flex flex-col justify-between h-[165px] border ${
-                        isSelected
-                          ? 'bg-[#031c26] border-2 border-cyan-400 shadow-[0_0_20px_rgba(0,242,254,0.25)] scale-[1.02]'
-                          : 'bg-black/50 border-white/10 hover:border-cyan-500/40 hover:bg-[#03151f]'
-                      }`}
-                    >
-                      {/* Top Header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <div
-                            className="w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs"
-                            style={{ backgroundColor: `${asset.color}20`, color: asset.color }}
-                          >
-                            {asset.symbol.slice(0, 2)}
-                          </div>
-                          <div>
-                            <span className="text-[9px] text-slate-400 block font-mono uppercase">{asset.categoryLabel} &bull; {asset.chain}</span>
-                            <span className="text-xs font-bold text-white truncate max-w-[120px] block">{asset.name}</span>
-                          </div>
-                        </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setVAmount('');
+                    setModal({ kind: 'stake' });
+                    playSound('click');
+                  }}
+                  disabled={isBusy('vault-stake') || isBusy('vault-compound') || isBusy('vault-claim') || isBusy('vault-unstake')}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-xs font-mono font-bold hover:bg-cyan-500/30 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Lock className="w-3.5 h-3.5" aria-hidden /> Stake {stakeSymbol}
+                </button>
+                <button
+                  onClick={() => {
+                    setVAmount('');
+                    setModal({ kind: 'unstake' });
+                    playSound('click');
+                  }}
+                  disabled={isBusy('vault-stake') || isBusy('vault-compound') || isBusy('vault-claim') || isBusy('vault-unstake')}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-white/5 border border-white/15 text-slate-200 text-xs font-mono font-bold hover:bg-white/10 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Unlock className="w-3.5 h-3.5" aria-hidden /> Unstake {stakeSymbol}
+                </button>
+                <button
+                  onClick={() => {
+                    playSound('click');
+                    void runClaim();
+                  }}
+                  disabled={isBusy('vault-stake') || isBusy('vault-compound') || isBusy('vault-claim') || isBusy('vault-unstake')}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-200 text-xs font-mono font-bold hover:bg-amber-500/30 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <Zap className="w-3.5 h-3.5" aria-hidden /> Claim {rewardSymbol}
+                </button>
+                <button
+                  onClick={() => {
+                    playSound('click');
+                    void runCompound();
+                  }}
+                  disabled={isBusy('vault-stake') || isBusy('vault-compound') || isBusy('vault-claim') || isBusy('vault-unstake')}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-400/40 text-emerald-200 text-xs font-mono font-bold hover:bg-emerald-500/30 transition cursor-pointer flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  <TrendingUp className="w-3.5 h-3.5" aria-hidden /> Claim + Compound
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500 font-mono leading-relaxed">
+                Claim + Compound: broadcast claim → swap {rewardSymbol}→{stakeSymbol} on the real ReputationAMM (8%
+                depth guard) → re-stake the exact returned {stakeSymbol}. All three are real transactions.
+              </p>
 
-                        <div className="flex items-center gap-1">
-                          {isSelected && (
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-cyan-400 text-slate-950 uppercase font-mono">
-                              ACTIVE
-                            </span>
+              <div className="space-y-2 pt-1 border-t border-white/10">
+                <h4 className="text-[10px] font-mono text-slate-400 flex items-center gap-1.5 uppercase tracking-wider">
+                  <Activity className="w-3 h-3" /> Vault Ledger (real on-chain events)
+                </h4>
+                <div className="max-h-44 overflow-y-auto space-y-1.5 pr-1">
+                  {myVaultEvents.length === 0 && (
+                    <p className="text-[11px] text-slate-500 font-mono">
+                      No events for this wallet yet — broadcast a stake to see it here.
+                    </p>
+                  )}
+                  {myVaultEvents.slice(-10).reverse().map((e, i) => {
+                    const kind = eventKind(e.type);
+                    return (
+                      <div key={i} className="flex items-center justify-between gap-3 text-[11px] font-mono bg-white/[0.03] rounded-lg px-2.5 py-1.5 border border-white/5">
+                        <span className="flex items-center gap-2">
+                          {kind === 'claim' ? (
+                            <ArrowUpRight className="w-3.5 h-3.5 text-amber-400" />
+                          ) : kind === 'unstake' ? (
+                            <ArrowDownRight className="w-3.5 h-3.5 text-rose-400" />
+                          ) : (
+                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-400" />
                           )}
-                          <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                            asset.activeChange >= 0 ? 'text-emerald-400 bg-emerald-500/10' : 'text-rose-400 bg-rose-500/10'
-                          }`}>
-                            {asset.activeChange >= 0 ? `+${asset.activeChange}%` : `${asset.activeChange}%`}
+                          <span className={kind === 'claim' ? 'text-amber-300' : kind === 'unstake' ? 'text-rose-300' : 'text-emerald-300'}>
+                            {e.type.replace(/([A-Z])/g, ' $1').trim()}
                           </span>
-                        </div>
+                          <span className="text-slate-300">{e.amount != null ? fmtNum(e.amount, 4) : ''}</span>
+                        </span>
+                        <span className="flex items-center gap-2 text-slate-500">
+                          <span>#{e.block}</span>
+                          <a
+                            href={`${CREDITCOIN_BLOCKSCOUT}/tx/${e.txHash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-cyan-400/80 hover:text-cyan-300"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </span>
                       </div>
-
-                      {/* Reward Rate & APY */}
-                      <div className="space-y-0.5 pt-1">
-                        <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                          <span>Reward APY ({dashboardTimeframe}):</span>
-                          <span>$${asset.priceUSD.toLocaleString()}</span>
-                        </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-xl font-mono font-black text-white">{asset.rewardRate.toFixed(2)}%</span>
-                          <span className="text-[10px] text-emerald-400 font-mono font-bold">Auto-Compounding</span>
-                          {asset.stakedBalance > 0 && (
-                            <span className="text-[10px] text-cyan-300 font-mono font-bold ml-auto">
-                              {`${asset.stakedBalance.toFixed(2)} ${asset.symbol}`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Mini Sparkline Curve */}
-                      <div className="relative w-full h-[36px] pt-1">
-                        <svg className="w-full h-full overflow-visible" viewBox="0 0 100 30" preserveAspectRatio="none">
-                          <defs>
-                            <linearGradient id={`grad-${asset.id}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor={asset.color} stopOpacity="0.35" />
-                              <stop offset="100%" stopColor={asset.color} stopOpacity="0.0" />
-                            </linearGradient>
-                          </defs>
-                          <path
-                            d={`M 0 25 Q 25 ${asset.activeChange >= 0 ? 12 : 22}, 50 ${asset.activeChange >= 0 ? 15 : 20} T 100 ${asset.activeChange >= 0 ? 4 : 26}`}
-                            fill="none"
-                            stroke={asset.color}
-                            strokeWidth="2.2"
-                          />
-                          <path
-                            d={`M 0 25 Q 25 ${asset.activeChange >= 0 ? 12 : 22}, 50 ${asset.activeChange >= 0 ? 15 : 20} T 100 ${asset.activeChange >= 0 ? 4 : 26} L 100 30 L 0 30 Z`}
-                            fill={`url(#grad-${asset.id})`}
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
-            {/* Right: CredX Liquid Staking Portfolio Hero Card (xl:col-span-4) */}
-            <div className="xl:col-span-4 rounded-3xl p-6 bg-gradient-to-br from-[#201138] via-[#150a26] to-[#0b0515] border border-purple-500/35 shadow-2xl relative overflow-hidden flex flex-col justify-between">
-              <div className="absolute top-0 right-0 w-44 h-44 bg-purple-500/15 rounded-full blur-3xl pointer-events-none" />
-              <div className="absolute bottom-0 left-0 w-32 h-32 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
+            {/* Right: Wallet + Validator product */}
+            <div className="xl:col-span-5 rounded-3xl p-5 bg-[#020d14] border border-purple-500/20 shadow-xl space-y-5">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-purple-400" />
+                  stVSTK — DEPIN Validator Staking
+                </h3>
+                <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                  Live registry
+                </span>
+              </div>
 
-              <div className="relative space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center text-purple-300">
-                      <ShieldCheck className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <span className="text-[10px] font-mono text-purple-300 uppercase tracking-widest block font-bold">CredX Sovereign L1 Vault</span>
-                      <h4 className="text-sm font-black text-white">Liquid Staking Portfolio</h4>
-                    </div>
-                  </div>
-                  <span className="px-2 py-0.5 rounded-full bg-purple-500/20 border border-purple-400/30 text-[10px] font-mono text-purple-200">
-                    Active
-                  </span>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-2xl bg-black/50 border border-white/10">
+                  <span className="text-[10px] text-slate-400 font-mono block">Wallet cUSD</span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(cusdBal, 2)}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">available to stake</span>
                 </div>
-
-                <p className="text-xs text-purple-200/80 leading-relaxed">
-                  An enterprise multi-chain liquid staking portal allowing zero-unbonding-delay yield compounding &amp; portable credit collateral.
-                </p>
-
-                {/* Staked Position Overview for Selected Asset */}
-                <div className="p-3.5 rounded-2xl bg-black/40 border border-purple-500/20 space-y-2">
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-purple-300/70">Selected Asset</span>
-                    <span className="text-white font-bold">{selectedAsset.name} ({selectedAsset.symbol})</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-purple-300/70">Your Staked Position</span>
-                    <span className="text-white font-bold">{(selectedAsset.stakedBalance + continuousTick).toFixed(5)} {selectedAsset.symbol}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-purple-300/70">Total Value USD</span>
-                    <span className="text-emerald-300 font-bold">
-                      $${((selectedAsset.stakedBalance + continuousTick) * selectedAsset.priceUSD).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs font-mono">
-                    <span className="text-purple-300/70">Reward Rate</span>
-                    <span className="text-cyan-300 font-bold">{selectedAsset.rewardRate.toFixed(2)}% APY</span>
-                  </div>
+                <div className="p-3 rounded-2xl bg-black/50 border border-purple-500/20">
+                  <span className="text-[10px] text-purple-400 font-mono block">Wallet {rewardSymbol}</span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(depinBal, 2)}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">available to delegate</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-black/50 border border-cyan-500/20">
+                  <span className="text-[10px] text-cyan-400 font-mono block">My delegations</span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(myValidatorStake, 2)}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">{rewardSymbol}</span>
+                </div>
+                <div className="p-3 rounded-2xl bg-black/50 border border-amber-500/20">
+                  <span className="text-[10px] text-amber-400 font-mono block">My pending rewards</span>
+                  <span className="text-lg font-bold text-white font-mono">{fmtNum(myValidatorPending, 2)}</span>
+                  <span className="text-[10px] text-slate-500 font-mono">{rewardSymbol}</span>
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="relative pt-4 space-y-2 font-mono">
-                <button
-                  onClick={() => {
-                    setActionModal('stake');
-                    playSound('click');
-                  }}
-                  className="w-full py-3 rounded-xl font-bold text-xs bg-gradient-to-r from-purple-500 via-indigo-500 to-purple-400 hover:from-purple-400 hover:to-indigo-400 text-white shadow-lg shadow-purple-500/30 transition flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Wallet className="w-3.5 h-3.5" />
-                  <span>Stake &amp; Mint {selectedAsset.symbol}</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setActionModal('unstake');
-                    playSound('click');
-                  }}
-                  className="w-full py-2.5 rounded-xl font-bold text-xs bg-white/5 hover:bg-white/10 text-purple-200 border border-purple-500/20 transition flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Instant 0-Slippage Unstake</span>
-                </button>
+              <div className="space-y-2">
+                <h4 className="text-[10px] font-mono text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Shield className="w-3 h-3" /> Live Validators ({reg?.validatorCount ?? 0})
+                </h4>
+                {validators.length === 0 && (
+                  <p className="text-[11px] text-slate-500 font-mono">Registry staking pool is empty or unreachable.</p>
+                )}
+                {sortedValidators.slice(0, 4).map((v) => (
+                  <div key={v.operator} className="rounded-xl bg-white/[0.03] border border-white/10 px-3 py-2.5 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                        <span className="font-mono text-xs font-bold text-white">{v.nodeTag}</span>
+                        <span className="text-[9px] text-slate-500 font-mono">id #{v.validatorId}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-purple-300">
+                        {(v.commissionBps / 100).toFixed(1)}% comm
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                      <span>pool {fmtNum(v.totalStaked)} {rewardSymbol}</span>
+                      <span>mine {fmtNum(v.myStake)} · {fmtNum(v.myStake > 0 ? v.myPendingRewards : 0)} pending</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => {
+                          setVAmount('');
+                          setModal({ kind: 'vstake', op: v.operator, tag: v.nodeTag });
+                          playSound('click');
+                        }}
+                        disabled={busy !== null}
+                        className="flex-1 px-2 py-1 rounded-lg bg-cyan-500/15 border border-cyan-400/30 text-cyan-200 text-[10px] font-mono font-bold hover:bg-cyan-500/25 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Stake
+                      </button>
+                      <button
+                        onClick={() => {
+                          setVAmount('');
+                          setModal({ kind: 'vunstake', op: v.operator, tag: v.nodeTag });
+                          playSound('click');
+                        }}
+                        disabled={busy !== null || v.myStake <= 0}
+                        className="flex-1 px-2 py-1 rounded-lg bg-white/5 border border-white/15 text-slate-200 text-[10px] font-mono font-bold hover:bg-white/10 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Unstake
+                      </button>
+                      <button
+                        onClick={() => {
+                          playSound('click');
+                          void runVClaim(v.operator, v.nodeTag);
+                        }}
+                        disabled={busy !== null || v.myStake <= 0}
+                        className="flex-1 px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-200 text-[10px] font-mono font-bold hover:bg-amber-500/25 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        Claim
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-black/40 border border-white/10 px-2 py-2">
+                  <span className="block text-[9px] font-mono text-slate-500">Registry Staked</span>
+                  <span className="text-xs font-bold text-white font-mono">{fmtNum(reg?.totalStaked, 0)}</span>
+                </div>
+                <div className="rounded-xl bg-black/40 border border-white/10 px-2 py-2">
+                  <span className="block text-[9px] font-mono text-slate-500">Reward / block</span>
+                  <span className="text-xs font-bold text-white font-mono">{fmtNum(reg?.rewardPerBlock, 4)}</span>
+                </div>
+                <div className="rounded-xl bg-black/40 border border-white/10 px-2 py-2">
+                  <span className="block text-[9px] font-mono text-slate-500">Owner</span>
+                  <span className="text-xs font-bold text-white font-mono">{reg ? fmtAddr(reg.owner) : '—'}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ═════════════════════════════════════════════════════════════════
-              SECTION 2: "YOUR ACTIVE STAKINGS" (Dynamic for ANY Selected Asset)
-             ═════════════════════════════════════════════════════════════════ */}
-          <div className="p-6 rounded-3xl bg-[#020f17] border border-cyan-500/25 shadow-2xl space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-white/5">
-              <div>
-                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Real-time Node Telemetry</span>
-                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                  <Coins className="w-5 h-5 text-cyan-400" />
-                  Your Active Stakings: <span className="text-cyan-300 font-mono">{selectedAsset.name} ({selectedAsset.symbol})</span>
-                </h3>
+          {/* TX console + staking registry ledger */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="rounded-3xl p-5 bg-[#020d14] border border-white/10 shadow-xl space-y-2">
+              <h4 className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Transaction Console</h4>
+              <div className="h-40 overflow-y-auto space-y-1 font-mono text-[10px] text-emerald-300">
+                {txLog.length === 0 && <p className="text-slate-500">No transactions broadcast this session.</p>}
+                {txLog.map((l, i) => (
+                  <p key={i} className={l.includes('failed') ? 'text-rose-300' : 'text-emerald-300'}>
+                    {'>'} {l}
+                  </p>
+                ))}
               </div>
-
-              {/* Asset Dropdown Switcher */}
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-mono text-slate-400">Switch Asset:</span>
-                <select
-                  value={selectedAssetId}
-                  onChange={(e) => {
-                    const newId = e.target.value;
-                    setSelectedAssetId(newId);
-                    const found = assets.find((a) => a.id === newId);
-                    if (found) {
-                      setStakeInput((found.walletBalance * 0.25).toFixed(2));
-                      setUnstakeInput((found.stakedBalance * 0.25).toFixed(2));
-                      playSound('click');
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-[#041a24] border border-cyan-500/30 text-white font-mono text-xs font-bold outline-none cursor-pointer"
-                >
-                  {assets.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name} ({a.symbol}) — {a.rewardRate.toFixed(2)}% APY
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => {
-                    setActionModal('stake');
-                    playSound('click');
-                  }}
-                  className="px-3.5 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 font-mono text-xs font-bold border border-cyan-500/30 transition cursor-pointer"
-                >
-                  + Stake More
-                </button>
-              </div>
-            </div>
-
-            {/* Main Active Position Card + Dynamic Slider Box */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-              {/* Dynamic Staked Balance Hero Display (lg:col-span-5) */}
-              <div className="lg:col-span-5 space-y-3">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs"
-                    style={{ backgroundColor: `${selectedAsset.color}25`, color: selectedAsset.color }}
-                  >
-                    {selectedAsset.symbol.slice(0, 2)}
-                  </div>
-                  <span className="text-sm font-bold text-white">Stake {selectedAsset.name}</span>
-                  <span className="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
-                    {selectedAsset.chain}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-black/40 border border-white/10 px-3 py-2">
+                  <span className="block text-[9px] font-mono text-slate-500">Vault last reward block</span>
+                  <span className="text-sm font-bold text-white font-mono">
+                    {vault?.lastRewardBlock != null ? fmtNum(vault.lastRewardBlock, 0) : '—'}
                   </span>
                 </div>
-
-                {/* Big Live Number Display with Continuous Accrual */}
-                <div className="space-y-1">
-                  <div className="flex items-baseline gap-1 font-mono">
-                    <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">
-                      {(selectedAsset.stakedBalance + continuousTick).toFixed(5)}
-                    </span>
-                    <span className="text-base font-bold" style={{ color: selectedAsset.color }}>
-                      {selectedAsset.symbol}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 font-mono text-xs text-slate-400">
-                    <span>
-                      &asymp; $${((selectedAsset.stakedBalance + continuousTick) * selectedAsset.priceUSD).toFixed(2)} USD
-                    </span>
-                    <span className="text-emerald-400 flex items-center gap-0.5">
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                      +{((selectedAsset.stakedBalance * (selectedAsset.rewardRate / 100)) / 365).toFixed(4)} {selectedAsset.symbol} / day
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 pt-2">
-                  <button
-                    onClick={() => {
-                      setActionModal('stake');
-                      playSound('click');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold font-mono text-xs transition cursor-pointer shadow-md shadow-cyan-500/20"
-                  >
-                    Stake / Mint {selectedAsset.symbol}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setActionModal('unstake');
-                      playSound('click');
-                    }}
-                    className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold font-mono text-xs transition cursor-pointer"
-                  >
-                    Unstake
-                  </button>
-                </div>
-              </div>
-
-              {/* Investment Period Slider */}
-              <div className="lg:col-span-7 p-5 rounded-2xl bg-black/60 border border-white/10 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white uppercase font-mono tracking-wider">
-                    Investment Period Projection ({selectedAsset.symbol})
+                <div className="rounded-xl bg-black/40 border border-white/10 px-3 py-2">
+                  <span className="block text-[9px] font-mono text-slate-500">Measured accrual</span>
+                  <span className="text-sm font-bold text-white font-mono">
+                    {measuredPerBlock > 0 ? `${measuredPerBlock.toFixed(2)} ${rewardSymbol}/blk` : 'measuring…'}
                   </span>
-                  <span className="text-xs font-mono text-cyan-300 font-bold">
-                    Effective APY: {effectiveApy.toFixed(2)}%
-                  </span>
-                </div>
-
-                {/* Milestones */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs font-mono text-slate-400 px-1">
-                    {[1, 3, 6, 12].map((m) => (
-                      <button
-                        key={m}
-                        onClick={() => setInvestmentMonths(m)}
-                        className={`cursor-pointer transition ${
-                          investmentMonths === m ? 'text-cyan-300 font-bold scale-105' : 'hover:text-slate-200'
-                        }`}
-                      >
-                        {m === 12 ? '1 Year' : `${m} Months`}
-                      </button>
-                    ))}
-                  </div>
-
-                  <input
-                    type="range"
-                    min={1}
-                    max={12}
-                    step={1}
-                    value={investmentMonths}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      const milestones = [1, 3, 6, 12];
-                      const closest = milestones.reduce((prev, curr) =>
-                        Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev, milestones[0]
-                      );
-                      setInvestmentMonths(closest);
-                    }}
-                    className="w-full accent-cyan-400 cursor-pointer h-2 bg-slate-800 rounded-lg"
-                  />
-                </div>
-
-                {/* Calculation Banner */}
-                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Projected Compounded Reward ({periodMultiplier.label})</span>
-                    <span className="text-emerald-300 font-bold text-sm">
-                      +{projectedReturnTokens.toFixed(4)} {selectedAsset.symbol} (+$${projectedReturnUSD.toFixed(2)} USD)
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-400 block text-[10px]">Auto-Restake Status</span>
-                    <span className="text-cyan-300 font-bold">Continuous Compound</span>
-                  </div>
                 </div>
               </div>
             </div>
 
-            {/* 4 Bottom Telemetry Metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4 border-t border-white/5 font-mono">
-              <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
-                <span className="text-[10px] uppercase text-slate-400 block">Momentum ({dashboardTimeframe})</span>
-                <span className={`text-lg font-bold ${selectedAsset.periodChanges[dashboardTimeframe] >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {selectedAsset.periodChanges[dashboardTimeframe] >= 0 ? `+${selectedAsset.periodChanges[dashboardTimeframe]}%` : `${selectedAsset.periodChanges[dashboardTimeframe]}%`}
-                </span>
-                <span className="text-[9px] text-slate-500 block">Active node velocity</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
-                <span className="text-[10px] uppercase text-slate-400 block">Asset Price</span>
-                <span className="text-lg font-bold text-white">$${selectedAsset.priceUSD.toLocaleString()}</span>
-                <span className="text-[9px] text-emerald-400 block">Live Price USD</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
-                <span className="text-[10px] uppercase text-slate-400 block">Risk Assessment</span>
-                <span className="text-lg font-bold text-emerald-400">99.4% Safe</span>
-                <span className="text-[9px] text-slate-500 block">{selectedAsset.slashingProtection}</span>
-              </div>
-              <div className="p-3.5 rounded-xl bg-black/40 border border-white/5">
-                <span className="text-[10px] uppercase text-slate-400 block">Reward Spread</span>
-                <span className="text-lg font-bold text-cyan-300">{selectedAsset.rewardRate.toFixed(2)}% – {(selectedAsset.rewardRate + 5.8).toFixed(2)}%</span>
-                <span className="text-[9px] text-slate-500 block">Boosted by OCCR credit</span>
+            <div className="rounded-3xl p-5 bg-[#020d14] border border-white/10 shadow-xl space-y-2">
+              <h4 className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                Validator Registry Ledger (real events)
+              </h4>
+              <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 font-mono text-[10px]">
+                {stakingLedger.length === 0 && <p className="text-slate-500 font-mono">No registry activity yet.</p>}
+                {stakingLedger.slice(0, 8).map((e, i) => {
+                  const color =
+                    e.kind === 'staked'
+                      ? 'text-emerald-300'
+                      : e.kind === 'unstaked'
+                        ? 'text-rose-300'
+                        : e.kind === 'registered'
+                          ? 'text-cyan-300'
+                          : 'text-amber-300';
+                  return (
+                    <div key={i} className="flex items-center gap-2 bg-white/[0.03] rounded-lg px-2.5 py-1.5 border border-white/5">
+                      <span className={color}>{e.kind}</span>
+                      <span className="text-slate-300">#{e.blockNumber}</span>
+                      <span className="text-slate-500">{e.nodeTag ?? fmtAddr(e.operator)}</span>
+                      {e.amount != null && <span className="text-slate-300">{fmtNum(e.amount, 2)}</span>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION 2: CRYPTOQUANT PEG SOLVENCY (Dynamic Timeframe Switching)
-         ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'cryptoquant' && (
-        <div className="p-6 rounded-3xl bg-[#030d14] border border-cyan-500/30 shadow-2xl space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
-                <h3 className="text-base font-bold text-white font-mono tracking-wide flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-emerald-400" />
-                  Creditcoin: Long Liquidations USD - All Exchanges, All Symbol
-                </h3>
-              </div>
-              <p className="text-xs text-slate-400 font-mono">
-                Continuous on-chain monitoring of stCTC exchange peg price (USD) vs. protocol slashing &amp; liquidation defense absorption volume ($M).
-              </p>
-            </div>
-
-            {/* Timeframe Switcher & Legend */}
-            <div className="flex items-center gap-4 font-mono text-xs">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-white shadow-[0_0_6px_#fff]" />
-                <span className="text-white">Price / Peg USD</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_6px_#10b981]" />
-                <span className="text-emerald-400">Long Liquidations USD</span>
-              </div>
-
-              {/* Dynamic Timeframe Pills (1D, 7D, 1M, 3M, 1Y, ALL) */}
-              <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10">
-                {(['1D', '7D', '1M', '3M', '1Y', 'ALL'] as const).map((tf) => (
-                  <button
-                    key={tf}
-                    onClick={() => {
-                      setCqTimeframe(tf);
-                      playSound('click');
-                    }}
-                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition cursor-pointer ${
-                      cqTimeframe === tf
-                        ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/30'
-                        : 'text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    {tf}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Dynamic Indicators for Active Timeframe */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
-            {/* KPI 1: Exchange Peg */}
-            <div className="p-3.5 rounded-2xl bg-black/60 border border-white/10 space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                <span>stCTC Peg Rate</span>
-                <span className="text-emerald-400 font-bold">{cqTimeframeMetrics.pegChangePct}</span>
-              </div>
-              <div className="text-lg font-black text-white">
-                1.0428 <span className="text-xs text-cyan-300">: 1.0000</span>
-              </div>
-              <span className="text-[10px] text-slate-400 block truncate">
-                {cqTimeframeMetrics.timelineLabel}
+      {/* PEG SOLVENCY */}
+      {activeTab === 'peg' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-emerald-500/20">
+              <span className="text-[10px] text-emerald-400 font-mono flex items-center gap-1">
+                <Shield className="w-3 h-3" /> stCTC Exchange Rate
+              </span>
+              <span className="text-2xl font-bold text-white font-mono">
+                {pegNow != null ? `${pegNow.toFixed(4)}` : '—'}
+              </span>
+              <span className="block text-[10px] text-slate-400 font-mono">
+                {pegNow != null ? `${((pegNow - 1) * 100).toFixed(2)}% above parity` : 'parity benchmark'}
               </span>
             </div>
-
-            {/* KPI 2: Absorbed Volume */}
-            <div className="p-3.5 rounded-2xl bg-black/60 border border-white/10 space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                <span>Period Absorbed Vol</span>
-                <span className="text-cyan-400 font-bold">{cqTimeframe} Active</span>
-              </div>
-              <div className="text-lg font-black text-emerald-400">
-                {cqTimeframeMetrics.totalVolume}
-              </div>
-              <span className="text-[10px] text-slate-400 block truncate">
-                Ingestion: {cqTimeframeMetrics.feedIngestion}
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-cyan-500/20">
+              <span className="text-[10px] text-cyan-400 font-mono flex items-center gap-1">
+                <Layers className="w-3 h-3" /> AMM Depth (USD)
+              </span>
+              <span className="text-2xl font-bold text-white font-mono">
+                {ammDepthUsd != null ? `$${fmtNum(ammDepthUsd, 0)}` : '—'}
+              </span>
+              <span className="block text-[10px] text-slate-400 font-mono">real cUSD/{rewardSymbol} reserves</span>
+            </div>
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-amber-500/20">
+              <span className="text-[10px] text-amber-400 font-mono flex items-center gap-1">
+                <Zap className="w-3 h-3" /> Pending Rewards
+              </span>
+              <span className="text-2xl font-bold text-white font-mono">{fmtNum(pendingNow, 0)}</span>
+              <span className="block text-[10px] text-slate-400 font-mono">
+                {pendingUSD != null ? `≈ $${fmtNum(pendingUSD, 0)} cUSD` : rewardSymbol}
               </span>
             </div>
-
-            {/* KPI 3: Max Stress Absorption Event */}
-            <div className="p-3.5 rounded-2xl bg-black/60 border border-white/10 space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                <span>Peak Stress Absorption</span>
-                <span className="text-amber-400 font-bold">{cqTimeframeMetrics.eventCount} Spikes</span>
-              </div>
-              <div className="text-lg font-black text-white">
-                {cqTimeframeMetrics.peakLiquidation}
-              </div>
-              <span className={`text-[10px] font-bold block truncate ${cqTimeframeMetrics.stressColor}`}>
-                {cqTimeframeMetrics.stressStatus}
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-purple-500/20">
+              <span className="text-[10px] text-purple-400 font-mono flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3" /> Claimed Lifetime
               </span>
-            </div>
-
-            {/* KPI 4: Live WebSocket Status */}
-            <div className="p-3.5 rounded-2xl bg-black/60 border border-emerald-500/20 space-y-1">
-              <div className="flex items-center justify-between text-[10px] text-slate-400">
-                <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                  Live Sync Feed
-                </span>
-                <span className="text-slate-400">12ms</span>
-              </div>
-              <div className="text-lg font-black text-cyan-300 flex items-center gap-1">
-                <span>#14,291</span>
-                <span className="text-xs text-slate-400">.{cqLiveTick}</span>
-              </div>
-              <span className="text-[10px] text-slate-400 block truncate">
-                Reserve: $50M Sovereign L1 Shield
+              <span className="text-2xl font-bold text-white font-mono">{fmtNum(claimedDEPIN, 0)}</span>
+              <span className="block text-[10px] text-slate-400 font-mono">
+                {claimedUSD != null ? `≈ $${fmtNum(claimedUSD, 0)} cUSD` : rewardSymbol} from ledger
               </span>
             </div>
           </div>
 
-          {/* CryptoQuant Live Canvas */}
-          <div className="relative w-full h-[320px] rounded-2xl overflow-hidden bg-[#050a0f] border border-white/10">
-            <canvas
-              ref={cqCanvasRef}
-              onMouseMove={handleCanvasMouseMove}
-              onMouseLeave={() => setCqHoverIndex(null)}
-              className="w-full h-full block cursor-crosshair"
-            />
+          <div className="rounded-3xl p-5 bg-[#020d14] border border-cyan-500/20 shadow-xl">
+            <div className="flex items-center justify-between pb-3">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-cyan-400" />
+                stCTC Exchange-Rate Curve — measured from the on-chain ledger
+              </h3>
+              <span className="text-[10px] font-mono text-slate-500">
+                claims valued at live AMM price · stake/unstake steps real
+              </span>
+            </div>
+            <div ref={chartWrapRef}>
+              <PegChart width={chartW} series={pegSeries} events={myVaultEvents} price={depinPrice} />
+            </div>
+            <div className="pt-3 border-t border-white/10 flex flex-wrap items-center gap-4 text-[10px] font-mono text-slate-400">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-0.5 bg-cyan-400" /> stCTC exchange rate
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/50" /> staked
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-rose-400/50" /> unstaked
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-sm bg-amber-400/50" /> claimed
+              </span>
+            </div>
+          </div>
 
-            {/* Interactive Hover Tooltip */}
-            {cqHoverIndex !== null && cqData[cqHoverIndex] && (
-              <div className="absolute top-4 left-14 pointer-events-none p-3 rounded-xl bg-black/95 border border-emerald-500/40 font-mono text-xs shadow-2xl space-y-1">
-                <div className="text-[10px] text-slate-400">{cqData[cqHoverIndex].date} &bull; Timeframe: {cqTimeframe}</div>
-                <div className="text-white">
-                  Peg Price: <strong className="text-cyan-300 font-bold">$${cqData[cqHoverIndex].pegPrice.toFixed(4)} USD</strong>
+          <div className="flex items-start gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.04] px-4 py-3 text-[11px] leading-relaxed text-slate-400">
+            <Info className="w-4 h-4 mt-0.5 shrink-0 text-cyan-400" />
+            <span className="font-mono">
+              Methodology: peg = (staked cUSD + claimed {rewardSymbol} × live AMM price + pending {rewardSymbol} × live
+              AMM price) ÷ staked cUSD. Staked/unstaked steps come from real events on the ReputationYieldVault; claims
+              are valued at the current on-chain AMM implied price because no historical price oracle exists on
+              testnet. The exchange rate therefore matches on-chain value at query time.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* LEADERBOARD */}
+      {activeTab === 'leaderboard' && (
+        <div className="space-y-6">
+          <div className="rounded-3xl p-5 bg-[#020d14] border border-purple-500/20 shadow-xl space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                Live Validator Leaderboard
+              </h3>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 bg-black/60 p-1.5 rounded-xl border border-white/10">
+                  <Search className="w-3.5 h-3.5 text-slate-500" />
+                  <input
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                    placeholder="filter by tag / operator…"
+                    className="bg-transparent outline-none text-[11px] font-mono text-white placeholder:text-slate-500 w-44"
+                  />
                 </div>
-                <div className="text-emerald-400">
-                  Slashing Absorption: <strong className="font-bold">$${cqData[cqHoverIndex].liquidationBufferUSD}M USD</strong>
+                <span className="text-[10px] font-mono text-slate-500">{sortedValidators.length} validators · live</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left table-auto border-collapse">
+                <thead>
+                  <tr className="text-[10px] font-mono text-slate-500 uppercase border-b border-white/10">
+                    <th className="px-2 py-2">Rank</th>
+                    <th className="px-2 py-2">Validator</th>
+                    <th className="px-2 py-2">Operator</th>
+                    <th className="px-2 py-2">Commission</th>
+                    <th className="px-2 py-2">Pool Staked ({rewardSymbol})</th>
+                    <th className="px-2 py-2">My Stake</th>
+                    <th className="px-2 py-2">My Pending</th>
+                    <th className="px-2 py-2">Action</th>
+                    <th className="px-2 py-2">vs</th>
+                  </tr>
+                </thead>
+                <tbody className="text-[11px] font-mono">
+                  {sortedValidators
+                    .filter(
+                      (v) =>
+                        filter.trim() === '' ||
+                        v.nodeTag.toLowerCase().includes(filter.toLowerCase()) ||
+                        v.operator.toLowerCase().includes(filter.toLowerCase())
+                    )
+                    .map((v, idx) => (
+                      <tr key={v.operator} className="border-b border-white/5 hover:bg-white/[0.03] transition">
+                        <td className="px-2 py-2 text-slate-400">#{idx + 1}</td>
+                        <td className="px-2 py-2">
+                          <span className="font-bold text-white">{v.nodeTag}</span>{' '}
+                          <span className="text-slate-500">id {v.validatorId}</span>
+                        </td>
+                        <td className="px-2 py-2">
+                          <a
+                            href={`${CREDITCOIN_BLOCKSCOUT}/address/${v.operator}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-cyan-400/80 hover:text-cyan-300 flex items-center gap-1"
+                          >
+                            {fmtAddr(v.operator)} <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </td>
+                        <td className="px-2 py-2 text-purple-300">{(v.commissionBps / 100).toFixed(1)}%</td>
+                        <td className="px-2 py-2 text-white">{fmtNum(v.totalStaked, 2)}</td>
+                        <td className="px-2 py-2 text-emerald-300">{v.myStake > 0 ? fmtNum(v.myStake, 2) : '—'}</td>
+                        <td className="px-2 py-2 text-amber-300">
+                          {v.myStake > 0 ? fmtNum(v.myPendingRewards, 2) : '—'}
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => {
+                                setVAmount('');
+                                setModal({ kind: 'vstake', op: v.operator, tag: v.nodeTag });
+                                playSound('click');
+                              }}
+                              disabled={busy !== null}
+                              className="px-2 py-1 rounded-lg bg-cyan-500/15 border border-cyan-400/30 text-cyan-200 text-[10px] font-mono font-bold hover:bg-cyan-500/25 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Stake
+                            </button>
+                            <button
+                              onClick={() => {
+                                playSound('click');
+                                void runVClaim(v.operator, v.nodeTag);
+                              }}
+                              disabled={busy !== null || v.myStake <= 0}
+                              className="px-2 py-1 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-200 text-[10px] font-mono font-bold hover:bg-amber-500/25 transition cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              Claim
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-2 py-2">
+                          <button
+                            onClick={() => toggleCompare(v.validatorId)}
+                            disabled={compare.length >= 2 && !compare.includes(v.validatorId)}
+                            className={`w-6 h-6 rounded-md border flex items-center justify-center transition cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
+                              compare.includes(v.validatorId)
+                                ? 'bg-cyan-500/30 border-cyan-400/60 text-cyan-200'
+                                : 'bg-white/5 border-white/15 text-transparent hover:text-slate-400'
+                            }`}
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+
+            {compareRows.length > 0 && (
+              <div className="rounded-2xl bg-black/40 border border-white/10 p-4 space-y-3">
+                <h4 className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">
+                  Comparing {compareRows.length} validator pools
+                </h4>
+                <div className="flex items-end gap-6">
+                  {compareRows
+                    .slice()
+                    .sort((a, b) => (b?.totalStaked ?? 0) - (a?.totalStaked ?? 0))
+                    .map((v) =>
+                      v ? (
+                        <div key={v.operator} className="flex-1">
+                          <div className="text-[10px] font-mono text-slate-300 mb-1">
+                            {v.nodeTag} · {fmtNum(v.totalStaked, 0)} {rewardSymbol}
+                          </div>
+                          <div
+                            className="rounded-t-xl bg-gradient-to-t from-cyan-600/60 to-cyan-400/60 border border-cyan-400/50"
+                            style={{
+                              height: `${Math.max(24, (v.totalStaked / Math.max(1, ...compareRows.map((c) => c?.totalStaked ?? 0))) * 120)}px`,
+                            }}
+                          />
+                          <div className="text-[9px] font-mono text-slate-500 mt-1">
+                            {(v.commissionBps / 100).toFixed(1)}% commission
+                          </div>
+                        </div>
+                      ) : null
+                    )}
                 </div>
-                {cqData[cqHoverIndex].isAlertTrigger && (
-                  <div className="text-[10px] text-rose-400 font-bold uppercase">
-                    &bull; Liquidation Absorption Spike (100% Reserve Backed)
-                  </div>
-                )}
               </div>
             )}
           </div>
 
-          {/* Telemetry Explanation */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs pt-2">
-            <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase block">Red Dashed Circles</span>
-              <p className="text-slate-300 text-[11px]">
-                Historical liquidation stress events absorbed with 0 de-pegging via the Creditcoin L1 insurance reserve.
-              </p>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-white/10">
+              <span className="text-[10px] font-mono text-slate-500 block">Registered Validators</span>
+              <span className="text-xl font-bold text-white font-mono">{reg?.validatorCount ?? '—'}</span>
             </div>
-            <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase block">Green Vertical Bars</span>
-              <p className="text-slate-300 text-[11px]">
-                Volume of liquidated debt instantly absorbed without reducing continuous stCTC staking yields.
-              </p>
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-white/10">
+              <span className="text-[10px] font-mono text-slate-500 block">Total Reward Units Issued</span>
+              <span className="text-xl font-bold text-white font-mono">{fmtNum(reg?.totalRewardUnitsIssued, 0)}</span>
             </div>
-            <div className="p-3 rounded-xl bg-black/40 border border-white/5 space-y-1">
-              <span className="text-[10px] text-slate-400 uppercase block">Timeframe Status</span>
-              <p className="text-slate-300 text-[11px]">
-                Active Feed: <strong className="text-emerald-400">{cqTimeframe} Resolution</strong> &bull; Non-decreasing peg ratio.
-              </p>
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-white/10">
+              <span className="text-[10px] font-mono text-slate-500 block">Commission Claimed (owner)</span>
+              <span className="text-xl font-bold text-white font-mono">{fmtNum(reg?.totalCommissionClaimed, 0)}</span>
             </div>
+            <div className="rounded-2xl p-4 bg-[#020d14] border border-white/10">
+              <span className="text-[10px] font-mono text-slate-500 block">Pool Health</span>
+              <span className="text-xl font-bold text-white font-mono">
+                {reg?.paused ? 'PAUSED' : reg ? 'ACTIVE' : '—'}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.02] px-4 py-3 text-[11px] leading-relaxed text-slate-400">
+            <Info className="w-4 h-4 mt-0.5 shrink-0 text-white/40" />
+            <span className="font-mono">
+              This leaderboard is the live validator directory on ValidatorStakingRegistry (real deployment
+              0x5Ec9…27a96). Ranking, pool sizes, commissions and pending rewards are read straight from the contract.
+              Every claim broadcasts a real testnet transaction.
+            </span>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════
-          SECTION 3: GLOBAL LST LEADERBOARD (Updated Global Ecosystem Data)
-         ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'leaderboard' && (
-        <div className="p-6 rounded-3xl bg-[#020e17] border border-cyan-500/25 shadow-2xl space-y-5">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-white font-mono flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-cyan-400" />
-                Global Liquid Staking Leaderboard
+      {/* ACTION MODAL */}
+      {modal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => {
+            setModal(null);
+            playSound('click');
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl p-6 bg-[#03131c] border border-cyan-500/30 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono flex items-center gap-2">
+                {modal.kind === 'stake' && <Lock className="w-4 h-4 text-cyan-400" />}
+                {modal.kind === 'unstake' && <Unlock className="w-4 h-4 text-rose-400" />}
+                {modal.kind === 'vstake' && <Lock className="w-4 h-4 text-cyan-400" />}
+                {modal.kind === 'vunstake' && <Unlock className="w-4 h-4 text-rose-400" />}
+                {modal.kind === 'stake' && `Stake into Vault (${stakeSymbol})`}
+                {modal.kind === 'unstake' && `Unstake from Vault (${stakeSymbol})`}
+                {modal.kind === 'vstake' && `Delegate to ${modal.tag}`}
+                {modal.kind === 'vunstake' && `Redeem from ${modal.tag}`}
               </h3>
-              <p className="text-xs text-slate-400 font-mono">
-                Verified real-time TVL, APY, and price momentum across global liquid staking protocols (DefiLlama API Sync).
-              </p>
-            </div>
-
-            {/* Search Bar */}
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search protocol or token..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8 pr-3 py-1.5 rounded-xl bg-black/60 border border-white/10 text-xs font-mono text-white outline-none focus:border-cyan-400 w-56"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* Leaderboard Table */}
-          <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/40">
-            <table className="w-full text-left font-mono text-xs">
-              <thead className="bg-[#03151f] text-slate-400 text-[11px] border-b border-white/10">
-                <tr>
-                  <th className="py-3 px-4 w-16">Rank</th>
-                  <th className="py-3 px-4 w-20 text-center">Compare</th>
-                  <th className="py-3 px-4">Name</th>
-                  <th className="py-3 px-4 text-right">APY</th>
-                  <th className="py-3 px-4 text-right">1d Change</th>
-                  <th className="py-3 px-4 text-right">7d Change</th>
-                  <th className="py-3 px-4 text-right">1m Change</th>
-                  <th className="py-3 px-4 text-right">TVL</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {filteredProtocols.map((proto) => {
-                  const isChecked = selectedCompare.includes(proto.name);
-                  return (
-                    <tr
-                      key={proto.rank}
-                      className={`hover:bg-white/5 transition ${
-                        proto.isCredX ? 'bg-cyan-950/25 border-l-2 border-cyan-400' : ''
-                      }`}
-                    >
-                      {/* Rank */}
-                      <td className="py-3.5 px-4 font-bold text-white">
-                        {proto.rank}
-                      </td>
-
-                      {/* Compare Checkbox */}
-                      <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => toggleCompare(proto.name)}
-                          className="text-slate-400 hover:text-cyan-300 transition cursor-pointer inline-flex items-center justify-center"
-                        >
-                          {isChecked ? (
-                            <CheckSquare className="w-4 h-4 text-cyan-400" />
-                          ) : (
-                            <Square className="w-4 h-4" />
-                          )}
-                        </button>
-                      </td>
-
-                      {/* Name & Chain */}
-                      <td className="py-3.5 px-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-white">{proto.name}</span>
-                          <span className="text-[10px] text-slate-400 bg-white/5 px-2 py-0.5 rounded">
-                            {proto.chain}
-                          </span>
-                          {proto.isCredX && (
-                            <span className="text-[9px] font-bold text-cyan-300 bg-cyan-500/20 px-1.5 py-0.5 rounded border border-cyan-400/30">
-                              L1 Native
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* APY */}
-                      <td className="py-3.5 px-4 text-right font-bold text-emerald-400">
-                        {proto.apy.toFixed(2)}%
-                      </td>
-
-                      {/* 1d Change */}
-                      <td className={`py-3.5 px-4 text-right ${proto.change1d >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {proto.change1d >= 0 ? `+${proto.change1d.toFixed(2)}%` : `${proto.change1d.toFixed(2)}%`}
-                      </td>
-
-                      {/* 7d Change */}
-                      <td className={`py-3.5 px-4 text-right ${proto.change7d >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {proto.change7d >= 0 ? `+${proto.change7d.toFixed(2)}%` : `${proto.change7d.toFixed(2)}%`}
-                      </td>
-
-                      {/* 1m Change */}
-                      <td className="py-3.5 px-4 text-right text-emerald-400 font-bold">
-                        +{proto.change1m.toFixed(2)}%
-                      </td>
-
-                      {/* TVL */}
-                      <td className="py-3.5 px-4 text-right font-bold text-white">
-                        {proto.tvl}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════
-          MODAL: MULTI-ASSET STAKE & INSTANT UNSTAKE
-         ═══════════════════════════════════════════════════════════════════ */}
-      {actionModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl p-6 bg-[#03151f] border border-cyan-500/40 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 font-mono text-slate-200">
-            <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <h4 className="text-base font-bold text-white flex items-center gap-2">
-                {actionModal === 'stake' ? (
-                  <>
-                    <Zap className="w-5 h-5 text-cyan-400" />
-                    <span>Stake &amp; Mint {selectedAsset.symbol}</span>
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-5 h-5 text-cyan-400" />
-                    <span>Instant 0-Slippage Unstake ({selectedAsset.symbol})</span>
-                  </>
-                )}
-              </h4>
               <button
-                onClick={() => setActionModal(null)}
-                className="w-7 h-7 rounded-full bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"
+                onClick={() => {
+                  setModal(null);
+                  playSound('click');
+                }}
+                className="text-slate-400 hover:text-white transition cursor-pointer"
               >
-                &times;
+                ✕
               </button>
             </div>
 
-            {actionModal === 'stake' ? (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/20 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Deposit {selectedAsset.nativeSymbol} ({selectedAsset.chain})</span>
-                    <span>Wallet: <strong className="text-white">{selectedAsset.walletBalance.toLocaleString()} {selectedAsset.nativeSymbol}</strong></span>
-                  </div>
-                  <input
-                    type="number"
-                    value={stakeInput}
-                    onChange={(e) => setStakeInput(e.target.value)}
-                    placeholder="0.0"
-                    className="w-full bg-transparent text-2xl font-bold text-cyan-300 outline-none"
-                  />
-                  <div className="flex items-center gap-1.5 pt-1 text-[10px]">
-                    {[25, 50, 75, 100].map((pct) => (
-                      <button
-                        key={pct}
-                        onClick={() => setStakeInput(((selectedAsset.walletBalance * pct) / 100).toFixed(2))}
-                        className="px-2 py-1 rounded bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-300 transition cursor-pointer"
-                      >
-                        {pct === 100 ? 'MAX' : `${pct}%`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+              <div className="rounded-xl bg-black/40 border border-white/10 px-3 py-2">
+                <span className="text-slate-500 block">Available</span>
+                <span className="text-white font-bold">
+                  {modal.kind === 'stake' && `${fmtNum(cusdBal)} ${stakeSymbol}`}
+                  {modal.kind === 'unstake' && `${fmtNum(staked)} ${stakeSymbol}`}
+                  {modal.kind === 'vstake' && `${fmtNum(depinBal)} ${rewardSymbol}`}
+                  {modal.kind === 'vunstake' &&
+                    `${fmtNum(validators.find((v) => v.operator === modal.op)?.myStake ?? 0)} ${rewardSymbol}`}
+                </span>
+              </div>
+              <div className="rounded-xl bg-black/40 border border-white/10 px-3 py-2">
+                <span className="text-slate-500 block">Signer</span>
+                <span className="text-cyan-300 font-bold">{demoMode ? fmtAddr(account) : 'disabled'}</span>
+              </div>
+            </div>
 
-                <div className="p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Mint Ratio:</span>
-                    <span className="text-white font-bold">1 {selectedAsset.nativeSymbol} = 1 {selectedAsset.symbol}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Validator APR:</span>
-                    <span className="text-emerald-400 font-bold">{selectedAsset.rewardRate.toFixed(2)}% (Continuous Auto-Compound)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Slashing Protection:</span>
-                    <span className="text-cyan-300 font-bold">{selectedAsset.slashingProtection}</span>
-                  </div>
-                </div>
-
+            <div className="space-y-2">
+              <label className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Amount</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="0"
+                  value={vAmount}
+                  onChange={(e) => setVAmount(e.target.value)}
+                  placeholder="0.0"
+                  className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm font-mono text-white outline-none focus:border-cyan-400/40"
+                />
                 <button
-                  onClick={handleExecuteStake}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-400 to-teal-400 hover:from-cyan-300 hover:to-teal-300 text-slate-950 shadow-xl shadow-cyan-500/30 transition cursor-pointer"
+                  onClick={() => {
+                    let maxBal = 0;
+                    if (modal.kind === 'stake') maxBal = cusdBal;
+                    else if (modal.kind === 'unstake') maxBal = staked;
+                    else if (modal.kind === 'vstake') maxBal = depinBal;
+                    else {
+                      const vop = modal as { kind: 'vstake' | 'vunstake'; op: string; tag: string };
+                      maxBal = validators.find((v) => v.operator === vop.op)?.myStake ?? 0;
+                    }
+                    setVAmount(maxBal > 0 ? maxBal.toFixed(2) : '0');
+                  }}
+                  className="px-3 py-2.5 rounded-xl bg-white/5 border border-white/15 text-[10px] font-mono text-slate-300 hover:text-white transition cursor-pointer"
                 >
-                  Confirm Stake &amp; Mint {selectedAsset.symbol}
+                  MAX
                 </button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/20 space-y-2">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Unstake {selectedAsset.symbol}</span>
-                    <span>Staked: <strong className="text-cyan-300">{selectedAsset.stakedBalance.toLocaleString()} {selectedAsset.symbol}</strong></span>
-                  </div>
-                  <input
-                    type="number"
-                    value={unstakeInput}
-                    onChange={(e) => setUnstakeInput(e.target.value)}
-                    placeholder="0.0"
-                    className="w-full bg-transparent text-2xl font-bold text-white outline-none"
-                  />
-                  <div className="flex items-center gap-1.5 pt-1 text-[10px]">
-                    {[25, 50, 75, 100].map((pct) => (
-                      <button
-                        key={pct}
-                        onClick={() => setUnstakeInput(((selectedAsset.stakedBalance * pct) / 100).toFixed(2))}
-                        className="px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-slate-300 transition cursor-pointer"
-                      >
-                        {pct === 100 ? 'MAX' : `${pct}%`}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            </div>
 
-                <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs space-y-1">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Unbonding Fee:</span>
-                    <span className="text-emerald-400 font-bold">0.00% (Instant Reserve)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Settlement Speed:</span>
-                    <span className="text-white font-bold">Immediate (Single-Block)</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Receive Asset:</span>
-                    <span className="text-cyan-300 font-bold">Native {selectedAsset.nativeSymbol} ({selectedAsset.chain})</span>
-                  </div>
-                </div>
-
+            <div className="flex items-center gap-2 pt-1">
+              {modal.kind === 'stake' && (
                 <button
-                  onClick={handleExecuteUnstake}
-                  className="w-full py-3.5 rounded-xl font-bold text-sm bg-white/15 hover:bg-white/25 text-white shadow-xl transition cursor-pointer"
+                  onClick={() => {
+                    playSound('click');
+                    void runStake();
+                  }}
+                  disabled={busy !== null}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-xs font-mono font-bold hover:bg-cyan-500/30 transition cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
                 >
-                  Instant Unstake to Native {selectedAsset.nativeSymbol}
+                  <Zap className="w-3.5 h-3.5" aria-hidden />
+                  {isBusy('vault-stake') ? 'Broadcasting…' : `Confirm Stake (real tx)`}
                 </button>
-              </div>
-            )}
+              )}
+              {modal.kind === 'unstake' && (
+                <button
+                  onClick={() => {
+                    playSound('click');
+                    void runUnstake();
+                  }}
+                  disabled={busy !== null}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-200 text-xs font-mono font-bold hover:bg-rose-500/30 transition cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  <Unlock className="w-3.5 h-3.5" aria-hidden />
+                  {isBusy('vault-unstake') ? 'Broadcasting…' : 'Confirm Unstake (real tx)'}
+                </button>
+              )}
+              {modal.kind === 'vstake' && (
+                <button
+                  onClick={() => {
+                    playSound('click');
+                    void runVStake();
+                  }}
+                  disabled={busy !== null}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-xs font-mono font-bold hover:bg-cyan-500/30 transition cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  <Lock className="w-3.5 h-3.5" aria-hidden />
+                  {busy === `vstake-${modal.op}` ? 'Broadcasting…' : 'Confirm Delegation (real tx)'}
+                </button>
+              )}
+              {modal.kind === 'vunstake' && (
+                <button
+                  onClick={() => {
+                    playSound('click');
+                    void runVUnstake();
+                  }}
+                  disabled={busy !== null}
+                  className="flex-1 px-3 py-2.5 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-200 text-xs font-mono font-bold hover:bg-rose-500/30 transition cursor-pointer disabled:opacity-40 flex items-center justify-center gap-2"
+                >
+                  <Unlock className="w-3.5 h-3.5" aria-hidden />
+                  {busy === `vunstake-${modal.op}` ? 'Broadcasting…' : 'Confirm Redeem (real tx)'}
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] font-mono text-slate-500">
+              Broadcasts a real Creditcoin testnet transaction. Confirmation limits to one action at a time.
+            </p>
           </div>
         </div>
       )}
