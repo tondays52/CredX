@@ -45,11 +45,11 @@ export const RyzenTracksShowcase: React.FC<RyzenTracksShowcaseProps> = ({ onSele
       color: '#00E5FF',
       heroStat: '4 Live Sectors',
       summary:
-        'Decentralized physical infrastructure spanning Pulse (bandwidth hashing), Nexus (IoT Bluetooth edge nodes), GeoOrbit (RTK GNSS space-time positioning), and Bittensor TAO AI compute leasing.',
+        'Decentralized physical infrastructure spanning Pulse (bandwidth hashing), Nexus (IoT Bluetooth edge nodes), GeoOrbit (RTK GNSS space-time positioning), and an on-chain CredXsor AI compute market.',
       highlights: [
         'Real hardware probing (CPU, GPU, RAM, Live Ping)',
         'Centimeter-level RTK GNSS satellite positioning',
-        'Bittensor TAO Yuma Consensus mathematical engine'
+        'CredXsor Yuma Consensus mathematical engine'
       ],
       linkHash: '#/depin'
     },

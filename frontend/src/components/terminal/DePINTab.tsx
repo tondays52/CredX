@@ -53,7 +53,7 @@ import NexusLivePanel from './NexusLivePanel';
 import useNexusLive from '../../hooks/useNexusLive';
 import { GeoOrbitAttestationModal } from '../modals/GeoOrbitAttestationModal';
 import { CredXGeoOrbitView } from './CredXGeoOrbitView';
-import { BittensorSubnetView } from './BittensorSubnetView';
+import AiComputeView from './AiComputeView';
 import GoogleMapView from '../common/GoogleMapView';
 import { Loader2, CircleCheck } from 'lucide-react';
 import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
@@ -94,7 +94,7 @@ import {
   txHashShort
 } from '../../services/credXService';
 
-export type DePINSector = 'pulse' | 'nodle' | 'geodnet' | 'bittensor' | 'staking';
+export type DePINSector = 'pulse' | 'nodle' | 'geodnet' | 'credxsor' | 'staking';
 export type PulseSubTab = 'dashboard' | 'wallet' | 'allocation' | 'rewards';
 export type NexusViewMode = 'app' | 'enterprise' | 'wallet';
 export type EnterpriseSubTab = 'dashboard' | 'map' | 'detections' | 'fleets';
@@ -225,6 +225,8 @@ const DePINTab: React.FC = () => {
         setActiveSector('geodnet');
       } else if (hash.includes('pulse')) {
         setActiveSector('pulse');
+      } else if (hash.includes('credxsor') || hash.includes('aicompute') || hash.includes('compute')) {
+        setActiveSector('credxsor');
       }
     };
     handleHash();
@@ -737,17 +739,17 @@ const DePINTab: React.FC = () => {
 
         <button
           onClick={() => {
-            setActiveSector('bittensor');
-            window.location.hash = '#/bittensor';
+            setActiveSector('credxsor');
+            window.location.hash = '#/credxsor';
           }}
           className={`flex-1 min-w-[170px] py-2.5 px-3 rounded-xl text-xs font-bold font-mono transition flex items-center justify-center gap-2 cursor-pointer ${
-            activeSector === 'bittensor'
+            activeSector === 'credxsor'
               ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-lg shadow-purple-500/10'
               : 'text-white/60 hover:text-white hover:bg-white/[0.02]'
           }`}
         >
           <BrainCircuit className="w-4 h-4 text-purple-400" />
-          <span>AI Compute (Bittensor)</span>
+          <span>AI Compute (CredXsor)</span>
         </button>
 
         <button
@@ -2960,10 +2962,10 @@ const DePINTab: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* SECTOR 4: BITTENSOR AI COMPUTE & GPU FLEET (PHASE 4)                      */}
+      {/* SECTOR 4: CREDXSOR AI COMPUTE MARKET (PHASE 4)                            */}
       {/* ========================================================================= */}
-      {activeSector === 'bittensor' && (
-        <BittensorSubnetView hardware={hardware} />
+      {activeSector === 'credxsor' && (
+        <AiComputeView hardware={hardware} />
       )}
 
       {/* ========================================================================= */}

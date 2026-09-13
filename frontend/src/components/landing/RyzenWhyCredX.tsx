@@ -38,7 +38,7 @@ export const RyzenWhyCredX: React.FC<RyzenWhyCredXProps> = ({ onLaunchApp }) => 
       title: 'Scalability & Efficiency',
       primaryPoint: 'High-Throughput State Proofs:',
       description:
-        'Sub-second finality powers real-time DePIN bandwidth hashing, RTK GNSS satellite corrections, and millisecond Bittensor AI compute leasing.',
+        'Sub-second finality powers real-time DePIN bandwidth hashing, RTK GNSS satellite corrections, and millisecond on-chain CredXsor AI compute settlements.',
       tag: 'Sub-Second'
     },
     {

@@ -2093,6 +2093,216 @@ export async function nexusClaimRewards(signer?: ethers.Signer): Promise<string>
   return receipt.hash as string;
 }
 
+// ─── AiCompute (CredXsor live on-chain AI compute Data-DAO ledger) ──────────
+
+export const AICOMPUTE_ABI = [
+  'function owner() view returns (address)',
+  'function paused() view returns (bool)',
+  'function rewardUnitsPerMinute() view returns (uint256)',
+  'function maxGrade() view returns (uint32)',
+  'function minSecondsBetweenSessions() view returns (uint32)',
+  'function maxSessionMinutes() view returns (uint32)',
+  'function providerCount() view returns (uint256)',
+  'function totalSessionsSettled() view returns (uint256)',
+  'function totalSessionMinutes() view returns (uint256)',
+  'function totalRewardUnitsIssued() view returns (uint256)',
+  'function providers(address) view returns (uint256 providerId, address operator, bytes4 modelTag, uint32 vramGb, uint32 tflops, uint80 sessionSeq, uint256 totalSessionMinutes, uint256 totalRewardUnits, uint256 claimedUnits, uint40 lastSettledAt, bytes32 lastAnchorHash)',
+  'function providerOperators(uint256) view returns (address)',
+  'function registerProvider(bytes4 modelTag, uint32 vramGb, uint32 tflops)',
+  'function settleSession(uint32 sessionMinutes, uint8 qualityGrade, bytes32 merkleRoot)',
+  'function claimRewards()',
+];
+
+export interface AiComputeProviderView {
+  providerId: number;
+  operator: string;
+  modelTag: string;
+  vramGb: number;
+  tflops: number;
+  sessionSeq: number;
+  totalSessionMinutes: number;
+  totalRewardUnits: number;
+  claimedUnits: number;
+  lastSettledAt: number;
+  lastAnchorHash: string;
+}
+
+export interface AiComputeState {
+  owner: string;
+  paused: boolean;
+  rewardUnitsPerMinute: number;
+  maxGrade: number;
+  minSecondsBetweenSessions: number;
+  maxSessionMinutes: number;
+  providerCount: number;
+  totalSessionsSettled: number;
+  totalSessionMinutes: number;
+  totalRewardUnitsIssued: number;
+}
+
+export interface AiComputeSessionEntry {
+  operator: string;
+  sessionSeq: number;
+  merkleRoot: string;
+  sessionMinutes: number;
+  qualityGrade: number;
+  rewardUnits: number;
+  timestamp: number;
+  blockNumber: number;
+}
+
+export async function fetchAiComputeState(): Promise<AiComputeState | null> {
+  try {
+    const c = readContract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI);
+    const [owner, paused, rpm, maxG, cooldown, maxMin, count, sessions, minutes, units] = await Promise.all([
+      c.owner(), c.paused(), c.rewardUnitsPerMinute(), c.maxGrade(), c.minSecondsBetweenSessions(),
+      c.maxSessionMinutes(), c.providerCount(), c.totalSessionsSettled(), c.totalSessionMinutes(),
+      c.totalRewardUnitsIssued(),
+    ]);
+    return {
+      owner: String(owner),
+      paused: Boolean(paused),
+      rewardUnitsPerMinute: parseFloat(ethers.formatUnits(rpm, 18)),
+      maxGrade: Number(maxG),
+      minSecondsBetweenSessions: Number(cooldown),
+      maxSessionMinutes: Number(maxMin),
+      providerCount: Number(count),
+      totalSessionsSettled: Number(sessions),
+      totalSessionMinutes: Number(minutes),
+      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchAiComputeProvider(user: string): Promise<AiComputeProviderView | null> {
+  try {
+    const c = readContract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI);
+    const p = await c.providers(user);
+    if (p.operator === ethers.ZeroAddress) return null;
+    return {
+      providerId: Number(p.providerId),
+      operator: String(p.operator),
+      modelTag: String(p.modelTag),
+      vramGb: Number(p.vramGb),
+      tflops: Number(p.tflops),
+      sessionSeq: Number(p.sessionSeq),
+      totalSessionMinutes: Number(p.totalSessionMinutes),
+      totalRewardUnits: parseFloat(ethers.formatUnits(p.totalRewardUnits, 18)),
+      claimedUnits: parseFloat(ethers.formatUnits(p.claimedUnits, 18)),
+      lastSettledAt: Number(p.lastSettledAt),
+      lastAnchorHash: String(p.lastAnchorHash),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** All registered providers on the live AiComputeRegistry (via the id → operator index). */
+export async function fetchAiComputeProviders(limit = 50): Promise<AiComputeProviderView[]> {
+  try {
+    const c = readContract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI);
+    const count = Math.min(Number(await c.providerCount()), limit);
+    const operators = await Promise.all(
+      Array.from({ length: count }, (_, i) => c.providerOperators(i + 1))
+    );
+    const rows = await Promise.all(
+      operators.map(async (op: string) => {
+        const p = await c.providers(op);
+        if (p.operator === ethers.ZeroAddress) return null;
+        return {
+          providerId: Number(p.providerId),
+          operator: String(p.operator),
+          modelTag: String(p.modelTag),
+          vramGb: Number(p.vramGb),
+          tflops: Number(p.tflops),
+          sessionSeq: Number(p.sessionSeq),
+          totalSessionMinutes: Number(p.totalSessionMinutes),
+          totalRewardUnits: parseFloat(ethers.formatUnits(p.totalRewardUnits, 18)),
+          claimedUnits: parseFloat(ethers.formatUnits(p.claimedUnits, 18)),
+          lastSettledAt: Number(p.lastSettledAt),
+          lastAnchorHash: String(p.lastAnchorHash),
+        };
+      })
+    );
+    return rows.filter((r): r is AiComputeProviderView => r !== null);
+  } catch {
+    return [];
+  }
+}
+
+/** Recent compute sessions on the live AiComputeRegistry (via eth_getLogs). */
+export async function fetchAiComputeLedger(limit = 40): Promise<AiComputeSessionEntry[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const topic = ethers.id('ComputeSessionSettled(address,uint256,bytes32,uint32,uint8,uint256,uint256)');
+    // The CC3 public RPC times out on very wide eth_getLogs windows; probe from
+    // wide to narrow until the RPC answers (same handling as GeoOrbit stations).
+    const windows = [50000, 20000, 10000, 6000];
+    let logs: any[] = [];
+    for (const win of windows) {
+      try {
+        logs = await provider
+          .getLogs({
+            address: CONTRACTS.aiComputeRegistry,
+            topics: [topic],
+            fromBlock: Math.max(1, latest - win),
+            toBlock: 'latest',
+          })
+          .catch(() => []);
+        if (logs.length > 0) break;
+      } catch {
+        /* try a narrower window */
+      }
+    }
+    const decoder = ethers.AbiCoder.defaultAbiCoder();
+    const entries: AiComputeSessionEntry[] = [];
+    for (const log of logs) {
+      const data = decoder.decode(['uint32', 'uint8', 'uint256', 'uint256'], log.data);
+      entries.push({
+        operator: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        sessionSeq: Number(log.topics[2]),
+        merkleRoot: String(log.topics[3]),
+        sessionMinutes: Number(data[0]),
+        qualityGrade: Number(data[1]),
+        rewardUnits: parseFloat(ethers.formatUnits(data[2], 18)),
+        timestamp: Number(data[3]),
+        blockNumber: Number(log.blockNumber),
+      });
+    }
+    entries.sort((a, b) => b.blockNumber - a.blockNumber);
+    return entries.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export async function aiComputeRegisterProvider(modelTag: string, vramGb: number, tflops: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI, s);
+  const tx = await c.registerProvider(modelTag, vramGb, tflops, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function aiComputeSettleSession(sessionMinutes: number, qualityGrade: number, merkleRoot: string, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI, s);
+  const tx = await c.settleSession(sessionMinutes, qualityGrade, merkleRoot, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function aiComputeClaimRewards(signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI, s);
+  const tx = await c.claimRewards({ gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
 // ─── Evidence Registry (attested proofs + proof-gated events, via eth_getLogs) ─
 
 export interface EvidenceEntry {
