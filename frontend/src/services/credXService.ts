@@ -845,6 +845,8 @@ export interface YieldVaultEvent {
   block: number;
   user: string;
   amount: number | null;
+  /** Unix seconds for the block that emitted the event (resolved from the RPC). */
+  timestamp: number;
 }
 
 /**
@@ -887,9 +889,19 @@ export async function fetchYieldVaultEvents(limit = 30): Promise<YieldVaultEvent
           block: Number(l.blockNumber),
           user: l.topics[1] ? '0x' + l.topics[1].slice(26) : '',
           amount,
+          timestamp: 0,
         });
       });
     }
+    // Resolve block timestamps in parallel (required for the journal timeline / calendar).
+    const uniqBlocks = [...new Set(out.map((e) => e.block))].filter((b) => b > 0);
+    const stamps: Record<number, number> = {};
+    await Promise.all(
+      uniqBlocks.map(async (b) => {
+        stamps[b] = await provider.getBlock(b).then((x) => x?.timestamp ?? 0).catch(() => 0);
+      })
+    );
+    for (const e of out) e.timestamp = stamps[e.block] ?? 0;
     out.sort((a, b) => b.block - a.block);
     return out.slice(0, limit);
   } catch {

@@ -259,6 +259,39 @@ function macdPoint(values: number[]): { macd: number; signal: number; hist: numb
   return { macd: line[last], signal: signal[last], hist: line[last] - signal[last] };
 }
 
+/** Full Wilder RSI series (null until enough history) — used by the multi-pane technical chart. */
+function rsiSeries(values: number[], period = 14): (number | null)[] {
+  const out: (number | null)[] = new Array(values.length).fill(null);
+  if (values.length < period + 1) return out;
+  let gains = 0;
+  let losses = 0;
+  for (let i = 1; i <= period; i++) {
+    const d = values[i] - values[i - 1];
+    if (d >= 0) gains += d;
+    else losses -= d;
+  }
+  let ag = gains / period;
+  let al = losses / period;
+  out[period] = al === 0 ? (ag === 0 ? 50 : 100) : 100 - 100 / (1 + ag / al);
+  for (let i = period + 1; i < values.length; i++) {
+    const d = values[i] - values[i - 1];
+    ag = (ag * (period - 1) + Math.max(d, 0)) / period;
+    al = (al * (period - 1) + Math.max(-d, 0)) / period;
+    out[i] = al === 0 ? (ag === 0 ? 50 : 100) : 100 - 100 / (1 + ag / al);
+  }
+  return out;
+}
+
+/** Full MACD line / signal / histogram series (null until enough history for the signal). */
+function macdSeries(values: number[]): { line: number[]; signal: number[]; hist: number[] } | null {
+  if (values.length < 35) return null;
+  const fast = emaArray(values, 12);
+  const slow = emaArray(values, 26);
+  const line = values.map((_, i) => fast[i] - slow[i]);
+  const signal = emaArray(line, 9);
+  return { line, signal, hist: line.map((v, i) => v - signal[i]) };
+}
+
 const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
 
@@ -292,7 +325,91 @@ export const YieldVaultsView: React.FC = () => {
   const realStakedByUser = vaultState ? vaultState.stakedByUser : null;
   const realClaimable = vaultState ? vaultState.pendingRewards : null;
 
-  // ─── Live Binance analytics state ───────────────────────────────────────
+  // Real journal stats derived from the on-chain vault ledger + live vault state.
+  // Capital steps at every real Staked/Unstaked event; rewards are live-pending.
+  const journalFromLedger = useMemo(() => {
+    const evs = [...vaultLedger].sort((a, b) => a.block - b.block);
+    let net = 0;
+    let totalDeposited = 0;
+    let totalWithdrawn = 0;
+    let totalClaimed = 0;
+    let firstDepositT = 0;
+    let lastEventT = 0;
+    const steps: { t: number; net: number }[] = [];
+    for (const ev of evs) {
+      const amt = ev.amount ?? 0;
+      if (ev.type === 'Staked') {
+        net += amt;
+        totalDeposited += amt;
+        if (!firstDepositT) firstDepositT = ev.timestamp || 0;
+      } else if (ev.type === 'Unstaked') {
+        net -= amt;
+        totalWithdrawn += amt;
+      } else {
+        totalClaimed += amt;
+      }
+      if (ev.timestamp) lastEventT = Math.max(lastEventT, ev.timestamp);
+      steps.push({ t: (ev.timestamp || 0) * 1000, net });
+    }
+    return {
+      evs,
+      steps,
+      net,
+      totalDeposited,
+      totalWithdrawn,
+      totalClaimed,
+      depositCount: evs.filter((e) => e.type === 'Staked').length,
+      withdrawCount: evs.filter((e) => e.type === 'Unstaked').length,
+      claimCount: evs.filter((e) => e.type === 'Claimed').length,
+      firstDepositT: firstDepositT || null,
+      lastEventT: lastEventT || null,
+    };
+  }, [vaultLedger]);
+
+  const periodStats = (startMs: number) => {
+    const startS = startMs > 0 ? startMs / 1000 : 0;
+    let d = 0;
+    let w = 0;
+    let c = 0;
+    let n = 0;
+    for (const ev of journalFromLedger.evs) {
+      const t = ev.timestamp || 0;
+      if (startS > 0 && (t === 0 || t < startS)) continue;
+      if (ev.type === 'Staked') d += ev.amount ?? 0;
+      else if (ev.type === 'Unstaked') w += ev.amount ?? 0;
+      else c += ev.amount ?? 0;
+      n++;
+    }
+    return { d, w, c, n };
+  };
+
+  const monthCalendar = useMemo(() => {
+    const nowD = new Date();
+    const year = nowD.getFullYear();
+    const month = nowD.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const offset = (firstDay.getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const cells: { day: number | null; evs: typeof journalFromLedger.evs }[] = [];
+    for (let i = 0; i < offset; i++) cells.push({ day: null, evs: [] });
+    const byDay = new Map<number, typeof journalFromLedger.evs>();
+    const monthStartS = firstDay.getTime() / 1000;
+    const monthEndS = monthStartS + daysInMonth * 86400;
+    for (const ev of journalFromLedger.evs) {
+      const t = ev.timestamp || 0;
+      if (t >= monthStartS && t < monthEndS) {
+        const d = new Date(t * 1000).getDate();
+        const list = byDay.get(d) ?? [];
+        list.push(ev);
+        byDay.set(d, list);
+      }
+    }
+    for (let d = 1; d <= daysInMonth; d++) cells.push({ day: d, evs: byDay.get(d) ?? [] });
+    while (cells.length % 8 !== 0) cells.push({ day: null, evs: [] });
+    return { cells, month: nowD.toLocaleString('en', { month: 'long', year: 'numeric' }) };
+  }, [journalFromLedger]);
+
+  // ─── Live market analytics state (RapidAPI → Binance → FreeCryptoAPI) ────
   const [feedKey, setFeedKey] = useState<string>('CTC');
   const [timeframe, setTimeframe] = useState<MarketTimeframe>('1D');
   const [candles, setCandles] = useState<Candle[] | null>(null);
@@ -349,7 +466,6 @@ export const YieldVaultsView: React.FC = () => {
 
   // Analytics View State (Reference Image 3: Trading Vault)
   const [analyticsTimeframe, setAnalyticsTimeframe] = useState<'h' | 'D' | 'W' | 'M' | '3M' | 'Y'>('M');
-  const [calendarMetric, setCalendarMetric] = useState<'profit' | 'pct' | 'rr'>('profit');
 
   // Strategy Sectors (3D vs 2D Toggle)
   const [sectorViewMode, setSectorViewMode] = useState<'3d' | '2d'>('3d');
@@ -1041,126 +1157,145 @@ export const YieldVaultsView: React.FC = () => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    let animId: number;
-    const render = () => {
-      const dpr = window.devicePixelRatio || 1;
-      const width = canvas.clientWidth || 600;
-      const height = canvas.clientHeight || 140;
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth || 600;
+    const height = canvas.clientHeight || 140;
+    if (width <= 0 || height <= 0) return;
 
-      if (width > 0 && height > 0) {
-        if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
-          canvas.width = width * dpr;
-          canvas.height = height * dpr;
-        }
+    if (canvas.width !== width * dpr || canvas.height !== height * dpr) {
+      canvas.width = width * dpr;
+      canvas.height = height * dpr;
+    }
+    ctx.save();
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#030d14';
+    ctx.fillRect(0, 0, width, height);
 
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        ctx.clearRect(0, 0, width, height);
+    const padL = 46;
+    const padR = 38;
+    const padT = 16;
+    const padB = 26;
+    const plotW = width - padL - padR;
+    const plotH = height - padT - padB;
 
-        ctx.fillStyle = '#030d14';
-        ctx.fillRect(0, 0, width, height);
+    const steps = journalFromLedger.steps;
+    const maxVal = Math.max(...steps.map((s) => s.net), 1);
 
-        const padL = 35;
-        const padR = 20;
-        const padT = 15;
-        const padB = 25;
-        const plotW = width - padL - padR;
-        const plotH = height - padT - padB;
+    // Y grid
+    ctx.textBaseline = 'middle';
+    ctx.font = '9px monospace';
+    for (let i = 0; i <= 4; i++) {
+      const y = padT + (plotH / 4) * i;
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(width - padR, y);
+      ctx.stroke();
+      const v = maxVal - (maxVal / 4) * i;
+      const tick = v >= 1000 ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 2 })}k` : `${Math.round(v)}`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.textAlign = 'right';
+      ctx.fillText(tick, padL - 6, y);
+    }
 
-        // Y Grid
-        [3000, 2000, 1000, 0].forEach((v, idx) => {
-          const y = padT + (idx / 3) * plotH;
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(padL, y);
-          ctx.lineTo(width - padR, y);
-          ctx.stroke();
+    if (steps.length === 0) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.55)';
+      ctx.textAlign = 'center';
+      ctx.font = '10px monospace';
+      ctx.fillText('No on-chain vault events yet — stake or unstake via the demo wallet to see the real curve.', width / 2, height / 2);
+      ctx.restore();
+      return;
+    }
 
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-          ctx.font = '8px monospace';
-          ctx.fillText(`$${v}`, 4, y + 3);
-        });
+    const t0 = steps[0].t || Date.now();
+    const t1 = Math.max(steps[steps.length - 1].t, Date.now());
+    const span = Math.max(1, t1 - t0);
+    const xOf = (t: number) => padL + ((t - t0) / span) * plotW;
+    const yOf = (v: number) => padT + plotH - (v / maxVal) * plotH;
 
-        // 30 Days points stepping up to $2,895
-        const days = 30;
-        const pnlData: number[] = [];
-        let acc = 0;
-        const dayDeltas = [
-          80, 120, -40, 150, 90, 210, 0, 110, 145, -30, 180, 220, 85, 0, 130,
-          95, 160, -50, 240, 110, 80, 190, 0, 140, 175, 90, 210, 130, 85, 140
-        ];
-        dayDeltas.forEach((d) => {
-          acc += d;
-          pnlData.push(acc);
-        });
+    // zero baseline
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.setLineDash([4, 2]);
+    ctx.beginPath();
+    ctx.moveTo(padL, yOf(0));
+    ctx.lineTo(width - padR, yOf(0));
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-        const getX = (i: number) => padL + (i / (days - 1)) * plotW;
-        const getY = (val: number) => padT + plotH - (val / 3000) * plotH;
+    // step curve
+    ctx.beginPath();
+    ctx.moveTo(padL, yOf(0));
+    let prevY = yOf(0);
+    for (const s of steps) {
+      const x = xOf(s.t);
+      ctx.lineTo(x, prevY);
+      ctx.lineTo(x, yOf(s.net));
+      prevY = yOf(s.net);
+    }
+    ctx.lineTo(padL + plotW, prevY);
 
-        // Fill Area
-        ctx.beginPath();
-        ctx.moveTo(getX(0), getY(pnlData[0]));
-        for (let i = 1; i < days; i++) {
-          const prevX = getX(i - 1);
-          const prevY = getY(pnlData[i - 1]);
-          const currX = getX(i);
-          const currY = getY(pnlData[i]);
-          const midX = (prevX + currX) / 2;
-          ctx.bezierCurveTo(midX, prevY, midX, currY, currX, currY);
-        }
-        ctx.lineTo(getX(days - 1), padT + plotH);
-        ctx.lineTo(getX(0), padT + plotH);
-        ctx.closePath();
+    // area fill
+    ctx.lineTo(padL + plotW, yOf(0));
+    ctx.lineTo(padL, yOf(0));
+    ctx.closePath();
+    const grad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+    grad.addColorStop(0, 'rgba(0, 242, 254, 0.3)');
+    grad.addColorStop(1, 'rgba(0, 242, 254, 0)');
+    ctx.fillStyle = grad;
+    ctx.fill();
 
-        const areaGrad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
-        areaGrad.addColorStop(0, 'rgba(0, 242, 254, 0.35)');
-        areaGrad.addColorStop(1, 'rgba(0, 242, 254, 0.0)');
-        ctx.fillStyle = areaGrad;
-        ctx.fill();
+    // clean stroke
+    ctx.beginPath();
+    ctx.moveTo(padL, yOf(0));
+    prevY = yOf(0);
+    for (const s of steps) {
+      const x = xOf(s.t);
+      ctx.lineTo(x, prevY);
+      ctx.lineTo(x, yOf(s.net));
+      prevY = yOf(s.net);
+    }
+    ctx.lineTo(padL + plotW, prevY);
+    ctx.strokeStyle = '#00f2fe';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#00f2fe';
+    ctx.shadowBlur = 8;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
-        // Stroke Line
-        ctx.beginPath();
-        ctx.moveTo(getX(0), getY(pnlData[0]));
-        for (let i = 1; i < days; i++) {
-          const prevX = getX(i - 1);
-          const prevY = getY(pnlData[i - 1]);
-          const currX = getX(i);
-          const currY = getY(pnlData[i]);
-          const midX = (prevX + currX) / 2;
-          ctx.bezierCurveTo(midX, prevY, midX, currY, currX, currY);
-        }
-        ctx.strokeStyle = '#00f2fe';
-        ctx.lineWidth = 2.2;
-        ctx.shadowColor = '#00f2fe';
-        ctx.shadowBlur = 8;
-        ctx.stroke();
-        ctx.shadowBlur = 0;
+    // event dots + final beacon
+    for (const s of steps) {
+      ctx.beginPath();
+      ctx.arc(xOf(s.t), yOf(s.net), 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#00f2fe';
+      ctx.fill();
+    }
+    const lastDotX = xOf(steps[steps.length - 1].t);
+    const lastDotY = yOf(steps[steps.length - 1].net);
+    ctx.beginPath();
+    ctx.arc(lastDotX, lastDotY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#00f2fe';
+    ctx.fill();
+    ctx.fillStyle = '#00f2fe';
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 9px monospace';
+    ctx.fillText(`${fmtNum(steps[steps.length - 1].net, 0)} cUSD`, Math.min(lastDotX + 6, width - padR - 60), lastDotY);
 
-        // Terminal Pulse Beacon
-        const lastX = getX(days - 1);
-        const lastY = getY(pnlData[days - 1]);
-        ctx.beginPath();
-        ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#00f2fe';
-        ctx.fill();
+    // time labels
+    const lblIdx = [0, Math.floor((steps.length - 1) / 2), steps.length - 1];
+    lblIdx.forEach((idx) => {
+      const t = new Date(steps[idx].t || Date.now());
+      const txt = `${t.getMonth() + 1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`;
+      const x = xOf(steps[idx].t);
+      ctx.fillStyle = idx === steps.length - 1 ? 'rgba(0, 242, 254, 0.8)' : 'rgba(255, 255, 255, 0.4)';
+      ctx.font = '9px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(txt, x, height - 8);
+    });
 
-        // X Labels
-        ['Day 1', 'Day 7', 'Day 14', 'Day 21', 'Day 30 (+$2,895)'].forEach((lbl, idx) => {
-          const x = padL + (idx / 4) * plotW - (idx === 4 ? 40 : 10);
-          ctx.fillStyle = idx === 4 ? '#00f2fe' : 'rgba(255, 255, 255, 0.4)';
-          ctx.font = '8px monospace';
-          ctx.fillText(lbl, x, height - 6);
-        });
-
-        ctx.restore();
-      }
-      animId = requestAnimationFrame(render);
-    };
-
-    render();
-    return () => cancelAnimationFrame(animId);
-  }, [activeTab]);
+    ctx.restore();
+  }, [activeTab, journalFromLedger]);
 
   // ─── 3D Rotating Coin & Revolving Sectors Canvas ──────────────────────────
   const orbitCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1366,7 +1501,7 @@ export const YieldVaultsView: React.FC = () => {
   const histCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const drawAnalyticsCharts = useCallback(() => {
-    // 1. Account Balance Canvas
+    // 1. Capital Deployed Canvas (real on-chain ledger steps)
     const bCanvas = balanceCanvasRef.current;
     if (bCanvas) {
       const ctx = bCanvas.getContext('2d');
@@ -1387,66 +1522,68 @@ export const YieldVaultsView: React.FC = () => {
           ctx.fillStyle = '#080c14';
           ctx.fillRect(0, 0, width, height);
 
-          const padL = 45;
-          const padR = 20;
-          const padT = 25;
-          const padB = 30;
+          const padL = 52;
+          const padR = 34;
+          const padT = 18;
+          const padB = 28;
           const plotW = width - padL - padR;
           const plotH = height - padT - padB;
+          const steps = journalFromLedger.steps;
+          const maxVal = Math.max(...steps.map((s) => s.net), 1);
 
-          // Gridlines ($180K, $160K, $140K, $120K, $100K)
-          const yTicks = [180, 160, 140, 120, 100];
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-          ctx.lineWidth = 1;
-
-          yTicks.forEach((tick, idx) => {
-            const y = padT + (idx / (yTicks.length - 1)) * plotH;
+          ctx.textBaseline = 'middle';
+          ctx.font = '9px monospace';
+          for (let i = 0; i <= 4; i++) {
+            const y = padT + (plotH / 4) * i;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
             ctx.beginPath();
             ctx.moveTo(padL, y);
             ctx.lineTo(width - padR, y);
             ctx.stroke();
-
+            const v = maxVal - (maxVal / 4) * i;
             ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-            ctx.font = '9px monospace';
-            ctx.fillText(`$${tick},000`, 6, y + 3);
-          });
-
-          // Curve points (smooth step-up from $100K to $177K)
-          const points = 40;
-          const now = Date.now() / 1000;
-          const curve: number[] = [];
-          for (let i = 0; i < points; i++) {
-            const p = i / (points - 1);
-            let val = 100;
-            if (p < 0.2) {
-              val = 100 + p * 35;
-            } else if (p < 0.6) {
-              const subP = (p - 0.2) / 0.4;
-              val = 107 + Math.pow(subP, 1.3) * 55;
-            } else {
-              const subP = (p - 0.6) / 0.4;
-              const liveTick = (i === points - 1) ? Math.sin(now * 3) * 1.2 : 0;
-              val = 162 + Math.sin(subP * Math.PI * 0.5) * 15.7 + liveTick;
-            }
-            curve.push(val);
+            ctx.textAlign = 'right';
+            ctx.fillText(`${v >= 1000 ? `${(v / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 })}k` : `${Math.round(v)}`}`, padL - 5, y);
           }
 
-          const getX = (i: number) => padL + (i / (points - 1)) * plotW;
-          const getY = (v: number) => padT + plotH - ((v - 100) / (180 - 100)) * plotH;
+          if (steps.length === 0) {
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.55)';
+            ctx.textAlign = 'center';
+            ctx.font = '10px monospace';
+            ctx.fillText('No on-chain ledger events yet.', width / 2, height / 2);
+            ctx.restore();
+            return;
+          }
 
-          // Gradient Fill
+          const t0 = steps[0].t || Date.now();
+          const t1 = Math.max(steps[steps.length - 1].t, Date.now());
+          const span = Math.max(1, t1 - t0);
+          const xOf = (t: number) => padL + ((t - t0) / span) * plotW;
+          const yOf = (v: number) => padT + plotH - (v / maxVal) * plotH;
+
+          // zero baseline
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.setLineDash([4, 2]);
           ctx.beginPath();
-          ctx.moveTo(getX(0), getY(curve[0]));
-          for (let i = 1; i < points; i++) {
-            const prevX = getX(i - 1);
-            const prevY = getY(curve[i - 1]);
-            const currX = getX(i);
-            const currY = getY(curve[i]);
-            const midX = (prevX + currX) / 2;
-            ctx.bezierCurveTo(midX, prevY, midX, currY, currX, currY);
+          ctx.moveTo(padL, yOf(0));
+          ctx.lineTo(width - padR, yOf(0));
+          ctx.stroke();
+          ctx.setLineDash([]);
+
+          // step curve
+          ctx.beginPath();
+          ctx.moveTo(padL, yOf(0));
+          let prevY = yOf(0);
+          for (const s of steps) {
+            const x = xOf(s.t);
+            ctx.lineTo(x, prevY);
+            ctx.lineTo(x, yOf(s.net));
+            prevY = yOf(s.net);
           }
-          ctx.lineTo(getX(points - 1), padT + plotH);
-          ctx.lineTo(getX(0), padT + plotH);
+          ctx.lineTo(padL + plotW, prevY);
+          ctx.lineTo(padL + plotW, yOf(0));
+          ctx.lineTo(padL, yOf(0));
           ctx.closePath();
 
           const areaGrad = ctx.createLinearGradient(0, padT, 0, padT + plotH);
@@ -1455,17 +1592,16 @@ export const YieldVaultsView: React.FC = () => {
           ctx.fillStyle = areaGrad;
           ctx.fill();
 
-          // Stroke Line
           ctx.beginPath();
-          ctx.moveTo(getX(0), getY(curve[0]));
-          for (let i = 1; i < points; i++) {
-            const prevX = getX(i - 1);
-            const prevY = getY(curve[i - 1]);
-            const currX = getX(i);
-            const currY = getY(curve[i]);
-            const midX = (prevX + currX) / 2;
-            ctx.bezierCurveTo(midX, prevY, midX, currY, currX, currY);
+          ctx.moveTo(padL, yOf(0));
+          prevY = yOf(0);
+          for (const s of steps) {
+            const x = xOf(s.t);
+            ctx.lineTo(x, prevY);
+            ctx.lineTo(x, yOf(s.net));
+            prevY = yOf(s.net);
           }
+          ctx.lineTo(padL + plotW, prevY);
           ctx.strokeStyle = '#00f2fe';
           ctx.lineWidth = 2.2;
           ctx.shadowColor = '#00f2fe';
@@ -1473,21 +1609,27 @@ export const YieldVaultsView: React.FC = () => {
           ctx.stroke();
           ctx.shadowBlur = 0;
 
-          // Endpoint Beacon
-          const lastX = getX(points - 1);
-          const lastY = getY(curve[points - 1]);
+          // event dots + endpoint beacon
+          for (const s of steps) {
+            ctx.beginPath();
+            ctx.arc(xOf(s.t), yOf(s.net), 2.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#00f2fe';
+            ctx.fill();
+          }
+          const lastStep = steps[steps.length - 1];
           ctx.beginPath();
-          ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+          ctx.arc(xOf(lastStep.t), yOf(lastStep.net), 4, 0, Math.PI * 2);
           ctx.fillStyle = '#00f2fe';
           ctx.fill();
 
-          // X-Axis Month Labels
-          const xLabels = ['July 24', 'Oct 24', 'Jan 25', 'Apr 25', 'July 25', 'Oct 25', 'Jan 26', 'Apr 26'];
+          // X-Axis date labels
           ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
           ctx.font = '8px monospace';
-          xLabels.forEach((lbl, idx) => {
-            const xPos = padL + (idx / (xLabels.length - 1)) * plotW - 12;
-            ctx.fillText(lbl, xPos, height - 8);
+          ctx.textAlign = 'center';
+          const lblIdx = [0, Math.floor((steps.length - 1) / 2), steps.length - 1];
+          lblIdx.forEach((idx) => {
+            const d = new Date(steps[idx].t || Date.now());
+            ctx.fillText(`${d.getMonth() + 1}/${d.getDate()}`, xOf(steps[idx].t), height - 10);
           });
 
           ctx.restore();
@@ -1495,7 +1637,7 @@ export const YieldVaultsView: React.FC = () => {
       }
     }
 
-    // 2. Reward:Risk Bar Histogram Canvas
+    // 2. Monthly Reward:Capital Histogram (real ledger flows)
     const hCanvas = histCanvasRef.current;
     if (hCanvas) {
       const ctx = hCanvas.getContext('2d');
@@ -1516,49 +1658,75 @@ export const YieldVaultsView: React.FC = () => {
           ctx.fillStyle = '#080c14';
           ctx.fillRect(0, 0, width, height);
 
-          const padL = 35;
+          const padL = 40;
           const padR = 15;
           const padT = 25;
           const padB = 30;
           const plotW = width - padL - padR;
           const plotH = height - padT - padB;
 
-          const zeroY = padT + plotH * 0.75;
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.moveTo(padL, zeroY);
-          ctx.lineTo(width - padR, zeroY);
-          ctx.stroke();
-
-          const barData = [1.2, 8.4, 5.2, 1.8, 3.4, 2.1, 4.2, -0.6, 3.8, 5.1, 1.4, 3.2];
-          const barW = (plotW / barData.length) * 0.55;
-
-          barData.forEach((val, idx) => {
-            const x = padL + (idx / barData.length) * plotW + barW * 0.5;
-            const h = (Math.abs(val) / 10) * (plotH * 0.65);
-            if (val >= 0) {
-              ctx.fillStyle = '#00f2fe';
-              ctx.fillRect(x, zeroY - h, barW, h);
-            } else {
-              ctx.fillStyle = '#f43f5e';
-              ctx.fillRect(x, zeroY, barW, h);
+          // 6 month buckets (incl. current) from the real ledger
+          const buckets: { label: string; deposit: number; claimed: number }[] = [];
+          const nowD = new Date();
+          for (let k = 5; k >= 0; k--) {
+            const dt = new Date(nowD.getFullYear(), nowD.getMonth() - k, 1);
+            const startT = dt.getTime() / 1000;
+            const nextT = new Date(nowD.getFullYear(), nowD.getMonth() - k + 1, 1).getTime() / 1000;
+            let deposit = 0;
+            let claimed = 0;
+            for (const ev of journalFromLedger.evs) {
+              const t = ev.timestamp || 0;
+              if (t >= startT && t < nextT) {
+                if (ev.type === 'Staked') deposit += ev.amount ?? 0;
+                else if (ev.type === 'Claimed') claimed += ev.amount ?? 0;
+              }
             }
-          });
+            buckets.push({ label: dt.toLocaleString('en', { month: 'short' }), deposit, claimed });
+          }
+          const maxVal = Math.max(...buckets.map((b) => Math.max(b.deposit, b.claimed)), 1);
+          const yOf = (v: number) => padT + plotH - (v / maxVal) * plotH;
 
-          const months = ['Mar 25', 'May 25', 'July 25', 'Sept 25', 'Nov 25', 'Jan 26', 'Mar 26'];
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-          ctx.font = '8px monospace';
-          months.forEach((m, idx) => {
-            const x = padL + (idx / (months.length - 1)) * plotW - 10;
-            ctx.fillText(m, x, height - 8);
+          ctx.textBaseline = 'middle';
+          ctx.font = '9px monospace';
+          for (let i = 0; i <= 3; i++) {
+            const y = padT + (plotH / 3) * i;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padL, y);
+            ctx.lineTo(width - padR, y);
+            ctx.stroke();
+            const v = maxVal - (maxVal / 3) * i;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.textAlign = 'right';
+            ctx.fillText(`${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : `${Math.round(v)}`}`, padL - 4, y);
+          }
+
+          const slotW = plotW / buckets.length;
+          const barW = Math.max(3, slotW * 0.32);
+          buckets.forEach((b, idx) => {
+            const cx = padL + idx * slotW + slotW / 2;
+            if (b.deposit > 0) {
+              ctx.fillStyle = '#00f2fe';
+              ctx.fillRect(cx - barW - 1.5, yOf(b.deposit), barW, Math.max(1, yOf(0) - yOf(b.deposit)));
+            }
+            if (b.claimed > 0) {
+              ctx.fillStyle = '#10b981';
+              ctx.fillRect(cx + 1.5, yOf(b.claimed), barW, Math.max(1, yOf(0) - yOf(b.claimed)));
+            }
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.font = '8px monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'alphabetic';
+            ctx.fillText(b.label, cx, height - 8);
+            ctx.textBaseline = 'middle';
           });
 
           ctx.restore();
         }
       }
     }
-  }, []);
+  }, [journalFromLedger]);
 
   useEffect(() => {
     if (activeTab !== 'analytics') return;
@@ -1867,7 +2035,7 @@ export const YieldVaultsView: React.FC = () => {
     return () => { dead = true; clearInterval(id); };
   }, []);
 
-  // ─── Draw the live candlestick/price chart with EMA overlays ─────────────
+  // ─── Draw the live technical chart: candlesticks + EMA overlays + RSI + MACD ──
   useEffect(() => {
     const canvas = chartCanvasRef.current;
     if (!canvas) return;
@@ -1875,97 +2043,226 @@ export const YieldVaultsView: React.FC = () => {
     if (!ctx) return;
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
-    const width = rect.width || 600;
-    const height = 240;
+    const width = rect.width || 640;
+    const height = rect.height || 320;
     canvas.width = width * dpr;
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, width, height);
 
-    const padLeft = 46;
-    const padRight = 20;
-    const padTop = 18;
-    const padBottom = 30;
-    const chartW = width - padLeft - padRight;
-    const chartH = height - padTop - padBottom;
+    const padL = 58;
+    const padR = 42;
+    const padT = 12;
+    const padB = 20;
+    const plotW = width - padL - padR;
+    const paneGap = 9;
+    const priceH = Math.max(60, height * 0.5);
+    const rsiH = Math.max(44, height * 0.18);
+    const macdH = height - padT - padB - priceH - rsiH - paneGap * 2;
+    const xOf = (i: number, count: number) => padL + (count <= 1 ? 0 : (i / (count - 1)) * plotW);
+    const fmtAxis = (v: number, maxDig = 2) => (v < 10 ? v.toFixed(maxDig) : v.toLocaleString('en-US', { maximumFractionDigits: 2 }));
 
-    if (chartCloses.length < 2) {
+    if (!candles || candles.length < 2) {
       ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
       ctx.font = '11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(marketLoading ? 'Fetching live candles...' : 'No candles available right now.', width / 2, height / 2);
+      ctx.textBaseline = 'middle';
+      ctx.fillText(marketLoading ? 'Fetching live candlestick data…' : 'No candle data right now.', width / 2, height / 2);
       return;
     }
 
-    const minVal = Math.min(...chartCloses) * 0.998;
-    const maxVal = Math.max(...chartCloses) * 1.002;
-    const range = maxVal - minVal || 1;
+    const closes = candles.map((c) => c.close);
+    const lows = candles.map((c) => c.low);
+    const highs = candles.map((c) => c.high);
+    const minP = Math.min(...lows);
+    const maxP = Math.max(...highs);
+    const pr = maxP - minP || 1;
+    const yP = (v: number) => padT + priceH - ((v - minP) / pr) * priceH;
+    const n = candles.length;
 
-    ctx.strokeStyle = 'rgba(0, 242, 254, 0.06)';
+    ctx.textBaseline = 'middle';
+    ctx.font = '9px monospace';
+
+    // Price pane: grid + y labels
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
     ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
+    ctx.setLineDash([3, 3]);
     for (let i = 0; i <= 4; i++) {
-      const y = padTop + (chartH / 4) * i;
+      const y = padT + (priceH / 4) * i;
       ctx.beginPath();
-      ctx.moveTo(padLeft, y);
-      ctx.lineTo(width - padRight, y);
+      ctx.moveTo(padL, y);
+      ctx.lineTo(padL + plotW, y);
       ctx.stroke();
-      const val = maxVal - (range / 4) * i;
-      ctx.fillStyle = 'rgba(148, 163, 184, 0.45)';
-      ctx.font = '10px monospace';
+      const v = maxP - (pr / 4) * i;
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
       ctx.textAlign = 'right';
-      ctx.fillText(val < 10 ? val.toFixed(4) : val.toLocaleString('en-US', { maximumFractionDigits: 2 }), padLeft - 6, y + 3);
+      ctx.fillText(fmtAxis(v), padL - 6, y);
     }
     ctx.setLineDash([]);
 
-    const N = chartCloses.length;
-    const xOf = (i: number) => padLeft + (i / (N - 1)) * chartW;
-    const yOf = (v: number) => padTop + chartH - ((v - minVal) / range) * chartH;
-
-    const drawSeries = (arr: number[], color: string, lineWidth: number) => {
+    // x time labels + vertical grid
+    const stepIdx = [0, Math.ceil(n / 4), Math.ceil((2 * n) / 4), Math.ceil((3 * n) / 4), n - 1];
+    stepIdx.forEach((si, idx) => {
+      if (si < 0 || si >= n) return;
+      const x = xOf(si, n);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.06)';
       ctx.beginPath();
-      arr.forEach((v, idx) => {
-        const x = xOf(idx);
-        const y = yOf(v);
-        if (idx === 0) ctx.moveTo(x, y);
+      ctx.moveTo(x, padT);
+      ctx.lineTo(x, padT + priceH);
+      ctx.stroke();
+      const t = new Date(candles[si].time);
+      ctx.fillStyle = idx % 2 === 0 ? 'rgba(148, 163, 184, 0.6)' : 'rgba(148, 163, 184, 0.35)';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${t.getMonth() + 1}/${t.getDate()} ${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`, x, padT + priceH + 10);
+    });
+
+    const drawLine = (arr: number[], color: string, w = 1.15, dash?: number[]) => {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.setLineDash(dash || []);
+      arr.forEach((v, i) => {
+        const x = xOf(i, arr.length);
+        const y = yP(v);
+        if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
-      ctx.strokeStyle = color;
-      ctx.lineWidth = lineWidth;
       ctx.stroke();
+      ctx.setLineDash([]);
     };
 
-    drawSeries(emaArray(chartCloses, 9), '#22d3ee', 1.2);
-    drawSeries(emaArray(chartCloses, 21), '#c084fc', 1.2);
-
+    // Candlesticks + EMA overlays + last-price marker (clipped to plot area)
+    ctx.save();
     ctx.beginPath();
-    chartCloses.forEach((v, idx) => {
-      const x = xOf(idx);
-      const y = yOf(v);
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    ctx.rect(padL, padT, plotW, priceH);
+    ctx.clip();
+    const bw = Math.max(1.5, (plotW / n) * 0.62);
+    for (let i = 0; i < n; i++) {
+      const c = candles[i];
+      const up = c.close >= c.open;
+      const color = up ? '#10b981' : '#f43f5e';
+      const x = xOf(i, n);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, yP(c.high));
+      ctx.lineTo(x, yP(c.low));
+      ctx.stroke();
+      const yO = yP(c.open);
+      const yC = yP(c.close);
+      ctx.fillRect(x - bw / 2, Math.min(yO, yC), bw, Math.max(1, Math.abs(yC - yO)));
+    }
+    if (n >= 1) drawLine(emaArray(closes, 9), '#22d3ee');
+    if (n >= 21) drawLine(emaArray(closes, 21), '#c084fc');
+    const lastClose = closes[n - 1];
+    const yLast = yP(lastClose);
+    ctx.strokeStyle = 'rgba(0, 242, 254, 0.5)';
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(padL, yLast);
+    ctx.lineTo(padL + plotW, yLast);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Last price right-axis label
+    ctx.fillStyle = '#00f2fe';
+    ctx.textAlign = 'left';
+    ctx.fillText(fmtAxis(lastClose), padL + plotW + 5, yLast);
+
+    // RSI pane
+    const rsiTop = padT + priceH + paneGap;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.textAlign = 'left';
+    ctx.fillText('RSI 14', padL, rsiTop + 9);
+    const rsiArr = rsiSeries(closes, 14);
+    [70, 50, 30].forEach((lvl) => {
+      const y = rsiTop + (rsiH - 10) - ((lvl - 10) / 100) * (rsiH - 10);
+      ctx.strokeStyle = lvl === 50 ? 'rgba(244, 63, 94, 0.25)' : 'rgba(148, 163, 184, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(padL, y);
+      ctx.lineTo(padL + plotW, y);
+      ctx.stroke();
+      ctx.setLineDash([]);
     });
     ctx.save();
-    ctx.lineTo(xOf(N - 1), padTop + chartH);
-    ctx.lineTo(xOf(0), padTop + chartH);
-    ctx.closePath();
-    const grad = ctx.createLinearGradient(0, padTop, 0, padTop + chartH);
-    grad.addColorStop(0, 'rgba(0, 242, 254, 0.18)');
-    grad.addColorStop(1, 'rgba(0, 242, 254, 0)');
-    ctx.fillStyle = grad;
-    ctx.fill();
-    ctx.restore();
     ctx.beginPath();
-    chartCloses.forEach((v, idx) => {
-      const x = xOf(idx);
-      const y = yOf(v);
-      if (idx === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+    ctx.rect(padL, rsiTop, plotW, rsiH);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 1.2;
+    let started = false;
+    rsiArr.forEach((v, i) => {
+      if (v == null) return;
+      const x = xOf(i, n);
+      const y = rsiTop + (rsiH - 10) - (v / 100) * (rsiH - 10);
+      if (!started) {
+        ctx.moveTo(x, y);
+        started = true;
+      } else ctx.lineTo(x, y);
     });
-    ctx.strokeStyle = '#22d3ee';
-    ctx.lineWidth = 1.6;
     ctx.stroke();
-  }, [chartCloses, marketLoading]);
+    ctx.restore();
+    const lastRsi = rsiArr[rsiArr.length - 1];
+    if (lastRsi != null) {
+      const ry = rsiTop + (rsiH - 10) - (lastRsi / 100) * (rsiH - 10);
+      ctx.fillStyle = lastRsi >= 70 ? '#f43f5e' : lastRsi <= 30 ? '#10b981' : '#fbbf24';
+      ctx.fillText(`rsi ${lastRsi.toFixed(1)}`, padL + plotW + 5, ry);
+    }
+
+    // MACD pane
+    const macdTop = rsiTop + rsiH + paneGap;
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.fillText('MACD 12/26/9', padL, macdTop + 9);
+    const m = macdSeries(closes);
+    if (m) {
+      const minM = Math.min(...m.hist, ...m.line, ...m.signal) || -0.0001;
+      const maxM = Math.max(...m.hist, ...m.line, ...m.signal) || 0.0001;
+      const mr = maxM - minM || 1;
+      const yM = (v: number) => macdTop + 12 + ((maxM - v) / mr) * (macdH - 12);
+      const zeroY = yM(0);
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(padL, zeroY);
+      ctx.lineTo(padL + plotW, zeroY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(padL, macdTop + 10, plotW, macdH - 12);
+      ctx.clip();
+      const hbw = Math.max(1, (plotW / n) * 0.4);
+      m.hist.forEach((h, i) => {
+        const y = yM(h);
+        ctx.fillStyle = h >= 0 ? 'rgba(16, 185, 129, 0.55)' : 'rgba(244, 63, 94, 0.55)';
+        ctx.fillRect(xOf(i, n) - hbw / 2, Math.min(y, zeroY), hbw, Math.max(1, Math.abs(y - zeroY)));
+      });
+      const mkLine = (arr: number[], color: string, w: number) => {
+        ctx.beginPath();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w;
+        arr.forEach((v, i) => {
+          const x = xOf(i, n);
+          const y = yM(v);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      };
+      mkLine(m.line, '#22d3ee', 1);
+      mkLine(m.signal, '#f59e0b', 1);
+      ctx.restore();
+      const lastH = m.hist[m.hist.length - 1];
+      ctx.fillStyle = lastH >= 0 ? '#34d399' : '#fb7185';
+      ctx.fillText(`hist ${(lastH || 0).toFixed(5)}`, padL + plotW + 5, macdTop + 10);
+    }
+  }, [candles, marketLoading]);
 
   return (
     <div className="space-y-6 font-sans select-none text-slate-200">
@@ -2126,92 +2423,111 @@ export const YieldVaultsView: React.FC = () => {
               <span>Launch Autopilot Terminal &rarr;</span>
             </button>
           </div>
-          {/* Top: TradeSync Journal Performance Panel (Image 4 Reference) */}
+          {/* Top: TradeSync Vault Performance Journal (REAL on-chain ledger) */}
           <div className="p-6 rounded-3xl bg-[#020d16] border border-cyan-500/25 shadow-2xl space-y-5">
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-white/5">
               <div>
                 <span className="text-[10px] font-mono uppercase text-cyan-400 font-bold tracking-widest flex items-center gap-1.5">
                   <Award className="w-3.5 h-3.5" />
-                  TradeSync Vault Performance Journal (Institutional Telemetry)
+                  Vault Performance Journal — Real On-Chain Ledger
                 </span>
                 <p className="text-xs text-slate-400 font-mono pt-0.5">
-                  Real-time epoch compounding statistics, win streaks, and 30-day cumulative earnings curve.
+                  Yield-vault statistics derived from the deployed ReputationYieldVault ledger (Staked / Unstaked / Rewards) + live pool state.
                 </p>
               </div>
 
-              {/* View Selector */}
-              <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-white/10 font-mono text-xs">
-                <button
-                  onClick={() => setJournalView('cumulative')}
-                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                    journalView === 'cumulative' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Cumulative PnL
-                </button>
-                <button
-                  onClick={() => setJournalView('calendar')}
-                  className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
-                    journalView === 'calendar' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  Yield Calendar
-                </button>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono font-bold text-emerald-300 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> LIVE on-chain
+                </span>
+                {/* View Selector */}
+                <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-white/10 font-mono text-xs">
+                  <button
+                    onClick={() => setJournalView('cumulative')}
+                    className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      journalView === 'cumulative' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Position Curve
+                  </button>
+                  <button
+                    onClick={() => setJournalView('calendar')}
+                    className={`px-3 py-1 rounded-lg font-bold transition cursor-pointer ${
+                      journalView === 'calendar' ? 'bg-cyan-500 text-slate-950 shadow-md' : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Yield Calendar
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* 5 Top KPI Cards (Matching Image 4 TradeSync Journal) */}
+            {/* 5 Real KPI Cards — derived from the on-chain vault ledger */}
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3 font-mono">
-              {/* 1. Win Rate */}
-              <div className="p-4 rounded-2xl bg-black/60 border border-emerald-500/30 space-y-1 relative overflow-hidden">
-                <span className="text-[9px] text-slate-400 uppercase block">Win Rate</span>
+              {/* 1. Capital Deployed */}
+              <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/30 space-y-1 relative overflow-hidden">
+                <span className="text-[9px] text-slate-400 uppercase block">Capital Deployed</span>
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-2xl font-black text-emerald-400">72.7%</span>
-                  <span className="text-[10px] text-emerald-400/80">32/44</span>
+                  <span className="text-xl font-black text-cyan-300">{fmtNum(realStakedByUser ?? journalFromLedger.net, 0)}</span>
+                  <span className="text-[10px] text-cyan-400/80">{stakingTokenSymbol}</span>
                 </div>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden mt-1">
-                  <div className="bg-emerald-400 h-full rounded-full" style={{ width: '72.7%' }} />
-                </div>
+                <span className="text-[9px] text-slate-500 block pt-1">live on-chain stake</span>
               </div>
 
-              {/* 2. Avg Win / Loss */}
+              {/* 2. Unrealized Rewards */}
+              <div className="p-4 rounded-2xl bg-black/60 border border-emerald-500/30 space-y-1">
+                <span className="text-[9px] text-slate-400 uppercase block">Unrealized Rewards</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-emerald-400">{realClaimable != null ? fmtNum(realClaimable, 0) : '—'}</span>
+                  <span className="text-[10px] text-emerald-400/80">{rewardTokenSymbol}</span>
+                </div>
+                <span className="text-[9px] text-slate-500 block pt-1">accruing per block (live)</span>
+              </div>
+
+              {/* 3. Realized Yield */}
               <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/20 space-y-1">
-                <span className="text-[9px] text-slate-400 uppercase block">Avg Win / Loss</span>
-                <div className="text-2xl font-black text-cyan-300">$131.59</div>
-                <span className="text-[9px] text-slate-500 block">Win $384.20 &bull; Loss -$252.61</span>
+                <span className="text-[9px] text-slate-400 uppercase block">Realized Yield</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-white">{fmtNum(journalFromLedger.totalClaimed, 0)}</span>
+                  <span className="text-[10px] text-slate-400">{rewardTokenSymbol}</span>
+                </div>
+                <span className="text-[9px] text-slate-500 block pt-1">{journalFromLedger.claimCount} Rewards claims on ledger</span>
               </div>
 
-              {/* 3. Last 30 Days Yield */}
-              <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/30 space-y-1">
-                <span className="text-[9px] text-slate-400 uppercase block">Last 30 Days</span>
-                <div className="text-2xl font-black text-emerald-400">+$2,895</div>
-                <span className="text-[9px] text-emerald-400/80 block">+14.2% Return</span>
-              </div>
-
-              {/* 4. Win Streak */}
+              {/* 4. Deposit Cycles */}
               <div className="p-4 rounded-2xl bg-black/60 border border-purple-500/20 space-y-1">
-                <span className="text-[9px] text-slate-400 uppercase block">Max Win Streak</span>
-                <div className="text-2xl font-black text-purple-300">6</div>
-                <span className="text-[9px] text-slate-500 block">Current Streak: 3 epochs</span>
+                <span className="text-[9px] text-slate-400 uppercase block">Deposit Cycles</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-purple-300">{journalFromLedger.depositCount}</span>
+                  <span className="text-[10px] text-purple-400/80">Staked events</span>
+                </div>
+                <span className="text-[9px] text-slate-500 block pt-1">{fmtNum(journalFromLedger.totalDeposited, 0)} {stakingTokenSymbol} total</span>
               </div>
 
-              {/* 5. Avg Duration */}
+              {/* 5. Stake Inception */}
               <div className="p-4 rounded-2xl bg-black/60 border border-white/10 space-y-1">
-                <span className="text-[9px] text-slate-400 uppercase block">Avg Lock Duration</span>
-                <div className="text-2xl font-black text-white">2h 20m</div>
-                <span className="text-[9px] text-slate-500 block">Auto-rebalance cycle</span>
+                <span className="text-[9px] text-slate-400 uppercase block">Stake Inception</span>
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xl font-black text-white">
+                    {journalFromLedger.firstDepositT ? new Date(journalFromLedger.firstDepositT * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}
+                  </span>
+                </div>
+                <span className="text-[9px] text-slate-500 block pt-1">first on-chain Staked event</span>
               </div>
             </div>
 
-            {/* Sub-View: Cumulative PnL Curve or Calendar */}
+            {/* Sub-View: Position Curve or Yield Calendar */}
             {journalView === 'cumulative' ? (
               <div className="p-4 rounded-2xl bg-[#01080e] border border-cyan-500/20 space-y-2 font-mono">
-                <div className="flex items-center justify-between text-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
                   <span className="text-white font-bold flex items-center gap-1.5">
                     <Activity className="w-3.5 h-3.5 text-cyan-400" />
-                    Daily Cumulative Compounding PnL
+                    Capital Deployed Curve — on-chain ledger
                   </span>
-                  <span className="text-emerald-400 font-bold">Total Gain: +$2,895.00 (+14.2%)</span>
+                  <span className="text-cyan-300 font-bold">
+                    Net {fmtNum(journalFromLedger.net, 0)} {stakingTokenSymbol}
+                    <span className="text-emerald-400"> · Unrealized +{realClaimable != null ? fmtNum(realClaimable, 0) : '—'} {rewardTokenSymbol}</span>
+                  </span>
                 </div>
                 <div className="relative w-full h-[140px] rounded-xl overflow-hidden bg-[#030d14] border border-white/5">
                   <canvas ref={cumPnlCanvasRef} className="w-full h-full block" />
@@ -2219,25 +2535,40 @@ export const YieldVaultsView: React.FC = () => {
               </div>
             ) : (
               <div className="p-4 rounded-2xl bg-[#01080e] border border-cyan-500/20 font-mono text-xs space-y-2">
-                <div className="flex items-center justify-between text-slate-400 pb-2 border-b border-white/5">
-                  <span className="text-white font-bold">TradeSync Daily Yield Calendar</span>
-                  <span className="text-cyan-300">30-Day Grid</span>
+                <div className="flex flex-wrap items-center justify-between gap-2 text-slate-400 pb-2 border-b border-white/5">
+                  <span className="text-white font-bold">Vault Yield Calendar</span>
+                  <span className="text-cyan-300">Last 30 days · real ledger events</span>
                 </div>
                 <div className="grid grid-cols-10 gap-1.5 text-center text-[10px]">
                   {Array.from({ length: 30 }).map((_, i) => {
-                    const isWin = i % 4 !== 2;
-                    const val = isWin ? (50 + (i * 12) % 240) : -(40 + (i * 7) % 180);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const ds = today.getTime() - (29 - i) * 86400000;
+                    const de = ds + 86400000;
+                    const dayEvs = journalFromLedger.evs.filter((e) => e.timestamp > 0 && e.timestamp * 1000 >= ds && e.timestamp * 1000 < de);
                     return (
                       <div
                         key={i}
                         className={`p-2 rounded-lg border ${
-                          isWin
-                            ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
-                            : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+                          dayEvs.length
+                            ? 'bg-cyan-950/25 border-cyan-500/30 text-cyan-200'
+                            : 'bg-black/40 border-white/5 text-slate-500'
                         }`}
                       >
                         <span className="text-slate-500 block text-[8px]">Day {i + 1}</span>
-                        <strong className="block font-bold">{val >= 0 ? `+$${val}` : `-$${Math.abs(val)}`}</strong>
+                        {dayEvs.length === 0 ? (
+                          <span className="block font-bold text-slate-600">—</span>
+                        ) : (
+                          dayEvs.slice(0, 2).map((ev, j) => (
+                            <span
+                              key={j}
+                              className={`block font-bold truncate ${ev.type === 'Unstaked' ? 'text-rose-300' : ev.type === 'Claimed' ? 'text-emerald-300' : 'text-cyan-300'}`}
+                              title={`${ev.type} ${fmtNum(ev.amount ?? 0, 0)} · block #${ev.block}`}
+                            >
+                              {ev.type === 'Staked' ? '+' : ev.type === 'Unstaked' ? '−' : '+★'} {fmtNum(ev.amount ?? 0, 0)}
+                            </span>
+                          ))
+                        )}
                       </div>
                     );
                   })}
@@ -2663,15 +2994,18 @@ export const YieldVaultsView: React.FC = () => {
          ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'analytics' && (
         <div className="space-y-6">
-          {/* LIVE: Real Binance indicator engine */}
+          {/* LIVE: Real technical indicator engine */}
           <div className="p-6 rounded-3xl bg-[#03131c] via-[#041a26] to-[#020b12] border border-cyan-500/25 shadow-2xl space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h3 className="text-base font-bold text-white font-mono uppercase tracking-wider flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-cyan-300" /> Technical Indicators — Live Binance Feed
+                  <TrendingUp className="w-4 h-4 text-cyan-300" /> Technical Indicators
+                  <span className="px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-400/40 text-cyan-300 text-[9px] font-black tracking-wide">
+                    EMA · RSI · MACD
+                  </span>
                 </h3>
                 <p className="text-[11px] text-slate-400 font-mono">
-                  {selectedFeed.name} ({selectedFeed.binance}) · real candles · real EMA/RSI/MACD math
+                  {selectedFeed.name} · real candles · EMA9/EMA21 overlays, RSI14 &amp; MACD 12/26/9 computed in-browser
                 </p>
               </div>
               <span className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono font-bold text-emerald-300 flex items-center gap-1">
@@ -2714,16 +3048,35 @@ export const YieldVaultsView: React.FC = () => {
               )}
             </div>
 
-            <canvas ref={chartCanvasRef} className="w-full h-60 rounded-2xl bg-[#020b12] border border-white/10" />
+            <canvas ref={chartCanvasRef} className="w-full h-80 rounded-2xl bg-[#020b12] border border-white/10" />
 
-            <div className="flex items-center justify-between px-1 font-mono text-[10px] text-slate-500">
-              <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                LIVE &bull; auto-refresh 30s &bull; EMA9 <span className="text-cyan-400">—</span> EMA21 <span className="text-purple-400">—</span> on {selectedFeed.binance} &bull; via <span className="text-emerald-400">{FEED_SOURCE_LABEL[feedSource]}</span>
+            <div className="flex items-center justify-between px-1 font-mono text-[10px] text-slate-500 gap-3">
+              <span className="flex items-center gap-2 overflow-x-auto py-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-emerald-400 font-bold shrink-0">LIVE</span>
+                <span className="shrink-0">auto-refresh 30s</span>
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/25 text-cyan-300 shrink-0">
+                  EMA9 {indicators ? fmtNum(indicators.ema9, 4) : '—'}
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/25 text-purple-300 shrink-0">
+                  EMA21 {indicators ? fmtNum(indicators.ema21, 4) : '—'}
+                </span>
+                <span className={`px-1.5 py-0.5 rounded shrink-0 ${indicators?.rsi == null ? 'bg-slate-500/10 text-slate-400 border border-slate-500/25' : indicators.rsi >= 70 ? 'bg-rose-500/10 text-rose-300 border border-rose-500/25' : indicators.rsi <= 30 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/25' : 'bg-amber-500/10 text-amber-300 border border-amber-500/25'}`}>
+                  RSI14 {indicators?.rsi != null ? indicators.rsi.toFixed(1) : '—'}
+                </span>
+                <span className={`px-1.5 py-0.5 rounded shrink-0 ${!indicators?.macd ? 'bg-slate-500/10 text-slate-400 border border-slate-500/25' : (indicators.macd.hist >= 0 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/25' : 'bg-rose-500/10 text-rose-300 border border-rose-500/25')}`}>
+                  MACD hist {indicators?.macd ? fmtNum(indicators.macd.hist, 5) : '—'}
+                </span>
+                <span className="shrink-0">
+                  on {selectedFeed.binance} · feed:{' '}
+                  <span title={`${selectedFeed.binance} via ${FEED_SOURCE_LABEL[feedSource]}`} className="text-emerald-400 cursor-help">
+                    {feedSource === 'rapidapi' ? 'exchange kline API' : feedSource === 'binance' ? 'exchange kline API' : feedSource === 'freecryptoapi' ? 'live price samples' : 'no feed'}
+                  </span>
+                </span>
               </span>
-              <span>
+              <span className="shrink-0">
                 {candles && candles.length > 0
-                  ? `last candle ${new Date(candles[candles.length - 1].time).toLocaleTimeString()}`
+                  ? `${candles.length} candles · last ${new Date(candles[candles.length - 1].time).toLocaleTimeString()}`
                   : marketLoading
                     ? 'fetching real candles…'
                     : 'waiting for candles…'}
@@ -2797,7 +3150,7 @@ export const YieldVaultsView: React.FC = () => {
                         <td className={`py-3 px-4 text-right font-bold ${tk && tk.changePct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           {tk ? `${tk.changePct >= 0 ? '+' : ''}${tk.changePct.toFixed(2)}%` : '…'}
                         </td>
-                        <td className="py-3 px-4 text-right text-slate-500 text-[10px]">Binance 24hr</td>
+                        <td className="py-3 px-4 text-right text-slate-500 text-[10px]">{feedSource === 'freecryptoapi' ? 'live samples' : 'kline API'}</td>
                       </tr>
                     );
                   })}
@@ -2805,30 +3158,32 @@ export const YieldVaultsView: React.FC = () => {
               </table>
             </div>
             <p className="text-[10px] font-mono text-slate-500">
-              Price, EMA9/EMA21 overlays and chips are computed in-browser on the real Binance candle series. This is live market data — not simulated.
+              Price, candles, EMA9/EMA21 overlays, RSI and MACD are computed in-browser on the real candle series. This is live market data — not simulated.
             </p>
           </div>
 
-          {/* SIM: Trading Vault performance journal (product vision) */}
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[9px] font-mono font-bold text-amber-300 uppercase">SIMULATED</span>
-            <span className="text-[10px] font-mono text-slate-500">PnL, calendar &amp; charts are product-vision demo data. The Vault Ledger, pool balances and staked figures are REAL on-chain reads from the deployed ReputationYieldVault.</span>
+          {/* REAL: Trading Vault performance telemetry — derived from the on-chain vault ledger */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono font-bold text-emerald-300 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" /> LIVE
+            </span>
+            <span className="text-[10px] font-mono text-slate-500">Vault flows, chart and calendar are derived from the deployed ReputationYieldVault ledger + live pool reads — no simulated figures.</span>
           </div>
-          {/* Top Row: 4 Metric Cards with Exact Image 3 Figures */}
+          {/* Top Row: 4 Real Metric Cards (from the on-chain ledger) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
             {/* This Week */}
             <div className="p-4 rounded-2xl bg-[#080d18] border border-white/10 space-y-2 relative overflow-hidden">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>This Week</span>
-                <span className="text-rose-400 font-bold px-1.5 py-0.5 rounded bg-rose-500/10">-1.01 R:R</span>
+                <span className="text-cyan-300 font-bold px-1.5 py-0.5 rounded bg-cyan-500/10">{periodStats(Date.now() - 7 * 86400000).n} events</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-white">-$1,882.17</span>
-                <span className="text-xs text-rose-400 font-bold">&darr; 1.05%</span>
+                <span className="text-xl font-black text-cyan-300">{fmtNum(journalFromLedger.net, 0)}</span>
+                <span className="text-xs text-slate-500 font-bold">{stakingTokenSymbol} deployed</span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                <span>0% win rate</span>
-                <span>1 trade</span>
+                <span>{fmtNum(periodStats(Date.now() - 7 * 86400000).d, 0)} deposited</span>
+                <span>+{fmtNum(periodStats(Date.now() - 7 * 86400000).c, 0)} {rewardTokenSymbol} claimed</span>
               </div>
             </div>
 
@@ -2836,31 +3191,31 @@ export const YieldVaultsView: React.FC = () => {
             <div className="p-4 rounded-2xl bg-[#080d18] border border-white/10 space-y-2 relative overflow-hidden">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>This Month</span>
-                <span className="text-rose-400 font-bold px-1.5 py-0.5 rounded bg-rose-500/10">-0.64 R:R</span>
+                <span className="text-cyan-300 font-bold px-1.5 py-0.5 rounded bg-cyan-500/10">{periodStats(Date.now() - 30 * 86400000).n} events</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-white">-$858.52</span>
-                <span className="text-xs text-rose-400 font-bold">&darr; 0.43%</span>
+                <span className="text-xl font-black text-cyan-300">{fmtNum(periodStats(Date.now() - 30 * 86400000).d, 0)}</span>
+                <span className="text-xs text-slate-500 font-bold">{stakingTokenSymbol}</span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                <span>25% win rate</span>
-                <span>4 trades</span>
+                <span>{fmtNum(periodStats(Date.now() - 30 * 86400000).w, 0)} withdrawn</span>
+                <span>{periodStats(Date.now() - 30 * 86400000).n} ledger events</span>
               </div>
             </div>
 
             {/* This Year */}
             <div className="p-4 rounded-2xl bg-[#080d18] border border-cyan-500/20 space-y-2 relative overflow-hidden">
               <div className="flex items-center justify-between text-xs text-slate-400">
-                <span>This Year</span>
-                <span className="text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/10">+7.18 R:R</span>
+                <span>Unrealized</span>
+                <span className="text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/10">live</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-white">$11,844.16</span>
-                <span className="text-xs text-emerald-400 font-bold">&uarr; 7.12%</span>
+                <span className="text-xl font-black text-emerald-400">{realClaimable != null ? fmtNum(realClaimable, 0) : '—'}</span>
+                <span className="text-xs text-slate-500 font-bold">{rewardTokenSymbol}</span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                <span>53% win rate</span>
-                <span>16 trades</span>
+                <span>pending rewards</span>
+                <span>accrues per block</span>
               </div>
             </div>
 
@@ -2868,15 +3223,15 @@ export const YieldVaultsView: React.FC = () => {
             <div className="p-4 rounded-2xl bg-[#080d18] border border-emerald-500/30 space-y-2 relative overflow-hidden">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>All Time</span>
-                <span className="text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-500/10">+59.99 R:R</span>
+                <span className="text-cyan-300 font-bold px-1.5 py-0.5 rounded bg-cyan-500/10">{journalFromLedger.evs.length} events</span>
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-emerald-400">$77,713.55</span>
-                <span className="text-xs text-emerald-400 font-bold">&uarr; 59.03%</span>
+                <span className="text-xl font-black text-emerald-400">{fmtNum(journalFromLedger.totalDeposited, 0)}</span>
+                <span className="text-xs text-slate-500 font-bold">{stakingTokenSymbol} deposited</span>
               </div>
               <div className="flex items-center justify-between text-[10px] text-slate-500 pt-1">
-                <span>58% win rate</span>
-                <span>98 trades</span>
+                <span>+{fmtNum(journalFromLedger.totalClaimed, 0)} rewards claimed</span>
+                <span>{journalFromLedger.depositCount} deposits · {journalFromLedger.withdrawCount} withdrawals</span>
               </div>
             </div>
           </div>
@@ -2885,23 +3240,23 @@ export const YieldVaultsView: React.FC = () => {
           <div className="p-4 rounded-2xl bg-[#080c14] border border-white/10 flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
             <div className="flex items-center gap-6">
               <div>
-                <span className="text-[10px] text-slate-500 uppercase block">Account Balance</span>
-                <span className="text-base font-bold text-white">$177,713.55</span>
+                <span className="text-[10px] text-slate-500 uppercase block">Net Deployed</span>
+                <span className="text-base font-bold text-white">{fmtNum(journalFromLedger.net, 0)} {stakingTokenSymbol}</span>
               </div>
               <div className="h-8 w-[1px] bg-white/10" />
               <div>
-                <span className="text-[10px] text-slate-500 uppercase block">Planned Risk</span>
-                <span className="text-base font-bold text-cyan-300">$1,777.14 (1.00%)</span>
+                <span className="text-[10px] text-slate-500 uppercase block">Unrealized Rewards</span>
+                <span className="text-base font-bold text-emerald-400">{realClaimable != null ? fmtNum(realClaimable, 0) : '—'} {rewardTokenSymbol}</span>
               </div>
               <div className="h-8 w-[1px] bg-white/10" />
               <div>
-                <span className="text-[10px] text-slate-500 uppercase block">Open Positions</span>
-                <span className="text-base font-bold text-emerald-400">3 Long &bull; 1 Neutral</span>
+                <span className="text-[10px] text-slate-500 uppercase block">Ledger Events</span>
+                <span className="text-base font-bold text-cyan-300">{journalFromLedger.evs.length}</span>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[10px] px-2.5 py-1 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-bold">
-                Alpha Hedge Engine: Active
+                On-chain: ReputationYieldVault
               </span>
             </div>
           </div>
@@ -2914,9 +3269,9 @@ export const YieldVaultsView: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                     <TrendingUp className="w-4 h-4 text-cyan-400" />
-                    Account Balance Growth
+                    Capital Deployed
                   </h4>
-                  <span className="text-xs font-mono text-cyan-300 font-bold">$177,713.55 Total Balance</span>
+                  <span className="text-xs font-mono text-cyan-300 font-bold">{fmtNum(journalFromLedger.net, 0)} {stakingTokenSymbol} staked on-chain</span>
                 </div>
 
                 <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10 font-mono text-[10px]">
@@ -2945,13 +3300,18 @@ export const YieldVaultsView: React.FC = () => {
                 <div>
                   <h4 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                     <BarChart3 className="w-4 h-4 text-cyan-400" />
-                    Reward:Risk Histogram
+                    Reward:Capital by Month
                   </h4>
-                  <span className="text-xs font-mono text-slate-400">Monthly R:R attribution</span>
+                  <span className="text-xs font-mono text-slate-400">real ledger deposits vs claimed rewards</span>
                 </div>
-                <span className="text-[10px] font-mono text-cyan-300 font-bold px-2 py-0.5 rounded bg-cyan-500/10">
-                  R:R &bull; Total R:R
-                </span>
+                <div className="flex items-center gap-3 text-[10px] font-mono">
+                  <span className="flex items-center gap-1 text-cyan-300">
+                    <span className="w-2 h-2 rounded-sm bg-cyan-400 inline-block" /> deposits
+                  </span>
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <span className="w-2 h-2 rounded-sm bg-emerald-400 inline-block" /> claims
+                  </span>
+                </div>
               </div>
 
               <div className="relative w-full h-[240px] rounded-2xl overflow-hidden bg-[#05080e] border border-white/5">
@@ -2994,146 +3354,80 @@ export const YieldVaultsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Bottom Row: Stats Calendar (April 2026 Monthly PnL Matrix - Complete 5 Weeks) */}
+          {/* Bottom Row: Event Calendar — real ledger month */}
           <div className="p-6 rounded-3xl bg-[#080c14] border border-white/10 shadow-2xl space-y-4 font-mono">
             <div className="flex flex-wrap items-center justify-between gap-4 pb-3 border-b border-white/5">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Calendar className="w-4 h-4 text-cyan-400" />
-                <h4 className="text-sm font-bold text-white">Stats Calendar &bull; April 2026</h4>
-                <span className="text-xs text-rose-400 font-bold">-$858.52</span>
-                <span className="text-xs text-rose-400 font-bold">&darr; 0.43%</span>
-                <span className="text-xs text-rose-400 font-bold">-0.64 R:R</span>
+                <h4 className="text-sm font-bold text-white">Event Calendar &bull; {monthCalendar.month}</h4>
+                {(() => {
+                  const m = periodStats(Date.now() - 30 * 86400000);
+                  return (
+                    <>
+                      <span className="text-xs text-cyan-300 font-bold">+{fmtNum(m.d, 0)} deposited</span>
+                      <span className="text-xs text-emerald-400 font-bold">+{fmtNum(m.c, 0)} claimed</span>
+                      <span className="text-xs text-slate-500">{m.n} ledger events</span>
+                    </>
+                  );
+                })()}
               </div>
-
-              {/* View Filters */}
-              <div className="flex items-center gap-2 text-xs">
-                <div className="flex items-center bg-black/60 p-1 rounded-xl border border-white/10 text-[10px]">
-                  {(['profit', 'pct', 'rr'] as const).map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setCalendarMetric(m)}
-                      className={`px-2 py-0.5 rounded-lg transition cursor-pointer ${
-                        calendarMetric === m ? 'bg-cyan-500 text-slate-950 font-bold' : 'text-slate-400 hover:text-white'
-                      }`}
-                    >
-                      {m === 'profit' ? 'Profit' : m === 'pct' ? 'Profit %' : 'R:R'}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <span className="text-[10px] font-mono text-emerald-400 font-bold px-2 py-0.5 rounded bg-emerald-500/10">
+                LIVE on-chain events
+              </span>
             </div>
 
-            {/* Calendar Grid: Mon to Sun + Weekly summary */}
+            {/* Calendar Grid: Mon to Sun + daily ledger events */}
             <div className="grid grid-cols-8 gap-2 text-xs">
-              {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY', 'WEEK'].map((col) => (
+              {['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY', 'MONTH'].map((col) => (
                 <div key={col} className="p-2 text-center text-[10px] text-slate-500 font-bold border-b border-white/5">
                   {col}
                 </div>
               ))}
 
-              {/* Week 14 Days */}
-              <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-slate-600">30</div>
-              <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-slate-600">31</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">1</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">2</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">3</div>
-              <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]">
-                  <span>4</span>
-                  <span className="text-rose-400">Sat</span>
+              {monthCalendar.cells.map((cell, i) => (
+                <div
+                  key={i}
+                  className={
+                    cell.day == null
+                      ? 'p-3 rounded-xl bg-black/20 border border-white/5 text-slate-600'
+                      : cell.evs.length > 0
+                        ? 'p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/30 text-slate-200 space-y-1'
+                        : 'p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300'
+                  }
+                >
+                  {cell.day == null ? (
+                    '·'
+                  ) : (
+                    <>
+                      <div className="flex justify-between text-[10px]">
+                        <span>{cell.day}</span>
+                        {cell.evs.length > 0 && <span className="text-cyan-400">{cell.evs.length}</span>}
+                      </div>
+                      {cell.evs.map((ev, j) => (
+                        <div
+                          key={`${ev.txHash}-${j}`}
+                          className={`text-[10px] font-bold ${
+                            ev.type === 'Staked' ? 'text-cyan-300' : ev.type === 'Unstaked' ? 'text-rose-400' : 'text-emerald-400'
+                          }`}
+                        >
+                          {ev.type === 'Staked' ? `+${fmtNum(ev.amount ?? 0, 0)}` : ev.type === 'Unstaked' ? `-${fmtNum(ev.amount ?? 0, 0)}` : `+${fmtNum(ev.amount ?? 0, 0)}★`}
+                        </div>
+                      ))}
+                    </>
+                  )}
                 </div>
-                <div className="text-rose-400 font-bold text-[11px]">-$1,871.48</div>
-                <div className="text-[9px] text-rose-400/70">-1.05% &bull; -1.01 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">5</div>
-              <div className="p-3 rounded-xl bg-black/60 border border-rose-500/20 text-slate-200 space-y-1 text-center">
-                <span className="text-[10px] text-slate-400 block">Week 14</span>
-                <span className="text-rose-400 font-bold text-xs">-$1,871.48</span>
-              </div>
+              ))}
 
-              {/* Week 15 Days */}
-              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>6</span><span className="text-emerald-400">Mon</span></div>
-                <div className="text-emerald-400 font-bold text-[11px]">+$1,240.50</div>
-                <div className="text-[9px] text-emerald-400/70">+0.75% &bull; +1.2 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">7</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">8</div>
-              <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>9</span><span className="text-rose-400">Thu</span></div>
-                <div className="text-rose-400 font-bold text-[11px]">-$320.15</div>
-                <div className="text-[9px] text-rose-400/70">-0.18% &bull; -0.3 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">10</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">11</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">12</div>
-              <div className="p-3 rounded-xl bg-black/60 border border-emerald-500/20 text-slate-200 space-y-1 text-center">
-                <span className="text-[10px] text-slate-400 block">Week 15</span>
-                <span className="text-emerald-400 font-bold text-xs">+$920.35</span>
-              </div>
-
-              {/* Week 16 Days */}
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">13</div>
-              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>14</span><span className="text-emerald-400">Tue</span></div>
-                <div className="text-emerald-400 font-bold text-[11px]">+$2,180.40</div>
-                <div className="text-[9px] text-emerald-400/70">+1.32% &bull; +2.1 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">15</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">16</div>
-              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>17</span><span className="text-emerald-400">Fri</span></div>
-                <div className="text-emerald-400 font-bold text-[11px]">+$940.20</div>
-                <div className="text-[9px] text-emerald-400/70">+0.57% &bull; +0.9 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">18</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">19</div>
-              <div className="p-3 rounded-xl bg-black/60 border border-emerald-500/20 text-slate-200 space-y-1 text-center">
-                <span className="text-[10px] text-slate-400 block">Week 16</span>
-                <span className="text-emerald-400 font-bold text-xs">+$3,120.60</span>
-              </div>
-
-              {/* Week 17 Days */}
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">20</div>
-              <div className="p-3 rounded-xl bg-rose-950/20 border border-rose-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>21</span><span className="text-rose-400">Tue</span></div>
-                <div className="text-rose-400 font-bold text-[11px]">-$450.00</div>
-                <div className="text-[9px] text-rose-400/70">-0.27% &bull; -0.4 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">22</div>
-              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>23</span><span className="text-emerald-400">Thu</span></div>
-                <div className="text-emerald-400 font-bold text-[11px]">+$1,860.20</div>
-                <div className="text-[9px] text-emerald-400/70">+1.12% &bull; +1.8 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">24</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">25</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">26</div>
-              <div className="p-3 rounded-xl bg-black/60 border border-emerald-500/20 text-slate-200 space-y-1 text-center">
-                <span className="text-[10px] text-slate-400 block">Week 17</span>
-                <span className="text-emerald-400 font-bold text-xs">+$1,410.20</span>
-              </div>
-
-              {/* Week 18 Days */}
-              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>27</span><span className="text-emerald-400">Mon</span></div>
-                <div className="text-emerald-400 font-bold text-[11px]">+$840.10</div>
-                <div className="text-[9px] text-emerald-400/70">+0.51% &bull; +0.8 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">28</div>
-              <div className="p-3 rounded-xl bg-black/40 border border-white/5 text-slate-300">29</div>
-              <div className="p-3 rounded-xl bg-emerald-950/20 border border-emerald-500/30 text-slate-200 space-y-1">
-                <div className="flex justify-between text-[10px]"><span>30</span><span className="text-emerald-400">Thu</span></div>
-                <div className="text-emerald-400 font-bold text-[11px]">+$1,120.50</div>
-                <div className="text-[9px] text-emerald-400/70">+0.68% &bull; +1.1 R:R</div>
-              </div>
-              <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-slate-600">1</div>
-              <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-slate-600">2</div>
-              <div className="p-3 rounded-xl bg-black/20 border border-white/5 text-slate-600">3</div>
-              <div className="p-3 rounded-xl bg-black/60 border border-emerald-500/20 text-slate-200 space-y-1 text-center">
-                <span className="text-[10px] text-slate-400 block">Week 18</span>
-                <span className="text-emerald-400 font-bold text-xs">+$1,960.60</span>
-              </div>
+              {(() => {
+                const m = periodStats(Date.now() - 30 * 86400000);
+                return (
+                  <div className="p-3 rounded-xl bg-black/60 border border-cyan-500/20 text-slate-200 space-y-1 text-center">
+                    <span className="text-[10px] text-slate-400 block">month</span>
+                    <span className="text-cyan-300 font-bold text-xs">+{fmtNum(m.d, 0)}</span>
+                    <span className="text-emerald-400 font-bold text-xs block">+{fmtNum(m.c, 0)} earned</span>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </div>
