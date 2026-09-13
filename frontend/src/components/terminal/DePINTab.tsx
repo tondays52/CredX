@@ -57,7 +57,7 @@ import AiComputeView from './AiComputeView';
 import ValidatorStakingView from './ValidatorStakingView';
 import GoogleMapView from '../common/GoogleMapView';
 import { Loader2, CircleCheck } from 'lucide-react';
-import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
+import { CONTRACTS, CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
 import { scanRealBluetoothDevice } from '../../utils/realHardwareConnect';
 import { Modal } from '../common/Modal';
 import { GPUCluster } from '../../types/tracks';
@@ -1568,132 +1568,227 @@ const DePINTab: React.FC = () => {
           {/* --------------------------------------------------------------------- */}
           {/* PULSE SUB-TAB 4: REWARDS & ROADMAP                                    */}
           {/* --------------------------------------------------------------------- */}
-          {activePulseTab === 'rewards' && (
-            <div className="space-y-6">
-              {/* Gamified Tier Milestone Banner */}
-              <GlassCard className="p-6 relative overflow-hidden border-emerald-500/30 bg-gradient-to-r from-emerald-950/40 via-black to-[#091507]">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 font-extrabold text-lg">
-                      VI
+          {activePulseTab === 'rewards' &&
+            (() => {
+              const st = pulseLive.state;
+              const nd = pulseLive.node;
+              const earned = nd?.totalRewardUnits ?? 0;
+              const claimed = nd?.claimedUnits ?? 0;
+              const unpaid = Math.max(0, earned - claimed);
+              const fmtU = (v: number) => v.toLocaleString(undefined, { maximumFractionDigits: 2 });
+              const now = Date.now() / 1000;
+              const epochStart = st && st.epochDurationSeconds > 0 ? st.genesisTime + st.currentEpoch * st.epochDurationSeconds : 0;
+              const epochEnd = st && st.epochDurationSeconds > 0 ? st.genesisTime + (st.currentEpoch + 1) * st.epochDurationSeconds : 0;
+              const epochPct =
+                st && epochEnd > epochStart ? Math.min(100, Math.max(0, ((now - epochStart) / (epochEnd - epochStart)) * 100)) : 0;
+              const gbSettled = (st?.totalBandwidthMB ?? 0) / 1024;
+              const registeredAt = nd?.registeredAt
+                ? new Date(nd.registeredAt * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+                : '—';
+              const milestones = [
+                { label: 'Genesis epoch ledger online', done: (st?.totalEpochsSettled ?? 0) >= 1, detail: `${st?.totalEpochsSettled ?? 0} epochs settled on-chain` },
+                { label: 'First community bandwidth onboarded', done: gbSettled >= 1, detail: `${gbSettled.toFixed(1)} GB on the ledger` },
+                { label: 'My node anchored an epoch', done: (nd?.epochCount ?? 0) >= 1, detail: nd ? `${nd.epochCount} epoch${nd.epochCount === 1 ? '' : 's'} anchored by this wallet` : 'register a node to start' },
+              ];
+              return (
+                <div className="space-y-6">
+                  {/* Live on-chain rewards banner */}
+                  <GlassCard className="p-6 relative overflow-hidden border-[#ABF600]/30 bg-gradient-to-r from-black via-[#081006] to-[#0A121D]">
+                    <div className="flex flex-wrap items-center gap-2 mb-4">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#ABF600]/15 border border-[#ABF600]/40 text-[#ABF600] text-[10px] font-mono font-bold">
+                        <span className={`w-2 h-2 rounded-full ${pulseLive.loading ? 'bg-[#ABF600] animate-pulse' : 'bg-[#ABF600]'} `} />
+                        LIVE ON-CHAIN · PULSEBANDWIDTHREGISTRY
+                      </span>
+                      <span className="px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-white/60 text-[10px] font-mono">
+                        {pulseLive.isConnected ? `signer ${pulseLive.activeSignerLabel}` : `watching demo node ${pulseLive.account.slice(0, 8)}…`}
+                      </span>
+                      <a
+                        href={`${CREDITCOIN_BLOCKSCOUT}/address/${CONTRACTS.pulseBandwidthRegistry}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-[10px] font-mono hover:bg-cyan-500/20 transition"
+                      >
+                        view contract ↗
+                      </a>
                     </div>
-                    <div>
-                      <div className="text-xs font-mono uppercase text-emerald-400 tracking-wider font-bold">
-                        Current Milestone Tier
+
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                        <span className="text-[10px] font-mono text-white/40 uppercase block">PULSE Earned</span>
+                        <span className="text-xl font-black font-mono text-[#ABF600]">{st ? fmtU(earned) : '—'}</span>
+                        <span className="text-[10px] text-white/40 font-mono block">reward units on ledger</span>
                       </div>
-                      <h2 className="text-2xl font-black text-white">{pulseTier}</h2>
+                      <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                        <span className="text-[10px] font-mono text-white/40 uppercase block">PULSE Claimed</span>
+                        <span className="text-xl font-black font-mono text-white">{fmtU(claimed)}</span>
+                        <span className="text-[10px] text-white/40 font-mono block">via on-chain claim</span>
+                      </div>
+                      <div className="p-4 rounded-xl bg-[#ABF600]/10 border border-[#ABF600]/30 space-y-1">
+                        <span className="text-[10px] font-mono text-[#ABF600]/70 uppercase block">Claimable Now</span>
+                        <span className="text-xl font-black font-mono text-[#ABF600]">{fmtU(unpaid)}</span>
+                        <span className="text-[10px] text-white/50 font-mono block">earned − claimed</span>
+                      </div>
+                      <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                        <span className="text-[10px] font-mono text-white/40 uppercase block">Current Epoch</span>
+                        <span className="text-xl font-black font-mono text-cyan-300">{st ? `#${st.currentEpoch}` : '—'}</span>
+                        <span className="text-[10px] text-white/40 font-mono block">progress {epochPct.toFixed(1)}%</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      <div className="flex justify-between text-xs font-mono">
+                        <span className="text-white/60">Epoch {st ? st.currentEpoch : '…'} progress (on-chain timebase)</span>
+                        <span className="text-[#ABF600] font-bold">{epochPct.toFixed(1)}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-black/60 rounded-full overflow-hidden border border-white/10">
+                        <div
+                          className="h-full bg-gradient-to-r from-[#ABF600] to-emerald-400 transition-all duration-700"
+                          style={{ width: `${epochPct}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-5 p-4 rounded-xl bg-black/40 border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-xs font-bold text-white block">Claim PULSE rewards</span>
+                        <span className="text-xs text-white/50 font-mono block mt-0.5">
+                          records {fmtU(unpaid)} units as claimed on-chain ({'RewardsClaimed'} event); reward units are a ledger entry, not an ERC-20 transfer — PULSE→cUSD redemption is on the roadmap below.
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => pulseLive.claim()}
+                        disabled={pulseLive.busy === 'claim' || unpaid <= 0}
+                        className="shrink-0 px-5 py-2.5 rounded-xl bg-[#ABF600] hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-black font-extrabold text-xs font-mono transition shadow-lg shadow-[#ABF600]/20"
+                      >
+                        {pulseLive.busy === 'claim' ? 'CLAIMING…' : unpaid > 0 ? `CLAIM ${fmtU(unpaid)} PULSE` : 'NOTHING TO CLAIM'}
+                      </button>
+                    </div>
+
+                    {pulseLive.lastTx && (
+                      <div className="mt-3 text-[10px] font-mono text-emerald-400">
+                        last claim tx{' '}
+                        <a href={`${CREDITCOIN_BLOCKSCOUT}/tx/${pulseLive.lastTx}`} target="_blank" rel="noreferrer" className="underline hover:text-emerald-300">
+                          {txHashShort(pulseLive.lastTx)}
+                        </a>{' '}
+                        · broadcast OK
+                      </div>
+                    )}
+                    {pulseLive.error && <div className="mt-3 text-[10px] font-mono text-rose-400">{pulseLive.error}</div>}
+                  </GlassCard>
+
+                  {/* My node stats — real on-chain participation */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                      <span className="text-[10px] font-mono text-white/40 uppercase block">My Node Epochs</span>
+                      <span className="text-xl font-black font-mono text-white">{nd?.epochCount ?? '—'}</span>
+                      <span className="text-[10px] text-white/40 font-mono block">registered {registeredAt}</span>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                      <span className="text-[10px] font-mono text-white/40 uppercase block">Last Anchor</span>
+                      <span className="text-xl font-black font-mono text-cyan-300">{nd ? `Ep#${nd.lastEpoch}` : '—'}</span>
+                      <span className="text-[10px] text-white/40 font-mono block">grade {nd?.lastQualityGrade ?? '—'} · {nd?.lastBandwidthMB?.toLocaleString() ?? '—'} MB</span>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                      <span className="text-[10px] font-mono text-white/40 uppercase block">Network Quality</span>
+                      <span className="text-xl font-black font-mono text-[#ABF600]">{pulseLive.networkQualityPct}%</span>
+                      <span className="text-[10px] text-white/40 font-mono block">1–4 grade average</span>
+                    </div>
+                    <div className="p-4 rounded-xl bg-black/40 border border-white/[0.08] space-y-1">
+                      <span className="text-[10px] font-mono text-white/40 uppercase block">Lifetime Ledger</span>
+                      <span className="text-xl font-black font-mono text-white">{pulseLive.ledgerGB.toFixed(2)} GB</span>
+                      <span className="text-[10px] text-white/40 font-mono block">this wallet's anchors</span>
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <span className="text-[10px] font-mono text-white/40 uppercase block">Accrued Tier Points</span>
-                    <span className="text-2xl font-black font-mono text-[#ABF600]">
-                      🍃 {(pulseTierPoints / 1000).toFixed(2)}K
-                    </span>
-                  </div>
-                </div>
+                  {/* Milestones & roadmap */}
+                  <GlassCard className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Rewards Roadmap</h3>
+                      <span className="text-[10px] font-mono text-white/40">LIVE MILESTONES ON-CHAIN</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {milestones.map((m) => (
+                        <div
+                          key={m.label}
+                          className={`p-4 rounded-xl border space-y-1 ${
+                            m.done ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-white/[0.02] border-white/[0.08]'
+                          }`}
+                        >
+                          <span className="text-xs font-bold text-white block">{m.label}</span>
+                          <span className={`text-[10px] font-mono block ${m.done ? 'text-emerald-400' : 'text-white/40'}`}>
+                            {m.done ? 'REACHED ✅' : 'PENDING'} · {m.detail}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
+                      <span className="text-[10px] font-mono text-white/40 uppercase block">Planned (honest roadmap — not yet on-chain)</span>
+                      <ul className="text-xs text-white/60 space-y-1">
+                        <li>· Cross-chain uptime attestation via Attestcoin BlockProver 0x0FD2</li>
+                        <li>· PULSE reward units → cUSD redemption</li>
+                        <li>· ISP-verified bandwidth proofs (legacy of simple operator reports)</li>
+                        <li>· Multi-chain onboarding (Base / Arbitrum once attested by the Attestcoin Protocol)</li>
+                      </ul>
+                    </div>
+                  </GlassCard>
 
-                {/* Level Progress */}
-                <div className="mt-6 space-y-2">
-                  <div className="flex justify-between text-xs font-mono">
-                    <span className="text-white/60">Level Progress to Tier VII Diamond:</span>
-                    <span className="text-emerald-400 font-bold">{pulseLevelProgressPct}%</span>
-                  </div>
-                  <div className="w-full h-2.5 bg-black/60 rounded-full overflow-hidden border border-white/10">
-                    <div
-                      className="h-full bg-gradient-to-r from-emerald-500 via-[#ABF600] to-teal-400 transition-all duration-700"
-                      style={{ width: `${pulseLevelProgressPct}%` }}
-                    />
-                  </div>
-                </div>
+                  {/* Real epoch ledger from eth_getLogs */}
+                  <GlassCard className="p-6 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">On-chain Epoch Ledger</h3>
+                      <span className="text-[10px] font-mono text-white/40">BandwidthAnchored EVENTS · ETH_GETLOGS</span>
+                    </div>
 
-                {/* Milestone Claim Box */}
-                <div className="mt-6 p-4 rounded-xl bg-black/40 border border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div>
-                    <span className="text-xs font-bold text-white block">Tier VI Bonus Milestone</span>
-                    <span className="text-lg font-extrabold font-mono text-[#ABF600] flex items-center gap-1.5 mt-0.5">
-                      🍃 6,000 Points (+20 CTS)
-                    </span>
-                  </div>
-                  <button
-                    onClick={claimPulseTierBonus}
-                    className="px-6 py-2.5 rounded-xl bg-[#ABF600] hover:brightness-110 text-black font-extrabold text-xs font-mono transition shadow-lg shadow-[#ABF600]/20"
-                  >
-                    CLAIM TIER VI BONUS
-                  </button>
+                    {pulseLive.ledger.length === 0 ? (
+                      <div className="text-xs font-mono text-white/50 py-8 text-center uppercase tracking-wider">
+                        {pulseLive.loading ? 'reading registry…' : 'no anchored epochs yet — anchor one in Node Dashboard'}
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left font-mono text-xs">
+                          <thead>
+                            <tr className="text-white/40 border-b border-white/10 pb-2 text-[10px] uppercase">
+                              <th className="pb-2">Epoch</th>
+                              <th className="pb-2">Anchored</th>
+                              <th className="pb-2">Operator</th>
+                              <th className="pb-2 text-right">Bandwidth</th>
+                              <th className="pb-2 text-right">Grade</th>
+                              <th className="pb-2 text-right">PULSE Units</th>
+                              <th className="pb-2 text-right">Anchor</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/[0.06]">
+                            {pulseLive.ledger.map((l, i) => (
+                              <tr key={`${l.epochId}-${i}`} className="text-white">
+                                <td className="py-3 font-bold text-[#ABF600] flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${i === 0 ? 'bg-[#ABF600] animate-pulse' : 'bg-white/20'}`} />
+                                  Epoch {l.epochId}
+                                </td>
+                                <td className="py-3 text-white/60">{new Date(l.timestamp * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
+                                <td className="py-3 text-white/60">{`${l.operator.slice(0, 6)}…${l.operator.slice(-4)}`}</td>
+                                <td className="py-3 text-right">{l.bandwidthMB.toLocaleString()} MB</td>
+                                <td className="py-3 text-right text-cyan-300">×{l.qualityGrade}</td>
+                                <td className="py-3 text-right font-bold text-[#ABF600]">{fmtU(l.rewardUnits)}</td>
+                                <td className="py-3 text-right">
+                                  <a
+                                    href={`${CREDITCOIN_BLOCKSCOUT}/tx/${l.anchorHash}`}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="text-emerald-400 hover:text-emerald-300 underline"
+                                  >
+                                    {l.anchorHash.slice(0, 8)}…
+                                  </a>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </GlassCard>
                 </div>
-              </GlassCard>
-
-              {/* Uptime Rewards Roadmap */}
-              <GlassCard className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Uptime Rewards Roadmap</h3>
-                  <span className="text-xs font-mono text-[#ABF600]">ACTIVE GENESIS SEASON</span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1">
-                    <span className="text-[10px] font-mono text-white/40 block">Tier V: Platinum</span>
-                    <span className="text-sm font-bold text-white">2K Points</span>
-                    <span className="text-[10px] text-emerald-400 font-mono block">COMPLETED ✅</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/30 space-y-1">
-                    <span className="text-[10px] font-mono text-emerald-300 font-bold block">Tier VI: Emerald (YOU)</span>
-                    <span className="text-sm font-bold text-[#ABF600]">6K Points</span>
-                    <span className="text-[10px] text-[#ABF600] font-mono block">ACTIVE TIER 🎯</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 opacity-70">
-                    <span className="text-[10px] font-mono text-white/40 block">Tier VII: Diamond</span>
-                    <span className="text-sm font-bold text-white">19K Points</span>
-                    <span className="text-[10px] text-white/40 font-mono block">NEXT MILESTONE</span>
-                  </div>
-                  <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] space-y-1 opacity-50">
-                    <span className="text-[10px] font-mono text-white/40 block">Tier VIII: Conqueror</span>
-                    <span className="text-sm font-bold text-white">50K Points</span>
-                    <span className="text-[10px] text-white/40 font-mono block">LOCKED</span>
-                  </div>
-                </div>
-              </GlassCard>
-
-              {/* Historical Epochs Table */}
-              <GlassCard className="p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Stage 0 Genesis Epoch Log</h3>
-                  <span className="text-[10px] font-mono text-white/40">USC VERIFIED LOGS</span>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono text-xs">
-                    <thead>
-                      <tr className="text-white/40 border-b border-white/10 pb-2 text-[10px] uppercase">
-                        <th className="pb-2">Epoch</th>
-                        <th className="pb-2">Start / End Date</th>
-                        <th className="pb-2">Total Uptime</th>
-                        <th className="pb-2 text-right">Uptime Points</th>
-                        <th className="pb-2 text-right">Network Points</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
-                      <tr className="text-white">
-                        <td className="py-3 font-bold text-[#ABF600] flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#ABF600] animate-pulse" />
-                          Epoch 0 (Current)
-                        </td>
-                        <td className="py-3 text-white/60">Aug 11, 2026 - Sep 11, 2026</td>
-                        <td className="py-3 text-white/80">30 days, 4 hrs, 12 mins</td>
-                        <td className="py-3 text-right font-bold text-[#ABF600]">
-                          🍃 {pulseUptimePoints.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </td>
-                        <td className="py-3 text-right font-bold text-cyan-300">
-                          💎 {pulseNetworkPoints.toFixed(2)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </GlassCard>
-            </div>
-          )}
+              );
+            })()}
         </div>
       )}
 
