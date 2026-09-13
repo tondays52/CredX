@@ -1,7 +1,7 @@
 {
   "network": "creditcoinTestnet",
   "chainId": "102031",
-  "timestamp": "2026-09-13T02:07:47.842Z",
+  "timestamp": "2026-09-13T02:55:18.612Z",
   "contracts": {
     "AttestationVerifier": "0x34aA30efE2226ffC2E55607017FbA2F07e62b279",
     "CreditScoreEngine": "0xA31697bBd4900f8FA62015A51dA3c58972E96BB6",
@@ -27,7 +27,8 @@
     "GeoOrbitRegistry": "0x8829e0e397ffa872D3E5B5CE5d32b52E98DC4e63",
     "PulseBandwidthRegistry": "0x97aDb0deE39402E1e92772ff2AA0eD935774832a",
     "NexusEdgeRegistry": "0xc28C0c9e8D81FDF7DFf46a9F458586857928e00B",
-    "AiComputeRegistry": "0xB792Ea148D15Da24F93a332Ebf5Cd60Eb1fa785D"
+    "AiComputeRegistry": "0xB792Ea148D15Da24F93a332Ebf5Cd60Eb1fa785D",
+    "ValidatorStakingRegistry": "0x5Ec9546995E71852b5160F1b41432CD37dd27a96"
   },
   "verifierMode": "mock-harness",
   "notes": "AttestationVerifier on this deployment is the MockAttestationOracle (always-pass testnet harness standing in for the Creditcoin 0x0FD2 Attestcoin precompile). RWAInvoiceFinancing (0x05D41AE81c47078DcA0CFF4891A407F4D09E01aA) was added in a follow-up deploy.",

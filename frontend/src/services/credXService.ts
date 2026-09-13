@@ -1067,22 +1067,22 @@ export async function depinUndelegateStake(operator: string, amount: number): Pr
   return receipt.hash as string;
 }
 
-export async function requestHardwareLoan(amount: number): Promise<string> {
-  const signer = await getSigner();
-  const write = new ethers.Contract(CONTRACTS.dePINInfrastructureHub, DEPIN_HUB_ABI, signer);
+export async function requestHardwareLoan(amount: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const write = new ethers.Contract(CONTRACTS.dePINInfrastructureHub, DEPIN_HUB_ABI, s);
   const tx = await write.requestHardwareLoan(ethers.parseUnits(amount.toString(), 18), { gasLimit: 500000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function repayHardwareLoan(amount: number): Promise<string> {
-  const signer = await getSigner();
+export async function repayHardwareLoan(amount: number, signer?: ethers.Signer): Promise<string> {
   const hub = readContract(CONTRACTS.dePINInfrastructureHub, DEPIN_HUB_ABI);
   const hAddr = await hub.getAddress();
   const depinAddr = await hub.DEPIN_TOKEN();
   const meta = await tokenMeta(depinAddr);
-  await ensureTokenApproval(signer, depinAddr, hAddr, ethers.parseUnits(amount.toString(), meta.decimals));
-  const write = new ethers.Contract(CONTRACTS.dePINInfrastructureHub, DEPIN_HUB_ABI, signer);
+  const s = signer ?? await getSigner();
+  await ensureTokenApproval(s, depinAddr, hAddr, ethers.parseUnits(amount.toString(), meta.decimals));
+  const write = new ethers.Contract(CONTRACTS.dePINInfrastructureHub, DEPIN_HUB_ABI, s);
   const tx = await write.repayHardwareLoan(ethers.parseUnits(amount.toString(), meta.decimals), { gasLimit: 500000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
@@ -2299,6 +2299,275 @@ export async function aiComputeClaimRewards(signer?: ethers.Signer): Promise<str
   const s = signer ?? await getSigner();
   const c = new ethers.Contract(CONTRACTS.aiComputeRegistry, AICOMPUTE_ABI, s);
   const tx = await c.claimRewards({ gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+// ─── Validator Staking (live on-chain validator registry + staking pool) ────
+
+export const VALIDATOR_STAKING_ABI = [
+  'function owner() view returns (address)',
+  'function paused() view returns (bool)',
+  'function rewardPerTokenPerBlock() view returns (uint256)',
+  'function minOperatorScore() view returns (uint256)',
+  'function MAX_COMMISSION_BPS() view returns (uint256)',
+  'function STAKE_TOKEN() view returns (address)',
+  'function validatorCount() view returns (uint256)',
+  'function totalStaked() view returns (uint256)',
+  'function totalRewardUnitsIssued() view returns (uint256)',
+  'function totalCommissionClaimed() view returns (uint256)',
+  'function getPool(address) view returns (uint256 validatorId, address operator, bytes4 nodeTag, uint16 commissionBps, uint256 totalStaked, uint256 accReward, uint256 accCommission, uint256 commissionDebt, uint256 commissionPool, uint256 claimedCommission, uint256 lastUpdateBlock, uint256 registeredAt)',
+  'function validatorOperators(uint256) view returns (address)',
+  'function staked(address,address) view returns (uint256)',
+  'function claimedUnits(address) view returns (uint256)',
+  'function pendingRewards(address,address) view returns (uint256)',
+  'function pendingCommission(address) view returns (uint256)',
+  'function registerValidator(bytes4 nodeTag, uint16 commissionBps)',
+  'function stakeToValidator(address operator, uint256 amount)',
+  'function unstakeFromValidator(address operator, uint256 amount)',
+  'function claimRewards(address operator)',
+  'function claimCommission()',
+];
+
+export interface ValidatorStakingState {
+  owner: string;
+  paused: boolean;
+  rewardPerBlock: number;
+  minOperatorScore: number;
+  maxCommissionBps: number;
+  validatorCount: number;
+  totalStaked: number;
+  totalRewardUnitsIssued: number;
+  totalCommissionClaimed: number;
+}
+
+export interface ValidatorView {
+  validatorId: number;
+  operator: string;
+  nodeTag: string;
+  commissionBps: number;
+  totalStaked: number;
+  claimedCommission: number;
+  registeredAt: number;
+  myStake: number;
+  myPendingRewards: number;
+  pendingCommission: number;
+}
+
+export type StakingEventKind = 'registered' | 'staked' | 'unstaked' | 'rewards' | 'commission';
+
+export interface StakingEventEntry {
+  kind: StakingEventKind;
+  user?: string;
+  operator: string;
+  validatorId?: number;
+  nodeTag?: string;
+  commissionBps?: number;
+  amount?: number;
+  timestamp: number;
+  blockNumber: number;
+}
+
+export async function fetchValidatorStakingState(): Promise<ValidatorStakingState | null> {
+  try {
+    const c = readContract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI);
+    const [owner, paused, rpb, minScore, maxBps, count, staked, issued, claimed] = await Promise.all([
+      c.owner(), c.paused(), c.rewardPerTokenPerBlock(), c.minOperatorScore(), c.MAX_COMMISSION_BPS(),
+      c.validatorCount(), c.totalStaked(), c.totalRewardUnitsIssued(), c.totalCommissionClaimed(),
+    ]);
+    return {
+      owner: String(owner),
+      paused: Boolean(paused),
+      rewardPerBlock: parseFloat(ethers.formatUnits(rpb, 18)),
+      minOperatorScore: Number(minScore),
+      maxCommissionBps: Number(maxBps),
+      validatorCount: Number(count),
+      totalStaked: parseFloat(ethers.formatUnits(staked, 18)),
+      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(issued, 18)),
+      totalCommissionClaimed: parseFloat(ethers.formatUnits(claimed, 18)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Full validator directory on the live ValidatorStakingRegistry (id → operator → pool). */
+export async function fetchValidatorStakingValidators(account: string, limit = 50): Promise<ValidatorView[]> {
+  try {
+    const c = readContract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI);
+    const count = Math.min(Number(await c.validatorCount()), limit);
+    const operators = await Promise.all(
+      Array.from({ length: count }, (_, i) => c.validatorOperators(i + 1))
+    );
+    const rows = await Promise.all(
+      operators.map(async (op: string) => {
+        const p = await c.getPool(op);
+        if (String(p.operator) === ethers.ZeroAddress) return null;
+        const [myStake, myPending, pendingCommission] = await Promise.all([
+          c.staked(account, op),
+          c.pendingRewards(account, op),
+          c.pendingCommission(op),
+        ]);
+        return {
+          validatorId: Number(p.validatorId),
+          operator: ethers.getAddress(String(p.operator)),
+          nodeTag: String(p.nodeTag),
+          commissionBps: Number(p.commissionBps),
+          totalStaked: parseFloat(ethers.formatUnits(p.totalStaked, 18)),
+          claimedCommission: parseFloat(ethers.formatUnits(p.claimedCommission, 18)),
+          registeredAt: Number(p.registeredAt),
+          myStake: parseFloat(ethers.formatUnits(myStake, 18)),
+          myPendingRewards: parseFloat(ethers.formatUnits(myPending, 18)),
+          pendingCommission: parseFloat(ethers.formatUnits(pendingCommission, 18)),
+        };
+      })
+    );
+    return rows.filter((r): r is ValidatorView => r !== null);
+  } catch {
+    return [];
+  }
+}
+
+/** Recent staking events on the live registry (via eth_getLogs, topic0 OR filter). */
+export async function fetchValidatorStakingLedger(limit = 50): Promise<StakingEventEntry[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const topic0 = [
+      ethers.id('ValidatorRegistered(address,uint256,bytes4,uint16,uint256)'),
+      ethers.id('Staked(address,address,uint256)'),
+      ethers.id('Unstaked(address,address,uint256)'),
+      ethers.id('RewardsClaimed(address,address,uint256)'),
+      ethers.id('CommissionClaimed(address,uint256)'),
+    ];
+    const windows = [50000, 20000, 10000, 6000];
+    let logs: any[] = [];
+    for (const win of windows) {
+      try {
+        logs = await provider
+          .getLogs({
+            address: CONTRACTS.validatorStakingRegistry,
+            topics: [topic0],
+            fromBlock: Math.max(1, latest - win),
+            toBlock: 'latest',
+          })
+          .catch(() => []);
+        if (logs.length > 0) break;
+      } catch {
+        /* try a narrower window */
+      }
+    }
+    const decoder = ethers.AbiCoder.defaultAbiCoder();
+    const entries: StakingEventEntry[] = [];
+    for (const log of logs) {
+      const op = ethers.getAddress('0x' + log.topics[1].slice(26));
+      if (log.topics[0] === topic0[0]) {
+        const d = decoder.decode(['bytes4', 'uint16', 'uint256'], log.data);
+        entries.push({
+          kind: 'registered',
+          operator: op,
+          validatorId: Number(log.topics[2]),
+          nodeTag: String(d[0]),
+          commissionBps: Number(d[1]),
+          timestamp: Number(d[2]),
+          blockNumber: Number(log.blockNumber),
+        });
+      } else if (log.topics[0] === topic0[1]) {
+        const d = decoder.decode(['uint256'], log.data);
+        entries.push({
+          kind: 'staked',
+          user: ethers.getAddress('0x' + log.topics[1].slice(26)),
+          operator: ethers.getAddress('0x' + log.topics[2].slice(26)),
+          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          timestamp: 0,
+          blockNumber: Number(log.blockNumber),
+        });
+      } else if (log.topics[0] === topic0[2]) {
+        const d = decoder.decode(['uint256'], log.data);
+        entries.push({
+          kind: 'unstaked',
+          user: ethers.getAddress('0x' + log.topics[1].slice(26)),
+          operator: ethers.getAddress('0x' + log.topics[2].slice(26)),
+          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          timestamp: 0,
+          blockNumber: Number(log.blockNumber),
+        });
+      } else if (log.topics[0] === topic0[3]) {
+        const d = decoder.decode(['uint256'], log.data);
+        entries.push({
+          kind: 'rewards',
+          user: ethers.getAddress('0x' + log.topics[1].slice(26)),
+          operator: ethers.getAddress('0x' + log.topics[2].slice(26)),
+          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          timestamp: 0,
+          blockNumber: Number(log.blockNumber),
+        });
+      } else if (log.topics[0] === topic0[4]) {
+        const d = decoder.decode(['uint256'], log.data);
+        entries.push({
+          kind: 'commission',
+          operator: op,
+          amount: parseFloat(ethers.formatUnits(d[0], 18)),
+          timestamp: 0,
+          blockNumber: Number(log.blockNumber),
+        });
+      }
+    }
+    // Resolve block timestamps in parallel (avoid serial RPC round-trips).
+    const uniqBlocks = [...new Set(entries.map((e) => e.blockNumber))];
+    const stamps: Record<number, number> = {};
+    await Promise.all(
+      uniqBlocks.map(async (b) => {
+        stamps[b] = await provider.getBlock(b).then((x) => x?.timestamp ?? 0).catch(() => 0);
+      })
+    );
+    for (const e of entries) e.timestamp = stamps[e.blockNumber] ?? 0;
+    entries.sort((a, b) => b.blockNumber - a.blockNumber);
+    return entries.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export async function validatorStakingRegister(nodeTag: string, commissionBps: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI, s);
+  const tx = await c.registerValidator(nodeTag, commissionBps, { gasLimit: 400000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function validatorStakeTo(operator: string, amount: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI, s);
+  const stakeToken = await c.STAKE_TOKEN();
+  const registryAddr = await c.getAddress();
+  await ensureTokenApproval(s, stakeToken, registryAddr, ethers.parseUnits(amount.toString(), 18));
+  const tx = await c.stakeToValidator(operator, ethers.parseUnits(amount.toString(), 18), { gasLimit: 400000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function validatorUnstakeFrom(operator: string, amount: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI, s);
+  const tx = await c.unstakeFromValidator(operator, ethers.parseUnits(amount.toString(), 18), { gasLimit: 400000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function validatorClaimRewards(operator: string, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI, s);
+  const tx = await c.claimRewards(operator, { gasLimit: 400000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function validatorClaimCommission(signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.validatorStakingRegistry, VALIDATOR_STAKING_ABI, s);
+  const tx = await c.claimCommission({ gasLimit: 400000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }

@@ -44,6 +44,7 @@ export const CONTRACTS = {
   pulseBandwidthRegistry: '0x97aDb0deE39402E1e92772ff2AA0eD935774832a',
   nexusEdgeRegistry: '0xc28C0c9e8D81FDF7DFf46a9F458586857928e00B',
   aiComputeRegistry: '0xB792Ea148D15Da24F93a332Ebf5Cd60Eb1fa785D',
+  validatorStakingRegistry: '0x5Ec9546995E71852b5160F1b41432CD37dd27a96',
 } as const;
 
 /** Testnet settlement token decimals (MockERC20 with 18 decimals). */
