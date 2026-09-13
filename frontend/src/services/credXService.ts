@@ -11,7 +11,7 @@
  */
 
 import { ethers, BrowserProvider, JsonRpcProvider } from 'ethers';
-import { CONTRACTS, CUSD_DECIMALS, CREDITCOIN_RPC } from '../config/contracts';
+import { CONTRACTS, CUSD_DECIMALS, CREDITCOIN_RPC, CREDITCOIN_CHAIN_ID } from '../config/contracts';
 
 export type CardTier = 'SUBPRIME' | 'NEAR_PRIME' | 'PRIME' | 'SUPER_PRIME';
 
@@ -1572,10 +1572,145 @@ export async function meterWithdrawPrepaid(amountUSD: number): Promise<string> {
   return receipt.hash as string;
 }
 
+// ─── GeoOrbit (live on-chain RTK telemetry anchor) ─────────────────────────
+
+export const GEOORBIT_ABI = [
+  'function owner() view returns (address)',
+  'function paused() view returns (bool)',
+  'function rewardPerTelemetry() view returns (uint256)',
+  'function minTelemetryIntervalBlocks() view returns (uint256)',
+  'function maxSpeedMps() view returns (uint256)',
+  'function stationCount() view returns (uint256)',
+  'function totalTelemetryAnchored() view returns (uint256)',
+  'function totalRewardUnitsIssued() view returns (uint256)',
+  'function stations(address) view returns (uint256 stationId, address operator, bytes4 hexId, uint256 telemetryCount, uint256 totalRewardUnits, uint256 claimedUnits, (int32,int32,uint32,uint8,uint16,uint40,bytes32) lastFix, bytes32 lastPosHash, uint256 lastTelemetryBlock)',
+  'function registerStation(bytes4 hexId, int32 latE7, int32 lngE7, uint32 hMeters)',
+  'function submitTelemetry(int32 latE7, int32 lngE7, uint32 hMeters, uint8 satellites, uint16 tdop, bytes32 antennaHash)',
+  'function claimRewards()',
+];
+
+export interface GeoOrbitFix {
+  latE7: number;
+  lngE7: number;
+  hMeters: number;
+  satellites: number;
+  tdop: number;
+  timestamp: number;
+  antennaHash: string;
+}
+
+export interface GeoOrbitStationView {
+  stationId: number;
+  operator: string;
+  hexId: string;
+  telemetryCount: number;
+  totalRewardUnits: number;
+  claimedUnits: number;
+  lastFix: GeoOrbitFix | null;
+  lastPosHash: string;
+}
+
+export interface GeoOrbitState {
+  owner: string;
+  paused: boolean;
+  rewardPerTelemetry: number;
+  minTelemetryIntervalBlocks: number;
+  maxSpeedMps: number;
+  stationCount: number;
+  totalTelemetryAnchored: number;
+  totalRewardUnitsIssued: number;
+}
+
+/** Coerce a 4-char hex id (e.g. 'd32fe600' or '0x...') to a bytes4 hex string. */
+export function toGeoOrbitHexId(prefix: string): string {
+  const clean = prefix.replace(/^0x/i, '').replace(/[^0-9a-f]/gi, '').padEnd(8, '0').slice(0, 8).toLowerCase();
+  return '0x' + clean;
+}
+
+export async function fetchGeoOrbitState(): Promise<GeoOrbitState | null> {
+  try {
+    const c = readContract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI);
+    const [owner, paused, rpt, minInt, maxSpeed, count, tel, units] = await Promise.all([
+      c.owner(), c.paused(), c.rewardPerTelemetry(), c.minTelemetryIntervalBlocks(), c.maxSpeedMps(), c.stationCount(), c.totalTelemetryAnchored(), c.totalRewardUnitsIssued(),
+    ]);
+    return {
+      owner: String(owner),
+      paused: Boolean(paused),
+      rewardPerTelemetry: parseFloat(ethers.formatUnits(rpt, 18)),
+      minTelemetryIntervalBlocks: Number(minInt),
+      maxSpeedMps: Number(maxSpeed),
+      stationCount: Number(count),
+      totalTelemetryAnchored: Number(tel),
+      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchGeoOrbitStation(user: string): Promise<GeoOrbitStationView | null> {
+  try {
+    const c = readContract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI);
+    const s = await c.stations(user);
+    if (s.operator === ethers.ZeroAddress) return null;
+    return {
+      stationId: Number(s.stationId),
+      operator: String(s.operator),
+      hexId: String(s.hexId),
+      telemetryCount: Number(s.telemetryCount),
+      totalRewardUnits: parseFloat(ethers.formatUnits(s.totalRewardUnits, 18)),
+      claimedUnits: parseFloat(ethers.formatUnits(s.claimedUnits, 18)),
+      lastFix: {
+        latE7: Number(s.lastFix.fix.latE7),
+        lngE7: Number(s.lastFix.fix.lngE7),
+        hMeters: Number(s.lastFix.fix.hMeters),
+        satellites: Number(s.lastFix.satellites),
+        tdop: Number(s.lastFix.tdop),
+        timestamp: Number(s.lastFix.timestamp),
+        antennaHash: String(s.lastFix.antennaHash),
+      },
+      lastPosHash: String(s.lastPosHash),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function geoOrbitRegisterStation(hexId: string, latE7: number, lngE7: number, hMeters: number): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, signer);
+  const tx = await c.registerStation(hexId, latE7, lngE7, hMeters, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function geoOrbitSubmitTelemetry(
+  latE7: number,
+  lngE7: number,
+  hMeters: number,
+  satellites: number,
+  tdop: number,
+  antennaHash: string
+): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, signer);
+  const tx = await c.submitTelemetry(latE7, lngE7, hMeters, satellites, tdop, antennaHash, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function geoOrbitClaimRewards(): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, signer);
+  const tx = await c.claimRewards({ gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
 // ─── Evidence Registry (attested proofs + proof-gated events, via eth_getLogs) ─
 
 export interface EvidenceEntry {
-  source: 'oracle' | 'escrow' | 'meter';
+  source: 'oracle' | 'escrow' | 'meter' | 'geoorbit';
   kind: string;
   actor: string;
   txHash: string;       // source-chain txHash (oracle/escrow) or event-key seeded
@@ -1590,6 +1725,7 @@ const EVIDENCE_TOPICS = {
   EscrowReleased: ethers.id('EscrowReleased(uint256,address,uint256,uint256,bytes32,uint256)'),
   UsageRecorded: ethers.id('UsageRecorded(address,bytes32,uint256,uint256)'),
   PrepaidConsumed: ethers.id('PrepaidConsumed(address,bytes32,uint256,uint256)'),
+  TelemetryAnchored: ethers.id('TelemetryAnchored(address,uint256,bytes32,int32,int32,uint32,uint8,uint256)'),
 };
 
 const EVIDENCE_FROM_BLOCKS = 30000;
@@ -1604,6 +1740,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
       provider.getLogs({ address: CONTRACTS.verifiedEscrow, topics: [EVIDENCE_TOPICS.EscrowReleased], fromBlock, toBlock: 'latest' }).catch(() => []),
       provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.UsageRecorded], fromBlock, toBlock: 'latest' }).catch(() => []),
       provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.PrepaidConsumed], fromBlock, toBlock: 'latest' }).catch(() => []),
+      provider.getLogs({ address: CONTRACTS.geoOrbitRegistry, topics: [EVIDENCE_TOPICS.TelemetryAnchored], fromBlock, toBlock: 'latest' }).catch(() => []),
     ]);
 
     const entries: EvidenceEntry[] = [];
@@ -1661,6 +1798,20 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         blockNumber: Number(log.blockNumber),
         verified: true,
         amountUSD: parseFloat(ethers.formatUnits(data[0], 18)),
+      });
+    }
+
+    for (const log of raw[4] || []) {
+      const data = escrowDecoder.decode(['int32', 'int32', 'uint32', 'uint8', 'uint256'], log.data);
+      entries.push({
+        source: 'geoorbit',
+        kind: 'TelemetryAnchored',
+        actor: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        txHash: ethers.id('geo:anchor:' + String(log.blockNumber) + ':' + String(log.topics[2])),
+        chainId: CREDITCOIN_CHAIN_ID,
+        blockNumber: Number(log.blockNumber),
+        verified: true,
+        amountUSD: null,
       });
     }
 

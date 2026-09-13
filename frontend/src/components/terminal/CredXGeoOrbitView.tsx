@@ -38,6 +38,7 @@ import {
 import { StableHexRecord, GlobalMinerCluster, NTRIPMountpoint, parseNMEAGGA } from '../../utils/geoOrbitTelemetry';
 import GeoOrbitAttestationModal from '../modals/GeoOrbitAttestationModal';
 import GoogleMapView from '../common/GoogleMapView';
+import GeoOrbitStatePanel from './GeoOrbitStatePanel';
 import {
   getRealDevicePhysicalPosition,
   watchRealDevicePhysicalPosition,
@@ -226,18 +227,21 @@ export const CredXGeoOrbitView: React.FC = () => {
 
   return (
     <div className="space-y-6 font-sans">
-      {/* SIMULATED banner */}
+      {/* On-chain anchor is LIVE; the mesh views below remain local simulation */}
       <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
         <SimulationBadge
-          label="SIMULATED GEOORBIT MESH"
-          note="RTK corrections, PoST attestations and station fixes are locally simulated — no GeoOrbit contract or GNSS attestation exists on testnet."
+          label="MESH VIEWS SIMULATED (ON-CHAIN ANCHOR LIVE)"
+          note="The GeoOrbitRegistry below is deployed on Creditcoin testnet — custody, telemetry and rewards are real transactions. The mesh explorer, RTK correction streams and macro tokenomics panels remain locally simulated telemetry."
         />
         <span className="font-mono">
-          RTK fixes, base stations and Proof-of-Space-Time (PoST) attestations are locally simulated
-          telemetry; nothing is written to Creditcoin. Hardware/GNSS data, when provided, is displayed
-          but never attested on-chain.
+          On-chain layer: LIVE — the GeoOrbitRegistry pane above anchors stations and Proof-of-Space-Time
+          heartbeats with real transactions. RTK correction interpolations, hex/mesh coverage and
+          macro-tokenomics below are locally simulated and written to nothing.
         </span>
       </div>
+
+      {/* LIVE on-chain telemetry anchor */}
+      <GeoOrbitStatePanel />
 
       {/* Top Banner & High-Level Network Health Bar */}
       <GlassCard className="p-6 border-amber-500/30 bg-gradient-to-r from-amber-950/20 via-black to-cyan-950/30">
@@ -248,8 +252,8 @@ export const CredXGeoOrbitView: React.FC = () => {
                 <Satellite className="w-3.5 h-3.5 animate-pulse" />
                 Decentralized RTK Space-Time Mesh · Port 2101
               </span>
-              <span className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/30 text-amber-400 font-mono text-[10px] font-extrabold uppercase tracking-wider">
-                PoST Simulated (Local)
+              <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-extrabold uppercase tracking-wider">
+                PoST Anchor Live · Mesh Sim
               </span>
             </div>
 
@@ -261,7 +265,7 @@ export const CredXGeoOrbitView: React.FC = () => {
             </h2>
 
             <p className="text-xs text-white/70 leading-relaxed">
-              Global real-time kinematic (RTK) differential correction network demonstration delivering centimeter-level positioning (1–2 cm) for autonomous drones, agricultural robots, and smart mobility. Triple-band carrier locks are modeled locally; on-chain PoST attestation is simulated in this panel.
+              Global real-time kinematic (RTK) differential correction network demonstration delivering centimeter-level positioning (1–2 cm) for autonomous drones, agricultural robots, and smart mobility. The on-chain telemetry anchor is LIVE (panel above); triple-band carrier locks and the macro mesh are modeled locally.
             </p>
           </div>
 

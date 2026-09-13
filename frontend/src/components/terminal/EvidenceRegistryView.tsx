@@ -25,6 +25,7 @@ const SOURCE_META: Record<EvidenceEntry['source'], { label: string; color: strin
   oracle: { label: 'ORACLE ANCHOR', color: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   escrow: { label: 'ESCROW RELEASE', color: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   meter: { label: 'METERED USAGE', color: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  geoorbit: { label: 'GEOORBIT FIX', color: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
 };
 
 const ethersZero = '0x0000000000000000000000000000000000000000';
@@ -151,6 +152,7 @@ const EvidenceRegistryView: React.FC = () => {
                   <div key={`${e.kind}-${e.blockNumber}-${i}`} className="flex items-center gap-2.5 p-2.5 rounded-xl bg-slate-900/50 border border-white/[0.06]">
                     {e.source === 'escrow' ? <FileCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                       : e.source === 'oracle' ? <Anchor className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      : e.source === 'geoorbit' ? <Database className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                       : <Link2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
                     <span className={`shrink-0 px-2 py-0.5 rounded-md border text-[9px] font-mono ${meta.color}`}>{meta.label}</span>
                     <div className="min-w-0 flex-1">
