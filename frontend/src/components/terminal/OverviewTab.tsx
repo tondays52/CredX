@@ -28,6 +28,7 @@ import { useProtocol } from '../../context/ProtocolContext';
 import BorrowModal from '../modals/BorrowModal';
 import RepayModal from '../modals/RepayModal';
 import SBTModal from '../modals/SBTModal';
+import SBTPassportTab from './SBTPassportTab';
 import { LoanPosition } from '../../types/protocol';
 
 // ─────────────────────────────────────────────────────────────
@@ -1338,6 +1339,13 @@ export const OverviewTab: React.FC = () => {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════
+          CREDIT PASSPORT (embedded SBT tab)
+      ═══════════════════════════════════════════════════ */}
+      <div className="w-full">
+        <SBTPassportTab />
       </div>
 
       {/* ── MODALS ─────────────────────────────────────────── */}

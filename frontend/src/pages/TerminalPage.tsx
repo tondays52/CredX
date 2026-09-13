@@ -6,7 +6,6 @@ import GamingTab from '../components/terminal/GamingTab';
 import AITab from '../components/terminal/AITab';
 import RWATab from '../components/terminal/RWATab';
 import VirtualNodeTab from '../components/terminal/VirtualNodeTab';
-import SBTPassportTab from '../components/terminal/SBTPassportTab';
 import CreditProofsTab from '../components/terminal/CreditProofsTab';
 import SimulationBadge from '../components/common/SimulationBadge';
 import { useWeb3 } from '../context/Web3Context';
@@ -19,7 +18,6 @@ import {
   Bot,
   Building2,
   Cpu,
-  Shield,
   Landmark,
 } from 'lucide-react';
 
@@ -31,7 +29,6 @@ type TerminalTab =
   | 'ai'
   | 'rwa'
   | 'node'
-  | 'sbt'
   | 'lending';
 
 const TerminalPage: React.FC = () => {
@@ -48,7 +45,6 @@ const TerminalPage: React.FC = () => {
     if (hash.includes('ai')) return 'ai';
     if (hash.includes('rwa')) return 'rwa';
     if (hash.includes('lending')) return 'lending';
-    if (hash.includes('sbt')) return 'sbt';
     if (hash.includes('proof')) return 'lending';
     return 'overview'; // Default to Overview - live credit profile, the judge-facing dashboard
   };
@@ -65,10 +61,9 @@ const TerminalPage: React.FC = () => {
       else if (hash.includes('ai')) setActiveTab('ai');
       else if (hash.includes('rwa')) setActiveTab('rwa');
       else if (hash.includes('lending')) setActiveTab('lending');
-      else if (hash.includes('sbt')) setActiveTab('sbt');
       else if (hash.includes('node')) setActiveTab('node');
       else if (hash.includes('proof') || hash.includes('attest')) setActiveTab('lending');
-      else if (hash.includes('overview')) setActiveTab('overview');
+      else if (hash.includes('overview') || hash.includes('sbt')) setActiveTab('overview');
     };
     handleHash();
     window.addEventListener('hashchange', handleHash);
@@ -83,7 +78,6 @@ const TerminalPage: React.FC = () => {
     { id: 'ai', label: 'AI Risk Vectors', icon: Bot },
     { id: 'rwa', label: 'RWA Treasuries', icon: Building2 },
     { id: 'node', label: 'Virtual Node', icon: Cpu },
-    { id: 'sbt', label: 'SBT Passport', icon: Shield },
     { id: 'lending', label: 'Credit & Proofs', icon: Landmark },
   ];
 
@@ -96,7 +90,6 @@ const TerminalPage: React.FC = () => {
     ai: { live: true, note: 'Live interactions with the deployed AutonomousAIHub on Creditcoin testnet.' },
     rwa: { live: dataSource === 'chain', note: 'Treasury deposits/withdraws and the invoice marketplace hit live contracts when connected; PoR reserve panel stays illustrative.' },
     node: { live: false, note: 'Virtual node telemetry is local to your browser (no CTC is actually shared or earned).' },
-    sbt: { live: dataSource === 'chain', note: 'Mint/refresh the real ERC-5192 soulbound token when connected.' },
     lending: { live: dataSource === 'chain', note: 'Credit Facility borrow/repay hit the undercollateralized lending pool; Proofs & Attest submissions write to CredXHub. RiskGuard and Covenant Ops add a verify-then-execute policy gate plus live oracle telemetry (0x0FD2/0x0FD3) with honest SIMULATED evaluation labels.' },
   };
 
@@ -164,7 +157,6 @@ const TerminalPage: React.FC = () => {
         {activeTab === 'ai' && <AITab />}
         {activeTab === 'rwa' && <RWATab />}
         {activeTab === 'node' && <VirtualNodeTab />}
-        {activeTab === 'sbt' && <SBTPassportTab />}
         {activeTab === 'lending' && <CreditProofsTab />}
       </div>
     </div>
