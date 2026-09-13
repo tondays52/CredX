@@ -870,7 +870,6 @@ const DePINTab: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-3 pt-2">
                       <button
                         onClick={() => {
-                          if (!isConnected) { openConnectModal(); return; }
                           pulseLive.anchorEpoch();
                         }}
                         disabled={pulseLive.busy === 'anchor'}
@@ -1915,10 +1914,6 @@ const DePINTab: React.FC = () => {
 
                       <button
                         onClick={() => {
-                          if (!nexusLive.isConnected) {
-                            addToast('info', 'Connect Wallet', 'Connect a wallet to claim NEXUS units on Creditcoin.');
-                            return;
-                          }
                           nexusLive.claim();
                         }}
                         disabled={nexusLive.busy !== null || !nexusLive.edge || nexusLive.unpaid <= 0}
@@ -2669,10 +2664,6 @@ const DePINTab: React.FC = () => {
                             <span className="text-[10px] text-white/40">Merkle Leaf: {selectedBeacon.merkleLeaf.slice(0, 18)}...</span>
                             <button
                               onClick={() => {
-                                if (!nexusLive.isConnected) {
-                                  addToast('info', 'Connect Wallet', 'Connect a wallet to commit detection batches to Creditcoin.');
-                                  return;
-                                }
                                 nexusLive.commitBatch(1, [String(selectedBeacon.macHash ?? selectedBeacon.id ?? '').toLowerCase()]);
                               }}
                               disabled={nexusLive.busy !== null}
@@ -2696,17 +2687,13 @@ const DePINTab: React.FC = () => {
                       <h4 className="text-white font-bold text-sm">Cryptographic Detections Feed</h4>
                       <p className="text-xs text-white/40 mt-0.5">Raw BLE advertising packet stream hashed for Creditcoin Merkle inclusion.</p>
                     </div>
-                    <button
+<button
                       onClick={() => {
-                        if (!nexusLive.isConnected) {
-                          addToast('info', 'Connect Wallet', 'Connect a wallet to commit detection batches to Creditcoin.');
-                          return;
-                        }
                         const leaves = nexusDiscoveredBeacons.map((b) => String(b.macHash ?? b.id ?? '').toLowerCase()).filter(Boolean) as string[];
                         nexusLive.commitBatch(leaves.length > 0 ? leaves.length : 4, leaves);
                       }}
                       disabled={nexusLive.busy !== null}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-500 text-black font-bold text-xs disabled:opacity-60"
+                      className="px-3 py-1.5 rounded-xl bg-emerald-500 text-black font-bold text-xs hover:brightness-110 transition disabled:opacity-60"
                     >
                       {nexusLive.busy === 'settle' || nexusLive.busy === 'register' ? <Loader2 className="w-3 h-3 animate-spin inline" /> : null} Commit Batch to Creditcoin
                     </button>
@@ -3527,10 +3514,6 @@ const DePINTab: React.FC = () => {
               <button
                 onClick={() => {
                   setIotModalOpen(false);
-                  if (!nexusLive.isConnected) {
-                    addToast('info', 'Connect Wallet', 'Connect a wallet to commit the captured batch to Creditcoin.');
-                    return;
-                  }
                   const leaves = nexusDiscoveredBeacons.map((b) => String(b.macHash ?? b.id ?? '').toLowerCase()).filter(Boolean) as string[];
                   nexusLive.commitBatch(leaves.length > 0 ? leaves.length : 4, leaves);
                   addToast('success', 'Batch Broadcast', 'Detection batch submitted to NexusEdgeRegistry on Creditcoin L1.');

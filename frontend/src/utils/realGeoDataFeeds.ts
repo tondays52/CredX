@@ -38,6 +38,118 @@ export interface LiveVesselData {
 const TOMTOM_KEY = import.meta.env.VITE_TOMTOM_API_KEY || 'DyzGbRgHYSgx8kAhotZXtxyhvZ6EQsxY';
 const FIRMS_KEY = import.meta.env.VITE_FIRMS_MAP_KEY || 'ec5b0f160707fc1644606ce56377176d';
 const OPENAI_KEY = import.meta.env.VITE_OPENAI_API_KEY || '';
+const AISSTREAM_KEY = import.meta.env.VITE_AISSTREAM_API_KEY || '';
+
+/**
+ * Live AIS maritime vessels over the AISStream.io WebSocket (real positions).
+ * Returns a disconnect handle; the onUpdate callback receives the current
+ * vessel map whenever position/static messages arrive.
+ */
+export function connectLiveAisVessels(
+  onUpdate: (vessels: LiveVesselData[]) => void
+): { close: () => void } | null {
+  if (!AISSTREAM_KEY || typeof WebSocket === 'undefined') return null;
+  const vessels = new Map<string, LiveVesselData>();
+  let socket: WebSocket | null = null;
+  let lastEmit = 0;
+
+  const emit = () => {
+    const now = Date.now();
+    if (now - lastEmit > 1000) {
+      lastEmit = now;
+      onUpdate(Array.from(vessels.values()));
+    }
+  };
+
+  const handleMessage = (raw: string) => {
+    try {
+      const msg = JSON.parse(raw);
+      if (msg?.MessageType === 'OrbitalUpdate' || msg?.messageType) return;
+      const body = msg?.Message?.PositionReport || msg?.Message?.StandardClassBPositionReport || msg?.Message;
+      const t = msg?.MessageType;
+      if (t === 1 || t === 2 || t === 3) {
+        const p = body;
+        if (p?.Latitude == null || p?.Longitude == null) return;
+        const mmsi = String(p.UserID ?? msg?.MetaData?.MMSI ?? '');
+        if (!mmsi) return;
+        const existing = vessels.get(mmsi);
+        vessels.set(mmsi, {
+          mmsi,
+          name: existing?.name ?? '',
+          latitude: p.Latitude,
+          longitude: p.Longitude,
+          speedKnots: p.SOG ?? existing?.speedKnots ?? 0,
+          course: p.COG ?? existing?.course ?? 0,
+          destination: existing?.destination ?? '',
+        });
+        if (vessels.size > 400) {
+          const first = vessels.keys().next().value as string;
+          vessels.delete(first);
+        }
+        emit();
+      } else if (t === 5) {
+        const p = body;
+        const mmsi = String(p?.UserID ?? msg?.MetaData?.MMSI ?? '');
+        const existing = vessels.get(mmsi);
+        if (!existing) return;
+        vessels.set(mmsi, {
+          ...existing,
+          name: (p?.ShipName || existing.name).trim(),
+          destination: (p?.Destination || existing.destination).trim(),
+        });
+        emit();
+      } else if (t === 18 || t === 19) {
+        const p = body;
+        if (p?.Latitude == null || p?.Longitude == null) return;
+        const mmsi = String(p.UserID ?? msg?.MetaData?.MMSI ?? '');
+        if (!mmsi) return;
+        const existing = vessels.get(mmsi);
+        vessels.set(mmsi, {
+          mmsi,
+          name: existing?.name ?? p?.ShipName ?? '',
+          latitude: p.Latitude,
+          longitude: p.Longitude,
+          speedKnots: p.SOG ?? existing?.speedKnots ?? 0,
+          course: p.COG ?? existing?.course ?? 0,
+          destination: existing?.destination ?? '',
+        });
+        if (vessels.size > 400) {
+          const first = vessels.keys().next().value as string;
+          vessels.delete(first);
+        }
+        emit();
+      }
+    } catch {
+      /* ignore malformed frames */
+    }
+  };
+
+  try {
+    socket = new WebSocket('wss://stream.aisstream.io/v0.1/stream');
+    socket.onopen = () => {
+      socket?.send(
+        JSON.stringify({
+          APIKey: AISSTREAM_KEY,
+          BoundingBoxes: [[[-75, -180], [75, 180]]],
+          FilterMessageTypes: [1, 2, 3, 4, 5, 18, 19],
+        })
+      );
+    };
+    socket.onmessage = (e) => handleMessage(String(e.data));
+  } catch {
+    return null;
+  }
+
+  return {
+    close: () => {
+      try {
+        socket?.close();
+      } catch {
+        /* noop */
+      }
+    },
+  };
+}
 
 /**
  * Fetch real live commercial flights & drones in the RTK corridor bbox from OpenSky Network
@@ -83,43 +195,10 @@ export async function fetchLiveOpenSkyAirspace(
       onGround: state[8]
     })).filter((f: LiveFlightData) => f.latitude != null && f.longitude != null);
   } catch (err) {
-    console.warn('[OpenSky] Live fetch fallback:', err);
-    // Real authentic fallback coordinates around corridor
-    return [
-      {
-        icao24: 'a8b12f',
-        callsign: 'BIM701',
-        originCountry: 'Bangladesh',
-        latitude: 23.8433,
-        longitude: 90.4048,
-        baroAltitude: 1200,
-        velocity: 78,
-        trueTrack: 142,
-        onGround: false
-      },
-      {
-        icao24: 'c4e901',
-        callsign: 'QTR638',
-        originCountry: 'Qatar',
-        latitude: 23.9500,
-        longitude: 90.3500,
-        baroAltitude: 5400,
-        velocity: 185,
-        trueTrack: 210,
-        onGround: false
-      },
-      {
-        icao24: '39d88a',
-        callsign: 'AGRI-UAV-09',
-        originCountry: 'Local',
-        latitude: 23.7808,
-        longitude: 90.4150,
-        baroAltitude: 120,
-        velocity: 14,
-        trueTrack: 45,
-        onGround: false
-      }
-    ];
+    console.warn('[OpenSky] Live fetch failed:', err);
+    // Honest failure: no fake positions. The UI shows zero live objects rather
+    // than fabricated aircraft.
+    return [];
   }
 }
 
@@ -160,17 +239,9 @@ export async function fetchLiveNasaFirmsHotspots(): Promise<LiveHazardHotspot[]>
     }
     return results;
   } catch (err) {
-    console.warn('[NASA FIRMS] Live fetch fallback:', err);
-    return [
-      {
-        latitude: 23.685,
-        longitude: 90.485,
-        brightness: 312.4,
-        confidence: 'nominal',
-        satellite: 'VIIRS_N20',
-        acqDate: new Date().toISOString().split('T')[0]
-      }
-    ];
+    console.warn('[NASA FIRMS] Live fetch failed:', err);
+    // Honest failure: no fake hotspots.
+    return [];
   }
 }
 

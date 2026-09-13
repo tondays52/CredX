@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ethers } from 'ethers';
-import { useWeb3 } from '../context/Web3Context';
+import { useWalletPicker } from '../context/WalletPickerContext';
 import {
   fetchNexusState,
   fetchNexusEdge,
@@ -33,8 +33,19 @@ export function nexusMerkleRoot(count: number, leaves: string[] = []): string {
 }
 
 function useNexusLive() {
-  const { isConnected, address } = useWeb3();
-  const account = isConnected && address ? address : DEMO_ACCOUNT;
+  const { active, getSigner, openPicker, activeSignerLabel } = useWalletPicker();
+  const account = active?.address ?? DEMO_ACCOUNT;
+  const isConnected = Boolean(active);
+
+  /** Resolve the signing wallet, or open the wallet picker and abort. */
+  const requireSigner = useCallback(async () => {
+    const signer = await getSigner();
+    if (!signer) {
+      openPicker();
+      return null;
+    }
+    return signer;
+  }, [getSigner, openPicker]);
 
   const [state, setState] = useState<NexusState | null>(null);
   const [edge, setEdge] = useState<NexusEdgeView | null>(null);
@@ -74,7 +85,9 @@ function useNexusLive() {
       setLastTx(null);
       try {
         const normalized = toGeoOrbitHexId(tag);
-        const txHash = await nexusRegisterEdge(normalized);
+        const signer = await requireSigner();
+        if (!signer) return null;
+        const txHash = await nexusRegisterEdge(normalized, signer);
         setLastTx(txHash);
         pushLog(`tx broadcast: registerEdge ${normalized} → ${txHash.slice(0, 10)}…`);
         await new Promise((r) => setTimeout(r, 1500));
@@ -88,7 +101,7 @@ function useNexusLive() {
         setBusy(null);
       }
     },
-    [refresh, pushLog]
+    [refresh, pushLog, requireSigner]
   );
 
   const settle = useCallback(
@@ -100,7 +113,9 @@ function useNexusLive() {
         if (!(qualityGrade >= 1 && qualityGrade <= 4)) throw new Error('Quality grade must be 1–4');
         if (!(detectionsCount > 0)) throw new Error('Detection count must be greater than 0');
         const rootHash = nexusMerkleRoot(detectionsCount, beaconLeaves);
-        const txHash = await nexusSettleBatch(detectionsCount, qualityGrade, rootHash);
+        const signer = await requireSigner();
+        if (!signer) return null;
+        const txHash = await nexusSettleBatch(detectionsCount, qualityGrade, rootHash, signer);
         setLastTx(txHash);
         pushLog(`tx broadcast: settleBatch ${detectionsCount} detections ×${qualityGrade} → ${txHash.slice(0, 10)}…`);
         await new Promise((r) => setTimeout(r, 1500));
@@ -114,7 +129,7 @@ function useNexusLive() {
         setBusy(null);
       }
     },
-    [refresh, pushLog]
+    [refresh, pushLog, requireSigner]
   );
 
   /**
@@ -137,7 +152,9 @@ function useNexusLive() {
     setError(null);
     setLastTx(null);
     try {
-      const txHash = await nexusClaimRewards();
+      const signer = await requireSigner();
+      if (!signer) return null;
+      const txHash = await nexusClaimRewards(signer);
       setLastTx(txHash);
       pushLog(`tx broadcast: claimRewards → ${txHash.slice(0, 10)}…`);
       await new Promise((r) => setTimeout(r, 1500));
@@ -150,7 +167,7 @@ function useNexusLive() {
     } finally {
       setBusy(null);
     }
-  }, [refresh, pushLog]);
+  }, [refresh, pushLog, requireSigner]);
 
   const unpaid = useMemo(
     () => (edge ? Math.max(0, edge.totalRewardUnits - edge.claimedUnits) : 0),
@@ -168,6 +185,8 @@ function useNexusLive() {
     txLog,
     account,
     isConnected,
+    activeSignerLabel,
+    openPicker,
     unpaid,
     register,
     settle,

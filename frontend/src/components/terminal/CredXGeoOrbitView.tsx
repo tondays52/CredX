@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import GlassCard from '../common/GlassCard';
 import SimulationBadge from '../common/SimulationBadge';
 import { useProtocol } from '../../context/ProtocolContext';
@@ -33,7 +33,8 @@ import {
   DollarSign,
   Plane,
   Flame as FireIcon,
-  Bot
+  Bot,
+  Sailboat
 } from 'lucide-react';
 import { StableHexRecord, GlobalMinerCluster, NTRIPMountpoint, parseNMEAGGA } from '../../utils/geoOrbitTelemetry';
 import GeoOrbitAttestationModal from '../modals/GeoOrbitAttestationModal';
@@ -49,9 +50,16 @@ import {
   fetchLiveOpenSkyAirspace,
   fetchLiveNasaFirmsHotspots,
   queryOpenAiDePINAdvisor,
+  connectLiveAisVessels,
   LiveFlightData,
-  LiveHazardHotspot
+  LiveHazardHotspot,
+  LiveVesselData
 } from '../../utils/realGeoDataFeeds';
+import {
+  fetchGeoOrbitStations,
+  GeoOrbitStationOnChain
+} from '../../services/credXService';
+import SmartGlobePanel from './SmartGlobePanel';
 
 export const CredXGeoOrbitView: React.FC = () => {
   const {
@@ -111,6 +119,62 @@ export const CredXGeoOrbitView: React.FC = () => {
   const [loadingFirms, setLoadingFirms] = useState<boolean>(false);
   const [aiAdvisorResponse, setAiAdvisorResponse] = useState<string | null>(null);
   const [isQueryingAi, setIsQueryingAi] = useState<boolean>(false);
+
+  // Real on-chain stations (GeoOrbitRegistry StationRegistered via eth_getLogs)
+  const [onChainStations, setOnChainStations] = useState<GeoOrbitStationOnChain[]>([]);
+  const [showOnChain, setShowOnChain] = useState<boolean>(true);
+  const [loadingStations, setLoadingStations] = useState<boolean>(false);
+  const [showGlobe, setShowGlobe] = useState<boolean>(false);
+
+  // Real AIS maritime layer (AISStream.io WebSocket)
+  const [liveAis, setLiveAis] = useState<boolean>(false);
+  const [aisVessels, setAisVessels] = useState<LiveVesselData[]>([]);
+  const aisSocketRef = useRef<{ close: () => void } | null>(null);
+
+  const handleToggleAis = () => {
+    if (!liveAis) {
+      const handle = connectLiveAisVessels((vessels) => setAisVessels([...vessels]));
+      if (handle) {
+        aisSocketRef.current = handle;
+        setLiveAis(true);
+        addToast('info', 'AISStream Maritime Stream', 'Live ship positions ingested over WebSocket.');
+      } else {
+        addToast('error', 'AISStream Not Configured', 'Set VITE_AISSTREAM_API_KEY to enable the live maritime layer.');
+      }
+    } else {
+      aisSocketRef.current?.close();
+      aisSocketRef.current = null;
+      setAisVessels([]);
+      setLiveAis(false);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      aisSocketRef.current?.close();
+      aisSocketRef.current = null;
+    };
+  }, []);
+
+  const loadOnChainStations = async (notify = false) => {
+    setLoadingStations(true);
+    try {
+      const stations = await fetchGeoOrbitStations();
+      setOnChainStations(stations);
+      if (notify) {
+        addToast('success', 'GeoOrbitRegistry Stations Synced', `${stations.length} station registrations read from on-chain logs.`);
+      }
+    } catch {
+      /* keep last known */
+    } finally {
+      setLoadingStations(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOnChainStations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleToggleAirspace = async () => {
     if (!liveAirspace) {
@@ -687,16 +751,42 @@ export const CredXGeoOrbitView: React.FC = () => {
 
                 {/* Real NASA FIRMS Satellite Thermal Anomalies Toggle */}
                 <button
-                  onClick={handleToggleFirms}
-                  disabled={loadingFirms}
+                  onClick={() => { loadOnChainStations(true); setShowOnChain(!showOnChain); }}
+                  disabled={loadingStations}
                   className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    liveFirms
-                      ? 'bg-red-500/20 text-red-300 border border-red-500/40 shadow-sm shadow-red-500/20'
+                    showOnChain
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/20'
                       : 'text-white/50 hover:text-white'
                   }`}
                 >
-                  <FireIcon className={`w-3.5 h-3.5 ${loadingFirms ? 'animate-pulse' : ''}`} />
-                  NASA FIRMS {liveHotspots.length > 0 && `(${liveHotspots.length})`}
+                  <Satellite className={`w-3.5 h-3.5 ${loadingStations ? 'animate-pulse' : ''}`} />
+                  On-chain Stations {onChainStations.length > 0 && `(${onChainStations.length})`}
+                </button>
+
+                {/* 3D Transparency Globe */}
+                <button
+                  onClick={() => setShowGlobe(!showGlobe)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    showGlobe
+                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20'
+                      : 'text-white/50 hover:text-white'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5" />
+                  3D Globe
+                </button>
+
+                {/* Real AIS Maritime Vessels Stream */}
+                <button
+                  onClick={handleToggleAis}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    liveAis
+                      ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm shadow-teal-500/20'
+                      : 'text-white/50 hover:text-white'
+                  }`}
+                >
+                  <Sailboat className="w-3.5 h-3.5" />
+                  AIS Vessels {aisVessels.length > 0 && `(${aisVessels.length})`}
                 </button>
               </div>
             </div>
@@ -778,7 +868,25 @@ export const CredXGeoOrbitView: React.FC = () => {
                   title: `🔥 NASA FIRMS Thermal Anomaly (${h.satellite}) | Brightness: ${h.brightness}K | Acq: ${h.acqDate}`,
                   color: '#ef4444',
                   label: '🔥'
-                }))
+                })),
+                ...(showOnChain && onChainStations.length > 0
+                  ? onChainStations.map((s) => ({
+                      id: `onchain-${s.stationId}`,
+                      lat: s.latE7 / 1e7,
+                      lng: s.lngE7 / 1e7,
+                      title: `◎ On-chain Station #${s.stationId} · hex ${s.hexId} · operator ${s.operator.slice(0, 6)}…${s.operator.slice(-4)} | CC3 block ${s.blockNumber.toLocaleString()}`,
+                      color: '#34d399',
+                      label: '◎'
+                    }))
+                  : []),
+                ...(liveAis ? aisVessels.map((v) => ({
+                  id: `ais-${v.mmsi}`,
+                  lat: v.latitude,
+                  lng: v.longitude,
+                  title: `⛵ MMSI ${v.mmsi}${v.name ? ` · ${v.name}` : ''} | ${v.speedKnots.toFixed(1)} kn · cse ${v.course.toFixed(0)}°${v.destination ? ` → ${v.destination}` : ''}`,
+                  color: '#14b8a6',
+                  label: '⛵'
+                })) : [])
               ]}
               circles={[
                 ...orbitClusters.map(c => ({
@@ -820,10 +928,14 @@ export const CredXGeoOrbitView: React.FC = () => {
             </div>
 
             <div className="absolute top-4 right-4 z-30 px-3 py-1.5 rounded-xl bg-black/85 border border-white/10 text-[11px] font-mono text-white/80 flex items-center gap-2 pointer-events-none">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span>22,660 Triple-Band CORS Online</span>
+              <span className={`w-2 h-2 rounded-full ${onChainStations.length > 0 ? 'bg-emerald-400 animate-ping' : 'bg-cyan-400 animate-pulse'}`} />
+              {onChainStations.length > 0
+                ? `${onChainStations.length} Registered Station${onChainStations.length === 1 ? '' : 's On-Chain'}`
+                : 'Syncing registered stations…'}
             </div>
           </div>
+
+          {showGlobe ? <SmartGlobePanel planes={liveFlights} hotspots={liveHotspots} vessels={aisVessels} /> : null}
 
           {/* NTRIP Service Configuration Spec Card (Screenshot 1 Replication) */}
           <GlassCard className="p-6 border-cyan-500/30 space-y-6">

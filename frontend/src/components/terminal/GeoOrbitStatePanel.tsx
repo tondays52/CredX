@@ -13,8 +13,9 @@ import {
   MapPin,
   Navigation,
   Layers,
+  Wallet,
 } from 'lucide-react';
-import { useWeb3 } from '../../context/Web3Context';
+import { useWalletPicker } from '../../context/WalletPickerContext';
 import {
   fetchGeoOrbitState,
   fetchGeoOrbitStation,
@@ -34,7 +35,7 @@ const ORIGIN_LAT = 523676000;
 const ORIGIN_LNG = 49041000;
 
 const GeoOrbitStatePanel: React.FC = () => {
-  const { address, isConnected, openConnectModal } = useWeb3();
+  const { active, getSigner, openPicker, activeSignerLabel } = useWalletPicker();
   const [state, setState] = useState<GeoOrbitState | null>(null);
   const [station, setStation] = useState<GeoOrbitStationView | null>(null);
   const [loading, setLoading] = useState(false);
@@ -46,7 +47,17 @@ const GeoOrbitStatePanel: React.FC = () => {
   const [txLog, setTxLog] = useState<string[]>([]);
   const [gpsPos, setGpsPos] = useState<{ latE7: number; lngE7: number; hMeters: number } | null>(null);
 
-  const account = isConnected && address ? address : '0x9afB4FAd95d9fEa67615911Ce1fA4C9f13FA8f07';
+  const account = active?.address ?? '0x9afB4FAd95d9fEa67615911Ce1fA4C9f13FA8f07';
+
+  /** Resolve the signing wallet, or open the wallet picker and abort. */
+  const requireSigner = async () => {
+    const signer = await getSigner();
+    if (!signer) {
+      openPicker();
+      return null;
+    }
+    return signer;
+  };
 
   const loadLive = async () => {
     setLoading(true);
@@ -70,12 +81,19 @@ const GeoOrbitStatePanel: React.FC = () => {
   const pushLog = (line: string) => setTxLog((prev) => [line, ...prev].slice(0, 12));
 
   const register = async () => {
-    if (!isConnected) { setError('Connect a wallet to register a station'); return; }
     setBusy(true); setError(null); setLastTx(null);
+    const signer = await requireSigner();
+    if (!signer) { setBusy(false); return; }
     try {
+      if (station && active) {
+        setError(`${active.label} already owns station #${station.stationId}. Pick a different signing wallet to register a new station.`);
+        openPicker();
+        setBusy(false);
+        return;
+      }
       const coords = gpsPos ?? { latE7: ORIGIN_LAT, lngE7: ORIGIN_LNG, hMeters: 0 };
       const txHash = await geoOrbitRegisterStation(
-        toGeoOrbitHexId(hexId), coords.latE7, coords.lngE7, coords.hMeters
+        toGeoOrbitHexId(hexId), coords.latE7, coords.lngE7, coords.hMeters, signer
       );
       setLastTx(txHash);
       pushLog(`tx broadcast: registerStation → ${txHash.slice(0, 10)}…`);
@@ -91,8 +109,9 @@ const GeoOrbitStatePanel: React.FC = () => {
   };
 
   const submitHeartbeat = async () => {
-    if (!isConnected) { setError('Connect a wallet to stream telemetry'); return; }
     setBusy(true); setError(null); setLastTx(null);
+    const signer = await requireSigner();
+    if (!signer) { setBusy(false); return; }
     try {
       let lat = station?.lastFix?.latE7 ?? ORIGIN_LAT;
       let lng = station?.lastFix?.lngE7 ?? ORIGIN_LNG;
@@ -107,7 +126,8 @@ const GeoOrbitStatePanel: React.FC = () => {
         lat, lng, h,
         station?.lastFix?.satellites ?? 15,
         station?.lastFix?.tdop ?? 11,
-        ethers.id('antenna-helios-LXA01')
+        ethers.id('antenna-helios-LXA01'),
+        signer
       );
       setLastTx(txHash);
       pushLog(`tx broadcast: submitTelemetry @ ${(lat / 1e7).toFixed(6)}, ${(lng / 1e7).toFixed(6)} → ${txHash.slice(0, 10)}…`);
@@ -122,10 +142,11 @@ const GeoOrbitStatePanel: React.FC = () => {
   };
 
   const claim = async () => {
-    if (!isConnected) { setError('Connect a wallet to claim rewards'); return; }
     setBusy(true); setError(null); setLastTx(null);
+    const signer = await requireSigner();
+    if (!signer) { setBusy(false); return; }
     try {
-      const txHash = await geoOrbitClaimRewards();
+      const txHash = await geoOrbitClaimRewards(signer);
       setLastTx(txHash);
       pushLog(`tx broadcast: claimRewards → ${txHash.slice(0, 10)}…`);
       await new Promise((r) => setTimeout(r, 1500));
@@ -183,6 +204,15 @@ const GeoOrbitStatePanel: React.FC = () => {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
+            onClick={openPicker}
+            title="Choose which wallet signs on-chain transactions"
+            className="px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-cyan-200 hover:bg-cyan-500/20 transition text-[11px] font-mono font-bold flex items-center gap-1.5 max-w-[240px]"
+          >
+            <Wallet className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{activeSignerLabel}</span>
+            <span className="text-[9px] uppercase tracking-wider text-cyan-400/70 shrink-0">switch</span>
+          </button>
+          <button
             onClick={loadLive}
             className="px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.1] text-xs font-mono font-bold text-white/70 hover:text-white transition cursor-pointer flex items-center gap-1.5"
           >
@@ -236,7 +266,11 @@ const GeoOrbitStatePanel: React.FC = () => {
                 </div>
               </>
             ) : (
-              <div className="text-xs font-mono text-white/60">{isConnected ? 'No station registered to this wallet yet.' : 'Demo watch (not connected): read-only across public state.'}</div>
+              <div className="text-xs font-mono text-white/60">
+              {station
+                ? `Active signing wallet: ${activeSignerLabel}`
+                : 'No station registered to this wallet yet — pick a signing wallet and register one on-chain.'}
+            </div>
             )}
           </div>
 
@@ -251,14 +285,14 @@ const GeoOrbitStatePanel: React.FC = () => {
                 </button>
                 <button
                   onClick={submitHeartbeat}
-                  disabled={busy || !isConnected}
+                  disabled={busy}
                   className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-mono text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />} Anchor Heartbeat
                 </button>
                 <button
                   onClick={claim}
-                  disabled={busy || !isConnected || unpaid <= 0}
+                  disabled={busy || unpaid <= 0}
                   className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold font-mono text-[11px] transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   <Zap className="w-3.5 h-3.5" /> Claim {unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 })}
@@ -281,7 +315,7 @@ const GeoOrbitStatePanel: React.FC = () => {
                 </button>
                 <button
                   onClick={register}
-                  disabled={busy || !isConnected}
+                  disabled={busy}
                   className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                 >
                   {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Satellite className="w-3.5 h-3.5" />} Register Station

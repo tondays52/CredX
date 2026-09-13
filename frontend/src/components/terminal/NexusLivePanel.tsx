@@ -14,6 +14,7 @@ import {
   Activity,
   Bluetooth,
   Server,
+  Wallet,
 } from 'lucide-react';
 import useNexusLive from '../../hooks/useNexusLive';
 import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
@@ -27,7 +28,8 @@ interface NexusLivePanelProps {
 const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) => {
   const {
     state, edge, ledger, loading, busy, error, lastTx, txLog,
-    isConnected, unpaid, register, commitBatch, claim, refresh, contract,
+    unpaid, register, commitBatch, claim, refresh, contract,
+    activeSignerLabel, openPicker,
   } = useNexusLive();
 
   const [tag, setTag] = useState('nexus-edge');
@@ -36,18 +38,9 @@ const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) =>
 
   const busyAny = busy !== null;
 
-  const commitNow = () => {
-    if (!isConnected) { alert('Connect a wallet to commit a detection batch'); return; }
-    commitBatch(detections, beaconLeaves);
-  };
-  const claimNow = () => {
-    if (!isConnected) { alert('Connect a wallet to claim NEXUS'); return; }
-    claim();
-  };
-  const registerNow = () => {
-    if (!isConnected) { alert('Connect a wallet to register an edge node'); return; }
-    register(tag);
-  };
+  const commitNow = () => commitBatch(detections, beaconLeaves);
+  const claimNow = () => claim();
+  const registerNow = () => register(tag);
 
   return (
     <GlassCard className="p-5 border-emerald-500/30 bg-gradient-to-br from-emerald-950/20 via-black to-sky-950/20">
@@ -80,6 +73,15 @@ const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) =>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={openPicker}
+            title="Choose which wallet signs on-chain transactions"
+            className="px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-cyan-200 hover:bg-cyan-500/20 transition text-[11px] font-mono font-bold flex items-center gap-1.5 max-w-[240px]"
+          >
+            <Wallet className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{activeSignerLabel}</span>
+            <span className="text-[9px] uppercase tracking-wider text-cyan-400/70 shrink-0">switch</span>
+          </button>
           <button
             onClick={refresh}
             className="px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.1] text-xs font-mono font-bold text-white/70 hover:text-white transition cursor-pointer flex items-center gap-1.5"
@@ -123,7 +125,9 @@ const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) =>
           <div className="space-y-0.5 min-w-0">
             <span className="text-[10px] uppercase font-mono text-white/40 flex items-center gap-1.5">
               <ScrollText className="w-3 h-3" /> YOUR EDGE NODE
-              {isConnected ? <span className="text-emerald-400 font-bold">· SIGNING WITH CONNECTED WALLET</span> : <span className="text-white/30">· READ-ONLY WATCH (DEMO EDGE)</span>}
+              <button onClick={openPicker} className="text-emerald-400 font-bold flex items-center gap-1 hover:opacity-80 transition">
+                <Wallet className="w-3 h-3" /> SIGNING WITH {activeSignerLabel.toUpperCase()}
+              </button>
             </span>
             {edge ? (
               <>
@@ -144,7 +148,7 @@ const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) =>
               </>
             ) : (
               <div className="text-xs font-mono text-white/60">
-                {isConnected ? 'This wallet has no edge node yet — commit a batch below and it will be auto-registered.' : 'Demo watch (not connected): read-only across public state. Connect a wallet to register your own edge.'}
+                This signing wallet (<strong className="text-white/80">{activeSignerLabel}</strong>) has no edge node yet — commit a batch below and it will be auto-registered.
               </div>
             )}
           </div>
@@ -162,7 +166,7 @@ const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) =>
               />
               <button
                 onClick={registerNow}
-                disabled={busyAny || !isConnected}
+                disabled={busyAny}
                 className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {busy === 'register' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />} Register Edge Node
@@ -196,14 +200,14 @@ const NexusLivePanel: React.FC<NexusLivePanelProps> = ({ beaconLeaves = [] }) =>
             </div>
             <button
               onClick={commitNow}
-              disabled={busyAny || !isConnected}
+              disabled={busyAny}
               className="px-3 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-mono text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {busy === 'settle' || busy === 'register' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />} Commit Batch to Creditcoin
             </button>
             <button
               onClick={claimNow}
-              disabled={busyAny || !isConnected || unpaid <= 0}
+              disabled={busyAny || unpaid <= 0}
               className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold font-mono text-[11px] transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               <Zap className="w-3.5 h-3.5" /> Claim {fmtUnits(unpaid)}

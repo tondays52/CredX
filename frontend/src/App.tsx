@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ToastProvider } from './context/ToastContext';
 import { Web3Provider } from './context/Web3Context';
+import { WalletPickerProvider } from './context/WalletPickerContext';
 import { ProtocolProvider } from './context/ProtocolContext';
 import Navbar from './components/common/Navbar';
 import Footer from './components/common/Footer';
@@ -82,9 +83,11 @@ const App: React.FC = () => {
   return (
     <ToastProvider>
       <Web3Provider>
-        <ProtocolProvider>
-          <AppContent />
-        </ProtocolProvider>
+        <WalletPickerProvider>
+          <ProtocolProvider>
+            <AppContent />
+          </ProtocolProvider>
+        </WalletPickerProvider>
       </Web3Provider>
     </ToastProvider>
   );

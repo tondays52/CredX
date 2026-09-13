@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useWeb3 } from '../context/Web3Context';
+import { useWalletPicker } from '../context/WalletPickerContext';
 import {
   fetchPulseState,
   fetchPulseNode,
@@ -25,8 +25,19 @@ export interface AnchorResult {
 }
 
 function usePulseLive() {
-  const { isConnected, address } = useWeb3();
-  const account = isConnected && address ? address : DEMO_ACCOUNT;
+  const { active, getSigner, openPicker, activeSignerLabel } = useWalletPicker();
+  const account = active?.address ?? DEMO_ACCOUNT;
+  const isConnected = Boolean(active);
+
+  /** Resolve the signing wallet, or open the wallet picker and abort. */
+  const requireSigner = useCallback(async () => {
+    const signer = await getSigner();
+    if (!signer) {
+      openPicker();
+      return null;
+    }
+    return signer;
+  }, [getSigner, openPicker]);
 
   const [state, setState] = useState<PulseState | null>(null);
   const [node, setNode] = useState<PulseNodeView | null>(null);
@@ -66,7 +77,9 @@ function usePulseLive() {
       setLastTx(null);
       try {
         const normalized = toGeoOrbitHexId(tag);
-        const txHash = await pulseRegisterNode(normalized);
+        const signer = await requireSigner();
+        if (!signer) return null;
+        const txHash = await pulseRegisterNode(normalized, signer);
         setLastTx(txHash);
         pushLog(`tx broadcast: registerNode ${normalized} → ${txHash.slice(0, 10)}…`);
         await new Promise((r) => setTimeout(r, 1500));
@@ -81,7 +94,7 @@ function usePulseLive() {
         setBusy(null);
       }
     },
-    [refresh, pushLog]
+    [refresh, pushLog, requireSigner]
   );
 
   const submit = useCallback(
@@ -92,7 +105,9 @@ function usePulseLive() {
       try {
         if (!(qualityGrade >= 1 && qualityGrade <= 4)) throw new Error('Quality grade must be 1–4');
         if (!(bandwidthMB > 0)) throw new Error('Bandwidth must be greater than 0 MB');
-        const txHash = await pulseSubmitBandwidth(bandwidthMB, qualityGrade);
+        const signer = await requireSigner();
+        if (!signer) return null;
+        const txHash = await pulseSubmitBandwidth(bandwidthMB, qualityGrade, signer);
         setLastTx(txHash);
         pushLog(`tx broadcast: submitBandwidth ${bandwidthMB} MB ×${qualityGrade} → ${txHash.slice(0, 10)}…`);
         await new Promise((r) => setTimeout(r, 1500));
@@ -114,7 +129,9 @@ function usePulseLive() {
     setError(null);
     setLastTx(null);
     try {
-      const txHash = await pulseClaimRewards();
+      const signer = await requireSigner();
+      if (!signer) return null;
+      const txHash = await pulseClaimRewards(signer);
       setLastTx(txHash);
       pushLog(`tx broadcast: claimRewards → ${txHash.slice(0, 10)}…`);
       await new Promise((r) => setTimeout(r, 1500));
@@ -127,7 +144,7 @@ function usePulseLive() {
     } finally {
       setBusy(null);
     }
-  }, [refresh, pushLog]);
+  }, [refresh, pushLog, requireSigner]);
 
   /**
    * Real one-click "anchor current epoch": auto-registers the wallet as a node
@@ -143,7 +160,9 @@ function usePulseLive() {
       let current = node;
       if (!current) {
         const tag = toGeoOrbitHexId('pulse-demo');
-        const txHash = await pulseRegisterNode(tag);
+        const signer = await requireSigner();
+        if (!signer) return result;
+        const txHash = await pulseRegisterNode(tag, signer);
         result.registered = true;
         result.txHash = txHash;
         pushLog(`tx broadcast: registerNode ${tag} → ${txHash.slice(0, 10)}…`);
@@ -154,7 +173,9 @@ function usePulseLive() {
       if (!current) throw new Error('Node registration did not settle');
       const mb = current.lastBandwidthMB > 0 ? current.lastBandwidthMB : 87245;
       const grade = current.lastQualityGrade >= 1 && current.lastQualityGrade <= 4 ? current.lastQualityGrade : 3;
-      const txHash = await pulseSubmitBandwidth(mb, grade);
+      const signer = await requireSigner();
+      if (!signer) return result;
+      const txHash = await pulseSubmitBandwidth(mb, grade, signer);
       result.anchored = true;
       result.txHash = txHash;
       pushLog(`tx broadcast: submitBandwidth ${mb} MB ×${grade} → ${txHash.slice(0, 10)}…`);
@@ -168,7 +189,7 @@ function usePulseLive() {
     } finally {
       setBusy(null);
     }
-  }, [node, account, refresh, pushLog]);
+  }, [node, account, refresh, pushLog, requireSigner]);
 
   const unpaid = useMemo(
     () => (node ? Math.max(0, node.totalRewardUnits - node.claimedUnits) : 0),
@@ -200,6 +221,8 @@ function usePulseLive() {
     txLog,
     account,
     isConnected,
+    activeSignerLabel,
+    openPicker,
     unpaid,
     networkQualityPct,
     ledgerGB,

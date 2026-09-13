@@ -1676,9 +1676,9 @@ export async function fetchGeoOrbitStation(user: string): Promise<GeoOrbitStatio
   }
 }
 
-export async function geoOrbitRegisterStation(hexId: string, latE7: number, lngE7: number, hMeters: number): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, signer);
+export async function geoOrbitRegisterStation(hexId: string, latE7: number, lngE7: number, hMeters: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, s);
   const tx = await c.registerStation(hexId, latE7, lngE7, hMeters, { gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
@@ -1690,21 +1690,86 @@ export async function geoOrbitSubmitTelemetry(
   hMeters: number,
   satellites: number,
   tdop: number,
-  antennaHash: string
+  antennaHash: string,
+  signer?: ethers.Signer
 ): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, signer);
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, s);
   const tx = await c.submitTelemetry(latE7, lngE7, hMeters, satellites, tdop, antennaHash, { gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function geoOrbitClaimRewards(): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, signer);
+export async function geoOrbitClaimRewards(signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI, s);
   const tx = await c.claimRewards({ gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
+}
+
+export interface GeoOrbitStationOnChain {
+  operator: string;
+  stationId: number;
+  hexId: string;
+  latE7: number;
+  lngE7: number;
+  hMeters: number;
+  timestamp: number;
+  blockNumber: number;
+}
+
+/** All stations ever registered on the live GeoOrbitRegistry (via eth_getLogs). */
+export async function fetchGeoOrbitStations(limit = 200): Promise<GeoOrbitStationOnChain[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const topic = ethers.id('StationRegistered(address,uint256,bytes4,int32,int32,uint32,uint256)');
+    // The CC3 public RPC times out on very wide eth_getLogs windows; probe from
+    // wide to narrow until the RPC answers.
+    const windows = [50000, 20000, 10000, 6000];
+    let logs: any[] = [];
+    for (const win of windows) {
+      try {
+        logs = await provider
+          .getLogs({
+            address: CONTRACTS.geoOrbitRegistry,
+            topics: [topic],
+            fromBlock: Math.max(1, latest - win),
+            toBlock: 'latest',
+          })
+          .catch(() => []);
+        if (logs.length > 0) break;
+      } catch {
+        /* try a narrower window */
+      }
+    }
+    const decoder = ethers.AbiCoder.defaultAbiCoder();
+    return logs
+      .map((log) => {
+        const data = decoder.decode(['bytes4', 'int32', 'int32', 'uint32', 'uint256'], log.data);
+        return {
+          operator: ethers.getAddress('0x' + log.topics[1].slice(26)),
+          stationId: Number(log.topics[2]),
+          hexId: Array.from(new Uint8Array((data[0] as string).slice(2).padStart(8, '0').match(/../g)!.map((h) => parseInt(h, 16))))
+            .map((b) => b.toString(16).padStart(2, '0'))
+            .join(''),
+          latE7: Number(data[1]),
+          lngE7: Number(data[2]),
+          hMeters: Number(data[3]),
+          timestamp: Number(data[4]),
+          blockNumber: Number(log.blockNumber),
+        };
+      })
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/** In-browser signer for a CC3 demo vault wallet (testnet keys only). */
+export function demoWalletSigner(privateKey: string): ethers.Wallet {
+  return new ethers.Wallet(privateKey, readProvider());
 }
 
 // ─── Pulse (live on-chain bandwidth Data-DAO epoch ledger) ──────────────────
@@ -1845,25 +1910,25 @@ export async function fetchPulseLedger(limit = 40): Promise<PulseLedgerEntry[]> 
   }
 }
 
-export async function pulseRegisterNode(nodeTag: string): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, signer);
+export async function pulseRegisterNode(nodeTag: string, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, s);
   const tx = await c.registerNode(nodeTag, { gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function pulseSubmitBandwidth(bandwidthMB: number, qualityGrade: number): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, signer);
+export async function pulseSubmitBandwidth(bandwidthMB: number, qualityGrade: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, s);
   const tx = await c.submitBandwidth(bandwidthMB, qualityGrade, { gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function pulseClaimRewards(): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, signer);
+export async function pulseClaimRewards(signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, s);
   const tx = await c.claimRewards({ gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
@@ -2004,25 +2069,25 @@ export async function fetchNexusLedger(limit = 40): Promise<NexusBatchEntry[]> {
   }
 }
 
-export async function nexusRegisterEdge(edgeTag: string): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, signer);
+export async function nexusRegisterEdge(edgeTag: string, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, s);
   const tx = await c.registerEdge(edgeTag, { gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function nexusSettleBatch(detectionsCount: number, qualityGrade: number, merkleRoot: string): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, signer);
+export async function nexusSettleBatch(detectionsCount: number, qualityGrade: number, merkleRoot: string, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, s);
   const tx = await c.settleBatch(detectionsCount, qualityGrade, merkleRoot, { gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function nexusClaimRewards(): Promise<string> {
-  const signer = await getSigner();
-  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, signer);
+export async function nexusClaimRewards(signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? await getSigner();
+  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, s);
   const tx = await c.claimRewards({ gasLimit: 300000 });
   const receipt = await tx.wait();
   return receipt.hash as string;

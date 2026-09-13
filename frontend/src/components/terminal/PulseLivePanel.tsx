@@ -13,6 +13,7 @@ import {
   Layers,
   ShieldCheck,
   Activity,
+  Wallet,
 } from 'lucide-react';
 import usePulseLive from '../../hooks/usePulseLive';
 import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
@@ -23,7 +24,7 @@ const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const PulseLivePanel: React.FC = () => {
   const {
     state, node, ledger, loading, busy, error, lastTx, txLog,
-    isConnected, unpaid, networkQualityPct, ledgerGB,
+    unpaid, networkQualityPct, ledgerGB, activeSignerLabel, openPicker,
     register, submit, claim, refresh,
     contract,
   } = usePulseLive();
@@ -32,18 +33,9 @@ const PulseLivePanel: React.FC = () => {
   const [mb, setMb] = useState(50000);
   const [grade, setGrade] = useState(3);
 
-  const registerNode = () => {
-    if (!isConnected) { alert('Connect a wallet to register a Pulse node'); return; }
-    register(tag);
-  };
-  const submitEpoch = () => {
-    if (!isConnected) { alert('Connect a wallet to report bandwidth'); return; }
-    submit(mb, grade);
-  };
-  const claimRewards = () => {
-    if (!isConnected) { alert('Connect a wallet to claim PULSE'); return; }
-    claim();
-  };
+  const registerNode = () => register(tag);
+  const submitEpoch = () => submit(mb, grade);
+  const claimRewards = () => claim();
 
   const busyAny = busy !== null;
 
@@ -78,6 +70,15 @@ const PulseLivePanel: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={openPicker}
+            title="Choose which wallet signs on-chain transactions"
+            className="px-3 py-2 rounded-xl bg-cyan-500/10 border border-cyan-500/25 text-cyan-200 hover:bg-cyan-500/20 transition text-[11px] font-mono font-bold flex items-center gap-1.5 max-w-[240px]"
+          >
+            <Wallet className="w-3.5 h-3.5 shrink-0" />
+            <span className="truncate">{activeSignerLabel}</span>
+            <span className="text-[9px] uppercase tracking-wider text-cyan-400/70 shrink-0">switch</span>
+          </button>
           <button
             onClick={refresh}
             className="px-3.5 py-2 rounded-xl bg-white/[0.05] border border-white/[0.1] text-xs font-mono font-bold text-white/70 hover:text-white transition cursor-pointer flex items-center gap-1.5"
@@ -123,7 +124,9 @@ const PulseLivePanel: React.FC = () => {
           <div className="space-y-0.5 min-w-0">
             <span className="text-[10px] uppercase font-mono text-white/40 flex items-center gap-1.5">
               <ScrollText className="w-3 h-3" /> YOUR PULSE NODE
-              {isConnected ? <span className="text-[#ABF600] font-bold">· SIGNING WITH CONNECTED WALLET</span> : <span className="text-white/30">· READ-ONLY WATCH (DEMO NODE)</span>}
+              <button onClick={openPicker} className="text-[#ABF600] font-bold flex items-center gap-1 hover:opacity-80 transition">
+                <Wallet className="w-3 h-3" /> SIGNING WITH {activeSignerLabel.toUpperCase()}
+              </button>
             </span>
             {node ? (
               <>
@@ -144,7 +147,7 @@ const PulseLivePanel: React.FC = () => {
               </>
             ) : (
               <div className="text-xs font-mono text-white/60">
-                {isConnected ? 'This wallet has no Pulse node yet — register one below to start earning PULSE units.' : 'Demo watch (not connected): read-only across public state. Connect a wallet to register your own node.'}
+                This signing wallet (<strong className="text-white/80">{activeSignerLabel}</strong>) has no Pulse node yet — register one below.
               </div>
             )}
           </div>
@@ -162,7 +165,7 @@ const PulseLivePanel: React.FC = () => {
               />
               <button
                 onClick={registerNode}
-                disabled={busyAny || !isConnected}
+                disabled={busyAny}
                 className="px-3 py-2 rounded-xl bg-[#ABF600]/20 hover:bg-[#ABF600]/30 text-[#ABF600] border border-[#ABF600]/40 font-mono text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {busy === 'register' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />} Register Node
@@ -198,14 +201,14 @@ const PulseLivePanel: React.FC = () => {
               </div>
               <button
                 onClick={submitEpoch}
-                disabled={busyAny || !isConnected}
+                disabled={busyAny}
                 className="px-3 py-2 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 font-mono text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 {busy === 'submit' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Radio className="w-3.5 h-3.5" />} Anchor Epoch #{state?.currentEpoch ?? '…'}
               </button>
               <button
                 onClick={claimRewards}
-                disabled={busyAny || !isConnected || unpaid <= 0}
+                disabled={busyAny || unpaid <= 0}
                 className="px-3 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold font-mono text-[11px] transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5" /> Claim {fmtUnits(unpaid)}
