@@ -80,18 +80,32 @@ export const AMM_ABI = [
   'function swap(uint256 amount0Out, uint256 amount1Out)',
 ];
 
+/**
+ * Verified against the deployed ReputationYieldVault runtime (CC3 testnet).
+ * stake(uint256)  -> 0xa694fc3a
+ * unstake(uint256)-> 0x2e17de78
+ * claimRewards()  -> 0x372500ab
+ * stakers(address)-> 0x9168ae72  returns (staked, lastRewardBlock, pendingRewards)
+ * The deployed vault exposes NO stakingToken()/rewardToken()/totalStaked()/
+ * rewardPerTokenStored()/lastRewardBlock()/rewardDebt() getters — those old ABI
+ * entries produced ethers selectors that were not in the runtime, so any
+ * fetchYieldVaultState() read always reverted and real vault state never
+ * surfaced. The token-address getters are resolved via the raw selectors below.
+ */
 export const YIELD_VAULT_ABI = [
-  'function stakingToken() view returns (address)',
-  'function rewardToken() view returns (address)',
-  'function totalStaked() view returns (uint256)',
-  'function rewardPerTokenStored() view returns (uint256)',
-  'function lastRewardBlock() view returns (uint256)',
-  'function stakers(address) view returns (uint256)',
-  'function rewardDebt(address) view returns (uint256)',
+  'function stakers(address) view returns (uint256 staked, uint256 lastRewardBlock, uint256 pendingRewards)',
   'function stake(uint256 amount)',
   'function unstake(uint256 amount)',
   'function claimRewards()',
 ];
+
+/** Raw getter selectors verified in the deployed ReputationYieldVault runtime. */
+export const YIELD_VAULT_GETTER_SELECTORS = {
+  stakingToken: '0x0479d644', //  -> cUSD (0xdec5…), pulled by stake()
+  rewardToken: '0x99248ea7', //   -> DEPIN (0x1930…), paid by claimRewards()
+  credXHub: '0xa4e2096c', //      -> hub (0x729b…) used by the credit oracle
+  baseDenominator: '0x0e40fe9f', // -> 100 (reward-basis constant)
+} as const;
 
 export const TREASURY_ABI = [
   'function name() view returns (string)',
@@ -818,6 +832,61 @@ export async function fetchAMMEvents(limit = 30): Promise<AMMEvent[]> {
   }
 }
 
+/** Verified event topics emitted by the deployed ReputationYieldVault. */
+export const YIELD_VAULT_EVENTS = {
+  Staked: '0x9e71bc8eea02a63969f509818f2dafb9254532904319f9dbda79b67bd34a5f3d',
+  Unstaked: '0x0f5bb82176feb1b5e747e28471aa92156a04d9f3ab9f45f28e2d704232b93f75',
+  Claimed: '0x7fdacbdde355ba930696a362ea6738feb9f8bd52dfb3d81947558fd3217e23e3',
+} as const;
+
+export interface YieldVaultEvent {
+  type: keyof typeof YIELD_VAULT_EVENTS;
+  txHash: string;
+  block: number;
+  user: string;
+}
+
+/**
+ * Real on-chain activity feed for the ReputationYieldVault (Staked / Unstaked /
+ * claimed rewards). The vault has no activity yet (single deployment tx), so it
+ * returns [] — the UI shows the honest empty state instead of a mocked stream.
+ */
+export async function fetchYieldVaultEvents(limit = 30): Promise<YieldVaultEvent[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const out: YieldVaultEvent[] = [];
+    for (const [type, topic] of Object.entries(YIELD_VAULT_EVENTS) as [keyof typeof YIELD_VAULT_EVENTS, string][]) {
+      let logs: any[] = [];
+      for (const win of [1200000, 600000, 300000, 150000, 60000]) {
+        try {
+          logs = await provider.getLogs({
+            address: CONTRACTS.reputationYieldVault,
+            topics: [topic],
+            fromBlock: Math.max(1, latest - win),
+            toBlock: 'latest',
+          });
+          if (logs.length > 0) break;
+        } catch {
+          /* try a narrower window */
+        }
+      }
+      logs.slice(-limit).forEach((l) => {
+        out.push({
+          type,
+          txHash: String(l.transactionHash),
+          block: Number(l.blockNumber),
+          user: l.topics[1] ? '0x' + l.topics[1].slice(26) : '',
+        });
+      });
+    }
+    out.sort((a, b) => b.block - a.block);
+    return out.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 async function ensureTokenApproval(
   signer: ethers.Signer,
   tokenAddress: string,
@@ -885,61 +954,81 @@ export async function swapViaAMM(amountIn: number, tokenInAddress: string, user:
 export async function fetchYieldVaultState(user: string): Promise<{
   stakingToken: TokenMeta;
   rewardToken: TokenMeta;
-  totalStaked: number;
-  rewardPerTokenStored: number;
-  lastRewardBlock: number;
+  credXHub: string;
+  totalStaked: number | null;
   stakedByUser: number;
-  rewardDebtByUser: number;
-  approxClaimable: number;
+  lastRewardBlock: number;
+  pendingRewards: number;
+  creditMult: number;
+  currentBlock: number;
 } | null> {
   try {
+    const { stakingToken, rewardToken, credXHub } = await resolveYieldVaultPair();
     const vault = readContract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI);
-    const [st, rt] = await Promise.all([vault.stakingToken(), vault.rewardToken()]);
-    const [sm, rm] = await Promise.all([tokenMeta(st), tokenMeta(rt)]);
-    const [ts, rpts, lrb, staked, debt] = await Promise.all([
-      vault.totalStaked(), vault.rewardPerTokenStored(), vault.lastRewardBlock(),
-      vault.stakers(user), vault.rewardDebt(user),
+    const [st, cb] = await Promise.all([
+      vault.stakers(user || ethers.ZeroAddress),
+      readProvider().getBlockNumber(),
     ]);
-    const stakedNum = parseFloat(ethers.formatUnits(staked, sm.decimals));
-    const stakedN = BigInt(staked);
-    const rptsN = BigInt(rpts);
-    const debtN = BigInt(debt);
-    const accruedRaw = stakedN > 0n ? (rptsN * stakedN) / 10n ** 18n - debtN : 0n;
-    const claimable = accruedRaw > 0n ? Number(accruedRaw) / 10 ** 18 : 0;
     return {
-      stakingToken: sm, rewardToken: rm,
-      totalStaked: parseFloat(ethers.formatUnits(ts, sm.decimals)),
-      rewardPerTokenStored: Number(rpts),
-      lastRewardBlock: Number(lrb),
-      stakedByUser: stakedNum,
-      rewardDebtByUser: Number(debt),
-      approxClaimable: claimable,
+      stakingToken,
+      rewardToken,
+      credXHub,
+      // The deployed vault has no global total-staked getter — surface null so the
+      // UI shows the honest "not globally readable" caption instead of a fake value.
+      totalStaked: null,
+      stakedByUser: parseFloat(ethers.formatUnits(st[0], stakingToken.decimals)),
+      lastRewardBlock: Number(st[1]),
+      // stake converts to RAW reward units — display capped at 18-decimals of DEPIN.
+      pendingRewards: parseFloat(ethers.formatUnits(st[2], rewardToken.decimals)),
+      // Credit oracle selector (0x21cccd01) reverts on the testnet hub, so the
+      // vault falls back to the default 20 multiplier (score < 48 branch).
+      creditMult: 20,
+      currentBlock: Number(cb),
     };
   } catch {
     return null;
   }
 }
 
+/**
+ * Resolve the ReputationYieldVault's token pair from the REAL on-chain getters.
+ * The deployed vault exposes no standard token getters, so the raw selectors
+ * (verified in the deployed runtime) are used — mirroring the ReputationAMM.
+ */
+export async function resolveYieldVaultPair(): Promise<{
+  stakingToken: TokenMeta;
+  rewardToken: TokenMeta;
+  credXHub: string;
+  baseDenominator: number;
+}> {
+  const provider = readProvider();
+  const vaultAddr = CONTRACTS.reputationYieldVault;
+  const raw = await Promise.all(
+    Object.values(YIELD_VAULT_GETTER_SELECTORS).map((sel) => provider.call({ to: vaultAddr, data: sel }))
+  );
+  const stAddr = ethers.getAddress('0x' + raw[0].slice(26));
+  const rtAddr = ethers.getAddress('0x' + raw[1].slice(26));
+  const hubAddr = ethers.getAddress('0x' + raw[2].slice(26));
+  const base = Number(ethers.getBigInt(raw[3]));
+  const [st, rt] = await Promise.all([tokenMeta(stAddr), tokenMeta(rtAddr)]);
+  return { stakingToken: st, rewardToken: rt, credXHub: hubAddr, baseDenominator: base };
+}
+
 export async function vaultStake(amount: number): Promise<string> {
   const signer = await getSigner();
-  const vault = readContract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI);
-  const vAddr = await vault.getAddress();
-  const st = await vault.stakingToken();
-  const meta = await tokenMeta(st);
-  await ensureTokenApproval(signer, st, vAddr, ethers.parseUnits(amount.toString(), meta.decimals));
+  const { stakingToken } = await resolveYieldVaultPair();
+  await ensureTokenApproval(signer, stakingToken.address, CONTRACTS.reputationYieldVault, ethers.parseUnits(amount.toString(), stakingToken.decimals));
   const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, signer);
-  const tx = await write.stake(ethers.parseUnits(amount.toString(), meta.decimals), { gasLimit: 400000 });
+  const tx = await write.stake(ethers.parseUnits(amount.toString(), stakingToken.decimals), { gasLimit: 400000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
 export async function vaultUnstake(amount: number): Promise<string> {
   const signer = await getSigner();
-  const vault = readContract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI);
-  const st = await vault.stakingToken();
-  const meta = await tokenMeta(st);
+  const { stakingToken } = await resolveYieldVaultPair();
   const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, signer);
-  const tx = await write.unstake(ethers.parseUnits(amount.toString(), meta.decimals), { gasLimit: 400000 });
+  const tx = await write.unstake(ethers.parseUnits(amount.toString(), stakingToken.decimals), { gasLimit: 400000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
