@@ -3,6 +3,7 @@ import GlassCard from '../common/GlassCard';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
 import { useToast } from '../../context/ToastContext';
+import usePulseLive from '../../hooks/usePulseLive';
 import posthog, { isPostHogEnabled } from '../../posthog';
 import {
   Cpu,
@@ -47,12 +48,14 @@ import {
   Navigation
 } from 'lucide-react';
 import GPULeaseModal from '../modals/GPULeaseModal';
-import PulseAttestationModal from '../modals/PulseAttestationModal';
+import PulseLivePanel from './PulseLivePanel';
 import { NexusAttestationModal } from '../modals/NexusAttestationModal';
 import { GeoOrbitAttestationModal } from '../modals/GeoOrbitAttestationModal';
 import { CredXGeoOrbitView } from './CredXGeoOrbitView';
 import { BittensorSubnetView } from './BittensorSubnetView';
 import GoogleMapView from '../common/GoogleMapView';
+import { Loader2, CircleCheck } from 'lucide-react';
+import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
 import { scanRealBluetoothDevice } from '../../utils/realHardwareConnect';
 import { Modal } from '../common/Modal';
 import { GPUCluster } from '../../types/tracks';
@@ -104,7 +107,6 @@ const DePINTab: React.FC = () => {
     score,
     pulseConnected,
     pulseEpoch,
-    pulseNetworkQuality,
     pulseUptimePoints,
     pulseNetworkPoints,
     pulseBandwidthGB,
@@ -177,6 +179,7 @@ const DePINTab: React.FC = () => {
     simulateRoverFix
   } = useProtocol();
   const { addToast } = useToast();
+  const pulseLive = usePulseLive();
 
   const [activeSector, setActiveSector] = useState<DePINSector>('pulse');
   const [activePulseTab, setActivePulseTab] = useState<PulseSubTab>('dashboard');
@@ -194,7 +197,6 @@ const DePINTab: React.FC = () => {
   const [isScanningBluetooth, setIsScanningBluetooth] = useState(false);
   const [selectedGPU, setSelectedGPU] = useState<GPUCluster | null>(null);
   const [gpuModalOpen, setGpuModalOpen] = useState(false);
-  const [pulseModalOpen, setPulseModalOpen] = useState(false);
   const [pinging, setPinging] = useState(false);
   const [delegating, setDelegating] = useState(false);
   const [stakeAmount, setStakeAmount] = useState('500');
@@ -815,6 +817,9 @@ const DePINTab: React.FC = () => {
             </button>
           </div>
 
+          {/* Live on-chain PulseBandwidthRegistry panel (all Pulse sub-tabs) */}
+          <PulseLivePanel />
+
           {/* Real Hardware Benchmark & Processing Monitor */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 bg-black/40 border border-white/[0.08] rounded-xl font-mono text-xs space-y-1">
@@ -853,7 +858,7 @@ const DePINTab: React.FC = () => {
                         {pulseCountryFlag} {pulseCountryName} (IP: {pulseRealIP})
                       </span>
                       <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono">
-                        Genesis Epoch {pulseEpoch}
+                        {pulseLive.state ? `On-Chain Epoch ${pulseLive.state.currentEpoch} · ${pulseLive.state.totalBandwidthMB.toLocaleString()} MB settled` : `Genesis Epoch ${pulseEpoch}`}
                       </span>
                     </div>
 
@@ -866,13 +871,38 @@ const DePINTab: React.FC = () => {
 
                     <div className="flex flex-wrap items-center gap-3 pt-2">
                       <button
-                        onClick={() => setPulseModalOpen(true)}
-                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#ABF600] to-emerald-400 hover:opacity-95 text-black font-extrabold text-xs font-mono shadow-lg shadow-[#ABF600]/20 transition flex items-center gap-2"
+                        onClick={() => {
+                          if (!isConnected) { openConnectModal(); return; }
+                          pulseLive.anchorEpoch();
+                        }}
+                        disabled={pulseLive.busy === 'anchor'}
+                        className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#ABF600] to-emerald-400 hover:opacity-95 text-black font-extrabold text-xs font-mono shadow-lg shadow-[#ABF600]/20 transition flex items-center gap-2 disabled:opacity-60"
                       >
-                        <ShieldCheck className="w-4 h-4 text-black" />
-                        Verify Epoch {pulseEpoch} on Creditcoin (+35 CTS)
+                        {pulseLive.busy === 'anchor' ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-black" />
+                        ) : (
+                          <ShieldCheck className="w-4 h-4 text-black" />
+                        )}
+                        {pulseLive.busy === 'anchor'
+                          ? 'Settling epoch on Creditcoin…'
+                          : pulseLive.state
+                          ? `Anchor Epoch ${pulseLive.state.currentEpoch} on Creditcoin (+PULSE units)`
+                          : 'Anchor Current Epoch on Creditcoin (+PULSE units)'}
                       </button>
                     </div>
+                    {pulseLive.lastTx ? (
+                      <div className="text-[10px] font-mono text-emerald-300 flex items-center gap-1.5 pt-1">
+                        <CircleCheck className="w-3 h-3" /> epoch anchored · tx {pulseLive.lastTx.slice(0, 10)}…
+                        <a href={`${CREDITCOIN_BLOCKSCOUT}/tx/${pulseLive.lastTx}`} target="_blank" rel="noreferrer" className="text-white/40 hover:text-emerald-300 inline-flex items-center gap-1">
+                          blockscout <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    ) : null}
+                    {pulseLive.error && !pulseLive.lastTx ? (
+                      <div className="text-[10px] font-mono text-rose-300 flex items-center gap-1.5 pt-1">
+                        <AlertTriangle className="w-3 h-3" /> {pulseLive.error}
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Right Side: Big Extension-Style Power Toggle & Network Quality Bar */}
@@ -905,13 +935,13 @@ const DePINTab: React.FC = () => {
                     {/* Network Quality Card with Dynamic Progress Bar */}
                     <div className="w-full p-3 bg-white/[0.03] border border-white/[0.06] rounded-xl space-y-2">
                       <div className="flex justify-between text-xs font-mono">
-                        <span className="text-white/60">Network Quality:</span>
-                        <span className="text-[#ABF600] font-bold">{pulseNetworkQuality}%</span>
+                        <span className="text-white/60">Network Quality (on-chain):</span>
+                        <span className="text-[#ABF600] font-bold">{pulseLive.state ? `${pulseLive.networkQualityPct}%` : '…'}</span>
                       </div>
                       <div className="w-full h-2 bg-black/50 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-gradient-to-r from-[#ABF600] to-emerald-400 transition-all duration-500"
-                          style={{ width: `${pulseNetworkQuality}%` }}
+                          style={{ width: `${pulseLive.state ? pulseLive.networkQualityPct : 0}%` }}
                         />
                       </div>
                       <div className="text-[10px] text-white/40 flex items-center justify-between font-mono">
@@ -929,18 +959,18 @@ const DePINTab: React.FC = () => {
                 <GlassCard className="p-5 border-[#ABF600]/20 bg-gradient-to-br from-black to-[#0a1506]">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono uppercase text-[#ABF600] font-bold tracking-wider">
-                      Epoch {pulseEpoch} Network Earnings:
+                      Epoch {pulseLive.state?.currentEpoch ?? pulseEpoch} Network Anchored:
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-mono">
-                      Data Packets
+                      On-Chain Ledger
                     </span>
                   </div>
                   <div className="text-3xl font-black font-mono text-white mt-3 flex items-center gap-2">
-                    <span className="text-cyan-400">💎</span> {pulseNetworkPoints.toFixed(4)}
+                    <span className="text-cyan-400">💎</span> {pulseLive.node ? pulseLive.unpaid.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '…'}
                   </div>
                   <div className="text-xs text-white/50 mt-2 font-mono flex items-center justify-between border-t border-white/[0.06] pt-2">
-                    <span>Actively Routed:</span>
-                    <span className="text-white font-bold">{pulseBandwidthGB} GB</span>
+                    <span>My Node Routed (last epoch):</span>
+                    <span className="text-white font-bold">{pulseLive.node ? `${(pulseLive.node.lastBandwidthMB / 1024).toFixed(2)} GB` : '—'}</span>
                   </div>
                 </GlassCard>
 
@@ -3168,7 +3198,6 @@ const DePINTab: React.FC = () => {
 
       {/* Modals */}
       <GPULeaseModal isOpen={gpuModalOpen} onClose={() => setGpuModalOpen(false)} cluster={selectedGPU} />
-      <PulseAttestationModal isOpen={pulseModalOpen} onClose={() => setPulseModalOpen(false)} />
       <NexusAttestationModal isOpen={nexusModalOpen} onClose={() => setNexusModalOpen(false)} />
 
       {/* 1. Mobile Node Pairing Modal (Circled QR Code Icon) */}

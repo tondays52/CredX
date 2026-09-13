@@ -1707,10 +1707,172 @@ export async function geoOrbitClaimRewards(): Promise<string> {
   return receipt.hash as string;
 }
 
+// ─── Pulse (live on-chain bandwidth Data-DAO epoch ledger) ──────────────────
+
+export const PULSE_ABI = [
+  'function owner() view returns (address)',
+  'function paused() view returns (bool)',
+  'function rewardPerEpoch() view returns (uint256)',
+  'function maxBandwidthMB() view returns (uint32)',
+  'function epochDurationSeconds() view returns (uint24)',
+  'function genesisTime() view returns (uint256)',
+  'function nodeCount() view returns (uint256)',
+  'function totalEpochsSettled() view returns (uint256)',
+  'function totalBandwidthMB() view returns (uint256)',
+  'function totalRewardUnitsIssued() view returns (uint256)',
+  'function currentEpoch() view returns (uint256)',
+  'function nodes(address) view returns (uint256 nodeId, address operator, bytes4 nodeTag, uint256 epochCount, uint256 lastEpoch, uint32 lastBandwidthMB, uint8 lastQualityGrade, uint256 totalRewardUnits, uint256 claimedUnits, uint256 registeredAt, bytes32 lastAnchorHash)',
+  'function registerNode(bytes4 nodeTag)',
+  'function submitBandwidth(uint32 bandwidthMB, uint8 qualityGrade)',
+  'function claimRewards()',
+];
+
+export interface PulseNodeView {
+  nodeId: number;
+  operator: string;
+  nodeTag: string;
+  epochCount: number;
+  lastEpoch: number;
+  lastBandwidthMB: number;
+  lastQualityGrade: number;
+  totalRewardUnits: number;
+  claimedUnits: number;
+  registeredAt: number;
+  lastAnchorHash: string;
+}
+
+export interface PulseState {
+  owner: string;
+  paused: boolean;
+  rewardPerEpoch: number;
+  maxBandwidthMB: number;
+  epochDurationSeconds: number;
+  genesisTime: number;
+  nodeCount: number;
+  totalEpochsSettled: number;
+  totalBandwidthMB: number;
+  totalRewardUnitsIssued: number;
+  currentEpoch: number;
+}
+
+export interface PulseLedgerEntry {
+  operator: string;
+  epochId: number;
+  anchorHash: string;
+  bandwidthMB: number;
+  qualityGrade: number;
+  rewardUnits: number;
+  timestamp: number;
+  blockNumber: number;
+}
+
+export async function fetchPulseState(): Promise<PulseState | null> {
+  try {
+    const c = readContract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI);
+    const [owner, paused, rpe, maxBw, dur, genesis, count, epochs, bw, units, cur] = await Promise.all([
+      c.owner(), c.paused(), c.rewardPerEpoch(), c.maxBandwidthMB(), c.epochDurationSeconds(),
+      c.genesisTime(), c.nodeCount(), c.totalEpochsSettled(), c.totalBandwidthMB(),
+      c.totalRewardUnitsIssued(), c.currentEpoch(),
+    ]);
+    return {
+      owner: String(owner),
+      paused: Boolean(paused),
+      rewardPerEpoch: parseFloat(ethers.formatUnits(rpe, 18)),
+      maxBandwidthMB: Number(maxBw),
+      epochDurationSeconds: Number(dur),
+      genesisTime: Number(genesis),
+      nodeCount: Number(count),
+      totalEpochsSettled: Number(epochs),
+      totalBandwidthMB: Number(bw),
+      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+      currentEpoch: Number(cur),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPulseNode(user: string): Promise<PulseNodeView | null> {
+  try {
+    const c = readContract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI);
+    const n = await c.nodes(user);
+    if (n.operator === ethers.ZeroAddress) return null;
+    return {
+      nodeId: Number(n.nodeId),
+      operator: String(n.operator),
+      nodeTag: String(n.nodeTag),
+      epochCount: Number(n.epochCount),
+      lastEpoch: Number(n.lastEpoch),
+      lastBandwidthMB: Number(n.lastBandwidthMB),
+      lastQualityGrade: Number(n.lastQualityGrade),
+      totalRewardUnits: parseFloat(ethers.formatUnits(n.totalRewardUnits, 18)),
+      claimedUnits: parseFloat(ethers.formatUnits(n.claimedUnits, 18)),
+      registeredAt: Number(n.registeredAt),
+      lastAnchorHash: String(n.lastAnchorHash),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchPulseLedger(limit = 40): Promise<PulseLedgerEntry[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const fromBlock = Math.max(1, latest - EVIDENCE_FROM_BLOCKS);
+    const logs = await provider
+      .getLogs({ address: CONTRACTS.pulseBandwidthRegistry, topics: [EVIDENCE_TOPICS.BandwidthAnchored], fromBlock, toBlock: 'latest' })
+      .catch(() => []);
+    const decoder = ethers.AbiCoder.defaultAbiCoder();
+    const entries: PulseLedgerEntry[] = [];
+    for (const log of logs) {
+      const data = decoder.decode(['uint32', 'uint8', 'uint256', 'uint256'], log.data);
+      entries.push({
+        operator: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        epochId: Number(log.topics[2]),
+        anchorHash: String(log.topics[3]),
+        bandwidthMB: Number(data[0]),
+        qualityGrade: Number(data[1]),
+        rewardUnits: parseFloat(ethers.formatUnits(data[2], 18)),
+        timestamp: Number(data[3]),
+        blockNumber: Number(log.blockNumber),
+      });
+    }
+    entries.sort((a, b) => b.blockNumber - a.blockNumber);
+    return entries.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export async function pulseRegisterNode(nodeTag: string): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, signer);
+  const tx = await c.registerNode(nodeTag, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function pulseSubmitBandwidth(bandwidthMB: number, qualityGrade: number): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, signer);
+  const tx = await c.submitBandwidth(bandwidthMB, qualityGrade, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function pulseClaimRewards(): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.pulseBandwidthRegistry, PULSE_ABI, signer);
+  const tx = await c.claimRewards({ gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
 // ─── Evidence Registry (attested proofs + proof-gated events, via eth_getLogs) ─
 
 export interface EvidenceEntry {
-  source: 'oracle' | 'escrow' | 'meter' | 'geoorbit';
+  source: 'oracle' | 'escrow' | 'meter' | 'geoorbit' | 'pulse';
   kind: string;
   actor: string;
   txHash: string;       // source-chain txHash (oracle/escrow) or event-key seeded
@@ -1726,6 +1888,7 @@ const EVIDENCE_TOPICS = {
   UsageRecorded: ethers.id('UsageRecorded(address,bytes32,uint256,uint256)'),
   PrepaidConsumed: ethers.id('PrepaidConsumed(address,bytes32,uint256,uint256)'),
   TelemetryAnchored: ethers.id('TelemetryAnchored(address,uint256,bytes32,int32,int32,uint32,uint8,uint256)'),
+  BandwidthAnchored: ethers.id('BandwidthAnchored(address,uint256,bytes32,uint32,uint8,uint256,uint256)'),
 };
 
 const EVIDENCE_FROM_BLOCKS = 30000;
@@ -1741,6 +1904,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
       provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.UsageRecorded], fromBlock, toBlock: 'latest' }).catch(() => []),
       provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.PrepaidConsumed], fromBlock, toBlock: 'latest' }).catch(() => []),
       provider.getLogs({ address: CONTRACTS.geoOrbitRegistry, topics: [EVIDENCE_TOPICS.TelemetryAnchored], fromBlock, toBlock: 'latest' }).catch(() => []),
+      provider.getLogs({ address: CONTRACTS.pulseBandwidthRegistry, topics: [EVIDENCE_TOPICS.BandwidthAnchored], fromBlock, toBlock: 'latest' }).catch(() => []),
     ]);
 
     const entries: EvidenceEntry[] = [];
@@ -1812,6 +1976,20 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         blockNumber: Number(log.blockNumber),
         verified: true,
         amountUSD: null,
+      });
+    }
+
+    for (const log of raw[5] || []) {
+      const data = escrowDecoder.decode(['uint32', 'uint8', 'uint256', 'uint256'], log.data);
+      entries.push({
+        source: 'pulse',
+        kind: 'BandwidthAnchored',
+        actor: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        txHash: ethers.id('pulse:anchor:' + String(log.blockNumber) + ':' + String(log.topics[2])),
+        chainId: CREDITCOIN_CHAIN_ID,
+        blockNumber: Number(log.blockNumber),
+        verified: true,
+        amountUSD: parseFloat(ethers.formatUnits(data[2], 18)),
       });
     }
 

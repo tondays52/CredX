@@ -41,6 +41,7 @@ export const CONTRACTS = {
   usageMeteringRegistry: '0xF8a9645ac3D234cf72B0C4C170cFB289FE2Ae4F9',
   verifiedEscrow: '0x07aBcbb7b2F9f4400c93d092F343e186ee526137',
   geoOrbitRegistry: '0x8829e0e397ffa872D3E5B5CE5d32b52E98DC4e63',
+  pulseBandwidthRegistry: '0x97aDb0deE39402E1e92772ff2AA0eD935774832a',
 } as const;
 
 /** Testnet settlement token decimals (MockERC20 with 18 decimals). */
