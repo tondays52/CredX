@@ -110,29 +110,9 @@ const DePINTab: React.FC = () => {
   const {
     hardware,
     runPingTest,
-    score,
-    pulseConnected,
-    pulseEpoch,
-    pulseUptimePoints,
-    pulseNetworkPoints,
-    pulseBandwidthGB,
-    pulseStakedCTC,
-    pulseStakingAPR,
-    pulseClaimableRewardUSD,
-    pulseTier,
-    pulseTierPoints,
-    pulseLevelProgressPct,
     pulseRealIP,
     pulseCountryFlag,
     pulseCountryName,
-    pulseComputeThroughputMhash,
-    pulseSessionSeconds,
-    pulseNetworks,
-    renamePulseNetwork,
-    togglePulseNode,
-    claimPulseAllocation,
-    claimPulseTierBonus,
-    stakePulseCTC,
     // CredX Nexus IoT Edge & Fleet State
     nexusActive,
     nexusMode,
@@ -203,7 +183,6 @@ const DePINTab: React.FC = () => {
   const [pinging, setPinging] = useState(false);
   const [delegating, setDelegating] = useState(false);
   const [stakeAmount, setStakeAmount] = useState('500');
-  const [pulseStakeInput, setPulseStakeInput] = useState('100');
   const [undelegating, setUndelegating] = useState(false);
   const [requestingLoan, setRequestingLoan] = useState(false);
   const [repayingLoan, setRepayingLoan] = useState(false);
@@ -447,41 +426,6 @@ const DePINTab: React.FC = () => {
     }
   };
 
-  // Dynamically computed allocation from real accumulated points and Creditcoin Trust Score
-  const dynamicAllocationUSDC = (
-    (pulseUptimePoints * 0.000010 + pulseNetworkPoints * 0.003) * (score / 750)
-  ).toFixed(2);
-
-  // Simulated live web scraping requests for CredX Pulse node
-  const [requestLogs, setRequestLogs] = useState<Array<{ id: number; time: string; url: string; size: string; status: number }>>([
-    { id: 1, time: 'Just now', url: 'huggingface.co/datasets/fin-sentiment-v3', size: '24.2 KB', status: 200 },
-    { id: 2, time: '2s ago', url: 'arxiv.org/abs/2405.0192 (AI Alignment)', size: '68.5 KB', status: 200 },
-    { id: 3, time: '5s ago', url: 'sec.gov/edgar/data/10-K/apple-2025', size: '142.0 KB', status: 200 }
-  ]);
-
-  useEffect(() => {
-    if (!pulseConnected) return;
-    const interval = setInterval(() => {
-      const endpoints = [
-        'commoncrawl.org/crawl-data/CC-MAIN-2026',
-        'github.com/trending/python/deep-learning',
-        'wikipedia.org/wiki/Creditcoin_Attestcoin',
-        'reuters.com/markets/global-macro-sentiment',
-        'kaggle.com/datasets/multimodal-dialogue'
-      ];
-      const randomUrl = endpoints[Math.floor(Math.random() * endpoints.length)]; // NOSONAR
-      const randomSize = (Math.random() * 80 + 10).toFixed(1) + ' KB'; // NOSONAR
-      setRequestLogs(prev => [
-        { id: Date.now(), time: 'Just now', url: randomUrl, size: randomSize, status: 200 },
-        ...prev.slice(0, 4)
-      ]);
-    }, 3500);
-    return () => clearInterval(interval);
-  }, [pulseConnected]);
-
-  const userWalletCTC = balanceCTC > 0 ? balanceCTC : 10000;
-  const userWalletUSD = userWalletCTC * 2.0;
-
   const handlePing = async () => {
     setPinging(true);
     addToast('info', 'DePIN Probe', 'Executing round-trip latency probe to closest Creditcoin validator...');
@@ -651,16 +595,6 @@ const DePINTab: React.FC = () => {
     }
   };
 
-  const handleStakePulse = () => {
-    const amt = parseFloat(pulseStakeInput);
-    if (isNaN(amt) || amt <= 0 || amt > userWalletCTC) {
-      addToast('error', 'Invalid Amount', 'Please enter a valid CTC staking amount.');
-      return;
-    }
-    stakePulseCTC(amt);
-    setPulseStakeInput('');
-  };
-
   const mockClusters: GPUCluster[] = [
     { id: 'GPU-US-01', model: 'NVIDIA H100 SXM5 80GB', vram: '80 GB HBM3', tflops: 1979, pricePerHour: 2.85, status: 'AVAILABLE' },
     { id: 'GPU-EU-04', model: '8x NVIDIA RTX 4090 Cluster', vram: '192 GB GDDR6X', tflops: 660, pricePerHour: 1.45, status: 'AVAILABLE' },
@@ -671,36 +605,6 @@ const DePINTab: React.FC = () => {
     { id: 'NODE-SEOUL-01', name: 'Creditcoin Genesis Validator Alpha', region: 'Seoul, KR', uptime: '99.98%', apy: '19.4%', stakedTotal: '1,420,000 CTC', commission: '2.0%' },
     { id: 'NODE-FRA-09', name: 'Frankfurt High-Speed Relay Hub', region: 'Frankfurt, DE', uptime: '99.95%', apy: '18.8%', stakedTotal: '980,000 CTC', commission: '2.5%' },
     { id: 'NODE-VA-03', name: 'Virginia US-East Edge Cluster', region: 'Virginia, US', uptime: '99.99%', apy: '20.1%', stakedTotal: '2,150,000 CTC', commission: '1.8%' },
-  ];
-
-  // Exactly matching the 25-day chart from the user's screenshot (Aug 16 - Sep 9)
-  const dailyEarnings = [
-    { day: '16 Aug', val: '818.3', uptime: 818.3, network: 120 },
-    { day: '17 Aug', val: '1.6K', uptime: 1600, network: 240 },
-    { day: '18 Aug', val: '1.6K', uptime: 1600, network: 230 },
-    { day: '19 Aug', val: '2K', uptime: 2000, network: 310 },
-    { day: '20 Aug', val: '1K', uptime: 1000, network: 180 },
-    { day: '21 Aug', val: '1.1K', uptime: 1100, network: 190 },
-    { day: '22 Aug', val: '1.5K', uptime: 1500, network: 260 },
-    { day: '23 Aug', val: '949.5', uptime: 949.5, network: 150 },
-    { day: '24 Aug', val: '994.9', uptime: 994.9, network: 160 },
-    { day: '25 Aug', val: '425.2', uptime: 425.2, network: 90 },
-    { day: '26 Aug', val: '1.8K', uptime: 1800, network: 290 },
-    { day: '27 Aug', val: '1K', uptime: 1000, network: 180 },
-    { day: '28 Aug', val: '2.4K', uptime: 2400, network: 410 },
-    { day: '29 Aug', val: '1.2K', uptime: 1200, network: 220 },
-    { day: '30 Aug', val: '1.5K', uptime: 1500, network: 260 },
-    { day: '31 Aug', val: '2.1K', uptime: 2100, network: 380 },
-    { day: '1 Sep', val: '849.2', uptime: 849.2, network: 140 },
-    { day: '2 Sep', val: '1.1K', uptime: 1100, network: 200 },
-    { day: '3 Sep', val: '1.1K', uptime: 1100, network: 200 },
-    { day: '4 Sep', val: '2.6K', uptime: 2600, network: 480 },
-    { day: '5 Sep', val: '1.2K', uptime: 1200, network: 220 },
-    { day: '6 Sep', val: '1.5K', uptime: 1500, network: 270 },
-    { day: '7 Sep', val: '935', uptime: 935.0, network: 170 },
-    { day: '8 Sep', val: '2K', uptime: 2000, network: 350 },
-    { day: '9 Sep', val: '1.4K', uptime: 1400, network: 240 },
-    { day: '10 Sep', val: '347.7', uptime: 347.7, network: 60, isToday: true },
   ];
 
   return (
@@ -892,8 +796,8 @@ const DePINTab: React.FC = () => {
               <span className="text-white font-bold">{hardware.deviceMemoryGB} GB Allocated</span>
             </div>
             <div className="p-3 bg-black/40 border border-white/[0.08] rounded-xl font-mono text-xs space-y-1">
-              <span className="text-white/40 text-[10px] uppercase block">WebCrypto Hash Speed</span>
-              <span className="text-[#ABF600] font-bold">{pulseComputeThroughputMhash} Mhash/s</span>
+              <span className="text-white/40 text-[10px] uppercase block">Browser GPU Renderer</span>
+              <span className="text-[#ABF600] font-bold truncate">{hardware.gpuRenderer || '…'}</span>
             </div>
             <div className="p-3 bg-black/40 border border-white/[0.08] rounded-xl font-mono text-xs space-y-1">
               <span className="text-white/40 text-[10px] uppercase block">Network Latency (RTT)</span>
@@ -912,14 +816,18 @@ const DePINTab: React.FC = () => {
                   <div className="lg:col-span-8 space-y-4">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#ABF600]/15 border border-[#ABF600]/40 text-[#ABF600] text-xs font-mono font-bold">
-                        <span className={`w-2 h-2 rounded-full ${pulseConnected ? 'bg-[#ABF600] animate-pulse' : 'bg-red-400'}`} />
-                        {pulseConnected ? 'CredX Pulse Relay Active' : 'CredX Pulse Relay Suspended'}
+                        <span className={`w-2 h-2 rounded-full ${pulseLive.node ? 'bg-[#ABF600] animate-pulse' : 'bg-red-400'}`} />
+                        {pulseLive.node ? 'NODE REGISTERED ON-CHAIN' : 'NO NODE REGISTERED YET'}
                       </span>
                       <span className="px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/10 text-white/60 text-xs font-mono">
-                        {pulseCountryFlag} {pulseCountryName} (IP: {pulseRealIP})
+                        {pulseLive.isConnected ? `signer ${pulseLive.activeSignerLabel}` : `watch account ${pulseLive.account.slice(0, 8)}…`}
                       </span>
                       <span className="px-2.5 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono">
-                        {pulseLive.state ? `On-Chain Epoch ${pulseLive.state.currentEpoch} · ${pulseLive.state.totalBandwidthMB.toLocaleString()} MB settled` : `Genesis Epoch ${pulseEpoch}`}
+                        {pulseLive.state
+                          ? `Epoch ${pulseLive.state.currentEpoch} · ${(pulseLive.state.totalBandwidthMB / 1024).toFixed(1)} GB settled`
+                          : pulseLive.loading
+                          ? 'reading registry…'
+                          : 'GENESIS EPOCH 0'}
                       </span>
                     </div>
 
@@ -927,15 +835,16 @@ const DePINTab: React.FC = () => {
                       Monetize Surplus Bandwidth for AI Data Pipelines
                     </h2>
                     <p className="text-xs text-white/60 leading-relaxed max-w-2xl">
-                      Share unused residential internet bandwidth to power decentralized AI model training datasets. Every byte routed is cryptographically attested on Creditcoin via the <strong className="text-white">Attestcoin Protocol (USC precompile 0x0FD2)</strong>, directly augmenting your Creditcoin Trust Score.
+                      Share unused residential internet bandwidth to power decentralized AI model training datasets. Every
+                      epoch anchor is a real transaction on Creditcoin L1 (CC3) — bandwidth reports land in the on-chain
+                      ledger with PULSE reward units. The Attestcoin Protocol (USC precompile 0x0FD2) augments Trust Score
+                      from attested activity.
                     </p>
 
                     <div className="flex flex-wrap items-center gap-3 pt-2">
                       <button
-                        onClick={() => {
-                          pulseLive.anchorEpoch();
-                        }}
-                        disabled={pulseLive.busy === 'anchor'}
+                        onClick={() => pulseLive.anchorEpoch()}
+                        disabled={pulseLive.busy !== null}
                         className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-[#ABF600] to-emerald-400 hover:opacity-95 text-black font-extrabold text-xs font-mono shadow-lg shadow-[#ABF600]/20 transition flex items-center gap-2 disabled:opacity-60"
                       >
                         {pulseLive.busy === 'anchor' ? (
@@ -945,14 +854,31 @@ const DePINTab: React.FC = () => {
                         )}
                         {pulseLive.busy === 'anchor'
                           ? 'Settling epoch on Creditcoin…'
-                          : pulseLive.state
-                          ? `Anchor Epoch ${pulseLive.state.currentEpoch} on Creditcoin (+PULSE units)`
-                          : 'Anchor Current Epoch on Creditcoin (+PULSE units)'}
+                          : pulseLive.node
+                          ? `Anchor Epoch ${pulseLive.state ? pulseLive.state.currentEpoch : '…'} (+${pulseLive.state ? pulseLive.state.rewardPerEpoch.toLocaleString() : ''} PULSE)`
+                          : 'Register Node & Anchor Epoch'}
+                      </button>
+                      {!pulseLive.node && (
+                        <button
+                          onClick={() => pulseLive.register('pulse-node')}
+                          disabled={pulseLive.busy !== null}
+                          className="px-4 py-2.5 rounded-xl bg-white/[0.06] border border-white/15 hover:bg-white/[0.12] text-white font-extrabold text-xs font-mono transition flex items-center gap-2 disabled:opacity-60"
+                        >
+                          {pulseLive.busy === 'register' && <Loader2 className="w-4 h-4 animate-spin" />}
+                          Register Node
+                        </button>
+                      )}
+                      <button
+                        onClick={() => pulseLive.refresh()}
+                        disabled={pulseLive.busy !== null}
+                        className="px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white/70 text-xs font-mono transition flex items-center gap-1.5 disabled:opacity-60"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${pulseLive.loading ? 'animate-spin' : ''}`} /> Refresh
                       </button>
                     </div>
                     {pulseLive.lastTx ? (
                       <div className="text-[10px] font-mono text-emerald-300 flex items-center gap-1.5 pt-1">
-                        <CircleCheck className="w-3 h-3" /> epoch anchored · tx {pulseLive.lastTx.slice(0, 10)}…
+                        <CircleCheck className="w-3 h-3" /> tx broadcast · {pulseLive.lastTx.slice(0, 10)}…
                         <a href={`${CREDITCOIN_BLOCKSCOUT}/tx/${pulseLive.lastTx}`} target="_blank" rel="noreferrer" className="text-white/40 hover:text-emerald-300 inline-flex items-center gap-1">
                           blockscout <ExternalLink className="w-3 h-3" />
                         </a>
@@ -965,30 +891,33 @@ const DePINTab: React.FC = () => {
                     ) : null}
                   </div>
 
-                  {/* Right Side: Big Extension-Style Power Toggle & Network Quality Bar */}
+                  {/* Right Side: Node Power Toggle & Network Quality Bar */}
                   <div className="lg:col-span-4 flex flex-col items-center justify-center p-6 rounded-2xl bg-black/60 border border-white/[0.08] text-center space-y-4">
-                    {/* The iconic large circular power button */}
+                    {/* The iconic large circular power button — anchors the live epoch on-chain */}
                     <button
-                      onClick={togglePulseNode}
+                      onClick={() => pulseLive.anchorEpoch()}
+                      disabled={pulseLive.busy !== null}
                       className={`relative w-24 h-24 rounded-full flex items-center justify-center transition-all duration-500 shadow-2xl group ${
-                        pulseConnected
+                        pulseLive.node
                           ? 'bg-[#ABF600] text-black shadow-[0_0_40px_rgba(171,246,0,0.4)] scale-105 hover:scale-110'
                           : 'bg-white/10 text-white/40 hover:bg-white/20'
                       }`}
-                      title={pulseConnected ? 'Click to Pause Pulse Node' : 'Click to Activate Pulse Node'}
+                      title={pulseLive.node ? 'Anchor the live epoch on Creditcoin' : 'Register your node & anchor the live epoch'}
                     >
-                      <Power className={`w-12 h-12 transition-transform ${pulseConnected ? 'stroke-[2.5]' : ''}`} />
-                      {pulseConnected && (
+                      <Power className={`w-12 h-12 transition-transform ${pulseLive.node ? 'stroke-[2.5]' : ''}`} />
+                      {pulseLive.node && (
                         <div className="absolute inset-0 rounded-full border-2 border-[#ABF600] animate-ping opacity-30 pointer-events-none" />
                       )}
                     </button>
 
                     <div className="space-y-1">
                       <div className="text-sm font-extrabold font-mono text-white">
-                        {pulseConnected ? 'Pulse is Connected' : 'Pulse is Disconnected'}
+                        {pulseLive.node ? 'Node Online (on-chain)' : 'Node Not Registered'}
                       </div>
                       <p className="text-[10px] text-white/40">
-                        {pulseConnected ? "You're doing great! Keep contributing to earn." : 'Click the button to resume contributing.'}
+                        {pulseLive.node
+                          ? 'Click to settle the current epoch and earn PULSE units.'
+                          : 'Click to register this wallet as a bandwidth node and anchor epoch 0.'}
                       </p>
                     </div>
 
@@ -1005,265 +934,299 @@ const DePINTab: React.FC = () => {
                         />
                       </div>
                       <div className="text-[10px] text-white/40 flex items-center justify-between font-mono">
-                        <span>Ping: {hardware.pingMs}ms</span>
-                        <span>0.00% Packet Loss</span>
+                        <span>Browser ping: {hardware.pingMs}ms</span>
+                        <span>{pulseLive.node ? `${pulseLive.ledgerGB.toFixed(2)} GB ledger (wallet)` : 'no anchors yet'}</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </GlassCard>
 
-              {/* Earnings Cards (Matching User's Screenshot: Network vs Uptime Earnings) */}
+              {/* Real on-chain stats cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Network Points Card */}
+                {/* Registry Anchored Card */}
                 <GlassCard className="p-5 border-[#ABF600]/20 bg-gradient-to-br from-black to-[#0a1506]">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono uppercase text-[#ABF600] font-bold tracking-wider">
-                      Epoch {pulseLive.state?.currentEpoch ?? pulseEpoch} Network Anchored:
+                      Epoch {pulseLive.state?.currentEpoch ?? '…'} Registry Anchored:
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-mono">
                       On-Chain Ledger
                     </span>
                   </div>
                   <div className="text-3xl font-black font-mono text-white mt-3 flex items-center gap-2">
-                    <span className="text-cyan-400">💎</span> {pulseLive.node ? pulseLive.unpaid.toLocaleString(undefined, { maximumFractionDigits: 1 }) : '…'}
+                    <span className="text-cyan-400">💎</span>{' '}
+                    {pulseLive.state ? `${(pulseLive.state.totalBandwidthMB / 1024).toFixed(1)} GB` : '…'}
                   </div>
                   <div className="text-xs text-white/50 mt-2 font-mono flex items-center justify-between border-t border-white/[0.06] pt-2">
                     <span>My Node Routed (last epoch):</span>
-                    <span className="text-white font-bold">{pulseLive.node ? `${(pulseLive.node.lastBandwidthMB / 1024).toFixed(2)} GB` : '—'}</span>
+                    <span className="text-white font-bold">
+                      {pulseLive.node ? `${(pulseLive.node.lastBandwidthMB / 1024).toFixed(2)} GB` : '—'}
+                    </span>
                   </div>
                 </GlassCard>
 
-                {/* Uptime Points Card */}
+                {/* My Node PULSE Earned Card */}
                 <GlassCard className="p-5 border-[#ABF600]/20 bg-gradient-to-br from-black to-[#0a1506]">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-mono uppercase text-[#ABF600] font-bold tracking-wider">
-                      Epoch {pulseEpoch} Uptime Earnings:
+                      My Node PULSE Earned:
                     </span>
                     <span className="text-xs px-2 py-0.5 rounded bg-[#ABF600]/10 text-[#ABF600] font-mono">
-                      Active Telemetry
+                      On-Chain
                     </span>
                   </div>
                   <div className="text-3xl font-black font-mono text-white mt-3 flex items-center gap-2">
-                    <span className="text-[#ABF600]">🍃</span> {pulseUptimePoints.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    <span className="text-[#ABF600]">🍃</span>{' '}
+                    {pulseLive.node
+                      ? pulseLive.node.totalRewardUnits.toLocaleString(undefined, { maximumFractionDigits: 2 })
+                      : '…'}
                   </div>
                   <div className="text-xs text-white/50 mt-2 font-mono flex items-center justify-between border-t border-white/[0.06] pt-2">
-                    <span>Active Session:</span>
-                    <span className="text-emerald-400 font-bold">{Math.floor(pulseSessionSeconds / 3600)} hrs, {Math.floor((pulseSessionSeconds % 3600) / 60)} mins</span>
+                    <span>Claimed / Unclaimed:</span>
+                    <span className="text-emerald-400 font-bold">
+                      {pulseLive.node
+                        ? `${pulseLive.node.claimedUnits.toLocaleString(undefined, { maximumFractionDigits: 2 })} / ${pulseLive.unpaid.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+                        : '—'}
+                    </span>
                   </div>
                 </GlassCard>
               </div>
 
-              {/* 25-Day Earnings Statistics Bar Chart (Matching Screenshot 1) */}
+              {/* On-Chain PULSE Units Chart (real ledger) */}
               <GlassCard className="p-6 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-[#ABF600]" /> Earnings Statistics
+                      <BarChart3 className="w-4 h-4 text-[#ABF600]" /> PULSE Units Settled by Epoch
                     </h3>
-                    <p className="text-xs text-white/40 mt-0.5">Historical daily points distribution (Aug 16 – Sep 10)</p>
+                    <p className="text-xs text-white/40 mt-0.5">
+                      {pulseLive.ledger.length
+                        ? `${pulseLive.ledger.length} on-chain BandwidthAnchored events read from PulseBandwidthRegistry`
+                        : 'Waiting for the first epoch anchor — click "Register & Anchor" above'}
+                    </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3 text-[11px] font-mono">
-                    <span className="flex items-center gap-1 text-cyan-400"><span className="w-2 h-2 rounded-full bg-cyan-400" /> Network Points</span>
-                    <span className="flex items-center gap-1 text-[#ABF600]"><span className="w-2 h-2 rounded-full bg-[#ABF600]" /> Uptime Points</span>
-                    <button onClick={handlePing} className="text-white/60 hover:text-white flex items-center gap-1 text-xs">
-                      <RefreshCw className="w-3 h-3" /> Refresh
+                    <span className="flex items-center gap-1 text-[#ABF600]"><span className="w-2 h-2 rounded-full bg-[#ABF600]" /> PULSE units per epoch</span>
+                    <button onClick={() => pulseLive.refresh()} className="text-white/60 hover:text-white flex items-center gap-1 text-xs">
+                      <RefreshCw className={`w-3 h-3 ${pulseLive.loading ? 'animate-spin' : ''}`} /> Refresh
                     </button>
                   </div>
                 </div>
 
-                {/* SVG 25-Day Bar Chart */}
                 <div className="pt-4 pb-2 overflow-x-auto">
                   <div className="min-w-[700px] h-48 flex items-end justify-between gap-1.5 px-2 border-b border-white/10">
-                    {dailyEarnings.map((item, idx) => {
-                      const maxVal = 2800;
-                      const uptimeHeight = Math.min(100, (item.uptime / maxVal) * 100);
-                      const networkHeight = Math.min(100, (item.network / maxVal) * 100);
-                      return (
-                        <div key={idx} className="flex-1 flex flex-col items-center gap-1 group relative">
-                          {/* Value above bar */}
-                          <span className={`text-[8px] font-mono leading-none ${item.isToday ? 'text-black font-extrabold px-1 py-0.5 rounded bg-[#ABF600]' : 'text-white/70'}`}>
-                            {item.val}
-                          </span>
-
-                          <div className="w-full max-w-[18px] flex flex-col items-center justify-end h-32 gap-0.5">
-                            <div
-                              className="w-full rounded-t bg-cyan-400/80 group-hover:bg-cyan-300 transition"
-                              style={{ height: `${networkHeight}%` }}
-                            />
-                            <div
-                              className={`w-full rounded-t transition shadow-sm ${
-                                item.isToday ? 'bg-[#ABF600] shadow-[#ABF600]/50' : 'bg-[#ABF600]'
-                              }`}
-                              style={{ height: `${uptimeHeight}%` }}
-                            />
+                    {pulseLive.ledger.length === 0 ? (
+                      <div className="w-full text-center text-xs font-mono text-white/40 py-16 uppercase tracking-wider">
+                        No settled epochs yet — anchors appear here live from the chain
+                      </div>
+                    ) : (
+                      [...pulseLive.ledger].slice(-24).map((l, idx, arr) => {
+                        const maxUnits = Math.max(...arr.map((e) => e.rewardUnits), 1);
+                        const height = Math.min(100, (l.rewardUnits / maxUnits) * 100);
+                        return (
+                          <div key={`${l.epochId}-${idx}`} className="flex-1 flex flex-col items-center gap-1 group relative" title={`Epoch ${l.epochId} · ${l.rewardUnits.toLocaleString()} PULSE units`}>
+                            <span className="text-[8px] font-mono leading-none text-white/60">{l.rewardUnits >= 1000 ? `${(l.rewardUnits / 1000).toFixed(1)}k` : l.rewardUnits}</span>
+                            <div className="w-full max-w-[18px] flex items-center justify-end h-32 rounded-t bg-cyan-400/80 group-hover:bg-cyan-300 transition" style={{ height: `${height}%` }} />
+                            <span className="text-[8px] font-mono mt-1 text-white/40">{l.epochId}</span>
                           </div>
-
-                          <span className={`text-[8px] font-mono mt-1 ${item.isToday ? 'px-1.5 py-0.5 rounded bg-[#ABF600] text-black font-extrabold' : 'text-white/40'}`}>
-                            {item.day}
-                          </span>
-                        </div>
-                      );
-                    })}
+                        );
+                      })
+                    )}
                   </div>
                 </div>
+
+                <p className="text-[11px] text-white/40 font-mono text-center pt-1">
+                  Each bar is a real settled epoch on PulseBandwidthRegistry — reward units = 1,000 PULSE × quality grade (1–4).
+                </p>
               </GlassCard>
 
-              {/* Your Networks Multi-Device Table (Matching Screenshot 1) */}
+              {/* Node & Registry On-Chain Table */}
               <GlassCard className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Wifi className="w-4 h-4 text-[#ABF600]" />
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Your Networks</h3>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Node & Registry · On-Chain</h3>
                   </div>
-                  <button className="text-xs font-mono px-3 py-1 rounded-lg bg-[#ABF600] text-black font-extrabold hover:brightness-105 transition">
-                    View All
-                  </button>
+                  <span className="text-[10px] font-mono text-[#ABF600]">
+                    {pulseLive.state ? `PULSE units issued: ${(pulseLive.state.totalRewardUnitsIssued as number).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '…'}
+                  </span>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono text-xs">
-                    <thead>
-                      <tr className="text-white/40 border-b border-white/10 pb-2 text-[10px] uppercase">
-                        <th className="pb-3 w-10 text-center">Status</th>
-                        <th className="pb-3">Network Name</th>
-                        <th className="pb-3">IP Address</th>
-                        <th className="pb-3">Time Connected</th>
-                        <th className="pb-3">Network Score</th>
-                        <th className="pb-3 text-right">Uptime Points Earned</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
-                      {pulseNetworks.map((net) => (
-                        <tr key={net.id} className="hover:bg-white/[0.02] transition">
-                          <td className="py-3 text-center">
-                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${net.status === 'Connected' ? 'bg-[#ABF600] shadow-[0_0_8px_#ABF600]' : 'bg-red-500/80'}`} />
-                          </td>
-                          <td className="py-3 font-bold text-white">
-                            <div className="flex items-center gap-2">
-                              <span>{net.name}</span>
-                              <button
-                                onClick={() => {
-                                  const nextName = prompt('Enter device name:', net.name);
-                                  if (nextName) renamePulseNetwork(net.id, nextName);
-                                }}
-                                className="text-white/40 hover:text-white transition"
-                                title="Rename Device"
-                              >
-                                ✏️
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-3 text-white/80">
-                            <span className="flex items-center gap-1.5">
-                              <span className="text-base">{net.flag}</span>
-                              <span className="font-mono text-white/90">{net.ip}</span>
-                            </span>
-                          </td>
-                          <td className="py-3 text-white/60">{net.timeConnected}</td>
-                          <td className="py-3">
-                            <span className="px-2 py-0.5 rounded bg-white/[0.04] text-white/80 font-bold">
-                              {net.score}%
-                            </span>
-                          </td>
-                          <td className="py-3 text-right">
-                            <span className="px-3 py-1 rounded-full bg-[#ABF600]/15 border border-[#ABF600]/30 text-[#ABF600] font-bold">
-                              🍃 {net.points.toLocaleString(undefined, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                {!pulseLive.node ? (
+                  <div className="text-xs font-mono text-white/50 py-8 text-center uppercase tracking-wider">
+                    this wallet has no registered node — click REGISTER NODE or ANCHOR EPOCH above
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
+                    <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl space-y-1">
+                      <span className="text-white/40 text-[10px] block">My Node Tag</span>
+                      <span className="text-white font-bold">{pulseLive.node.nodeTag}</span>
+                      <span className="text-[10px] text-white/40 block">#{(pulseLive.node as { nodeId?: number }).nodeId ?? '…'}</span>
+                    </div>
+                    <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl space-y-1">
+                      <span className="text-white/40 text-[10px] block">Epochs Anchored</span>
+                      <span className="text-white font-bold">{pulseLive.node.epochCount}</span>
+                      <span className="text-[10px] text-white/40 block">last: epoch {pulseLive.node.lastEpoch}</span>
+                    </div>
+                    <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl space-y-1">
+                      <span className="text-white/40 text-[10px] block">Last Bandwidth / Grade</span>
+                      <span className="text-[#ABF600] font-bold">{(pulseLive.node.lastBandwidthMB / 1024).toFixed(2)} GB</span>
+                      <span className="text-[10px] text-white/40 block">quality grade ×{pulseLive.node.lastQualityGrade}</span>
+                    </div>
+                    <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl space-y-1">
+                      <span className="text-white/40 text-[10px] block">Registered</span>
+                      <span className="text-white font-bold">
+                        {new Date(pulseLive.node.registeredAt * 1000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                      <span className="text-[10px] text-white/40 block">
+                        {`${pulseLive.node.operator.slice(0, 6)}…${pulseLive.node.operator.slice(-4)}`}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
+                  <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl space-y-1">
+                    <span className="text-white/40 text-[10px] block">Nodes Registered</span>
+                    <span className="text-white font-bold">{pulseLive.state?.nodeCount ?? '…'}</span>
+                  </div>
+                  <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl space-y-1">
+                    <span className="text-white/40 text-[10px] block">Epochs Settled (all nodes)</span>
+                    <span className="text-white font-bold">{pulseLive.state?.totalEpochsSettled ?? '…'}</span>
+                  </div>
+                  <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl space-y-1">
+                    <span className="text-white/40 text-[10px] block">Bandwidth On Ledger</span>
+                    <span className="text-cyan-300 font-bold">
+                      {pulseLive.state ? `${(pulseLive.state.totalBandwidthMB / 1024).toFixed(1)} GB` : '…'}
+                    </span>
+                  </div>
+                  <div className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-xl space-y-1">
+                    <span className="text-white/40 text-[10px] block">Reward / Epoch</span>
+                    <span className="text-[#ABF600] font-bold">
+                      {pulseLive.state ? `${pulseLive.state.rewardPerEpoch.toLocaleString()} PULSE` : '…'}
+                    </span>
+                    <span className="text-[10px] text-white/40 block">× grade 1–4</span>
+                  </div>
                 </div>
               </GlassCard>
 
-              {/* Connected Device Node & Live AI Web Request Stream */}
+              {/* Connected Device & Live On-Chain Settlement Feed */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 {/* Left: Active Device Manager */}
                 <GlassCard className="lg:col-span-5 p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Active Device Details</h3>
-                      <p className="text-xs text-white/40 mt-0.5">Primary edge worker running on this browser</p>
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Active Operator Wallet</h3>
+                      <p className="text-xs text-white/40 mt-0.5">Wallet that signs bandwidth anchors on CC3</p>
                     </div>
                     <span className={`px-2.5 py-1 rounded-full text-xs font-mono font-bold flex items-center gap-1.5 ${
-                      pulseConnected
+                      pulseLive.node
                         ? 'bg-[#ABF600]/15 text-[#ABF600] border border-[#ABF600]/30'
                         : 'bg-white/10 text-white/40 border border-white/10'
                     }`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${pulseConnected ? 'bg-[#ABF600] animate-pulse' : 'bg-white/40'}`} />
-                      {pulseConnected ? 'ROUTING' : 'PAUSED'}
+                      <span className={`w-1.5 h-1.5 rounded-full ${pulseLive.node ? 'bg-[#ABF600] animate-pulse' : 'bg-white/40'}`} />
+                      {pulseLive.node ? 'REGISTERED' : 'NOT REGISTERED'}
                     </span>
                   </div>
 
                   <div className="p-4 rounded-xl bg-black/40 border border-white/[0.06] space-y-2.5 font-mono text-xs">
                     <div className="flex justify-between text-white/60">
-                      <span>Device Name:</span>
-                      <span className="text-white font-bold">Primary Desktop Node</span>
+                      <span>Operator Account:</span>
+                      <a
+                        href={`${CREDITCOIN_BLOCKSCOUT}/address/${pulseLive.account}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-cyan-400 font-bold hover:underline"
+                      >
+                        {pulseLive.account.slice(0, 8)}…{pulseLive.account.slice(-4)}
+                      </a>
                     </div>
                     <div className="flex justify-between text-white/60">
-                      <span>Public IP Address:</span>
-                      <span className="text-cyan-400 font-bold">{pulseCountryFlag} {pulseRealIP}</span>
+                      <span>Node Tag:</span>
+                      <span className="text-[#ABF600] font-bold">{pulseLive.node?.nodeTag ?? '—'}</span>
                     </div>
                     <div className="flex justify-between text-white/60">
-                      <span>ISP Routing Tier:</span>
-                      <span className="text-[#ABF600] font-bold">Tier 1 Residential ({pulseCountryName})</span>
+                      <span>Browser GPU:</span>
+                      <span className="text-white font-bold">{hardware.gpuRenderer.split(' ')[0] || '…'}</span>
                     </div>
                     <div className="flex justify-between text-white/60">
-                      <span>Hardware Accelerator:</span>
-                      <span className="text-white font-bold">{hardware.gpuRenderer.split(' ')[0]} WebGL</span>
+                      <span>Browser Ping:</span>
+                      <span className="text-[#ABF600] font-bold">{hardware.pingMs}ms</span>
                     </div>
                     <div className="flex justify-between text-white/60">
-                      <span>Active Processing Speed:</span>
-                      <span className="text-[#ABF600] font-bold">{pulseComputeThroughputMhash} Mhash/s SHA-256</span>
+                      <span>Reward / Epoch:</span>
+                      <span className="text-[#ABF600] font-bold">
+                        {pulseLive.state ? `${pulseLive.state.rewardPerEpoch.toLocaleString()} PULSE` : '…'}
+                      </span>
                     </div>
                   </div>
 
                   <div className="p-3 bg-[#ABF600]/5 border border-[#ABF600]/20 rounded-xl text-xs space-y-1">
-                    <span className="text-[10px] font-mono uppercase text-[#ABF600] font-bold block">Creditcoin Attestation Benefit</span>
+                    <span className="text-[10px] font-mono uppercase text-[#ABF600] font-bold block">How it earns</span>
                     <p className="text-white/70 text-[11px] leading-relaxed">
-                      Every verified session minute increments your <strong>Creditcoin Trust Score (CTS)</strong> and lowers your borrowing APR on Creditcoin L1.
+                      Anchoring an epoch submits a bandwidth report (MB + quality grade 1–4) in one transaction on
+                      Creditcoin L1. The registry mints PULSE units (1,000 × grade) and records them in the on-chain
+                      ledger — claimable via the Rewards tab.
                     </p>
                   </div>
                 </GlassCard>
 
-                {/* Right: Live AI Data Request Stream */}
+                {/* Right: On-Chain Settlement Feed */}
                 <GlassCard className="lg:col-span-7 p-6 space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                        <TerminalIcon className="w-4 h-4 text-[#ABF600]" /> Live AI Web Request Stream
+                        <TerminalIcon className="w-4 h-4 text-[#ABF600]" /> On-Chain Settlement Feed
                       </h3>
-                      <p className="text-xs text-white/40 mt-0.5">Real-time web requests served for decentralized LLM training</p>
+                      <p className="text-xs text-white/40 mt-0.5">Real BandwidthAnchored events from PulseBandwidthRegistry</p>
                     </div>
-                    <span className="text-[10px] font-mono text-white/40">USC VERIFIED LOGS</span>
+                    <span className="text-[10px] font-mono text-[#ABF600]">LIVE · NETWORK-LEDGER</span>
                   </div>
 
-                  <div className="space-y-2 font-mono text-xs max-h-[220px] overflow-y-auto pr-1">
-                    {requestLogs.map(log => (
-                      <div
-                        key={log.id}
-                        className="p-3 rounded-xl bg-black/40 border border-white/[0.06] hover:border-[#ABF600]/30 transition flex items-center justify-between gap-2"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0">
-                            {log.status} OK
-                          </span>
-                          <span className="text-white/80 truncate">{log.url}</span>
+                  {pulseLive.ledger.length === 0 ? (
+                    <div className="text-xs font-mono text-white/50 py-10 text-center uppercase tracking-wider">
+                      {pulseLive.loading ? 'reading registry…' : 'no epochs settled yet — anchor the current epoch above'}
+                    </div>
+                  ) : (
+                    <div className="space-y-2 font-mono text-xs max-h-[240px] overflow-y-auto pr-1">
+                      {pulseLive.ledger.map((l, i) => (
+                        <div
+                          key={`${l.epochId}-${i}`}
+                          className="p-3 rounded-xl bg-black/40 border border-white/[0.06] hover:border-[#ABF600]/30 transition flex items-center justify-between gap-2"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[10px] font-bold shrink-0">
+                              EPOCH {l.epochId}
+                            </span>
+                            <div className="min-w-0">
+                              <span className="text-white/80 truncate block">{`${l.operator.slice(0, 6)}…${l.operator.slice(-4)}`}</span>
+                              <span className="text-white/30 text-[10px] block">
+                                {new Date(l.timestamp * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0 text-right">
+                            <span className="text-cyan-300 text-[11px]">{l.bandwidthMB.toLocaleString()} MB</span>
+                            <span className="text-[#ABF600] text-[11px] font-bold">×{l.qualityGrade} · {l.rewardUnits.toLocaleString()} PULSE</span>
+                            <a
+                              href={`${CREDITCOIN_BLOCKSCOUT}/tx/${l.anchorHash}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-white/30 hover:text-emerald-300 inline-flex items-center gap-1"
+                            >
+                              tx <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0 text-right">
-                          <span className="text-cyan-300 text-[11px]">{log.size}</span>
-                          <span className="text-white/30 text-[10px]">{log.time}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between text-xs font-mono text-white/50">
-                    <span>Packet Inspection: Encrypted TLS 1.3</span>
+                    <span>Bandwidth = operator-signed session report (not ISP-inspected bytes)</span>
                     <span className="text-[#ABF600] flex items-center gap-1">
-                      <Shield className="w-3.5 h-3.5" /> 100% Zero Personal Data
+                      <Shield className="w-3.5 h-3.5" /> replayed by epoch on-chain
                     </span>
                   </div>
                 </GlassCard>
@@ -1276,51 +1239,65 @@ const DePINTab: React.FC = () => {
           {/* --------------------------------------------------------------------- */}
           {activePulseTab === 'wallet' && (
             <div className="space-y-6">
-              {/* Wallet Balances & Address Cards */}
+              {/* Live Balances & Address Cards */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Total Balance Card */}
+                {/* Live Balances Card */}
                 <GlassCard className="lg:col-span-5 p-6 space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-white/40 uppercase">Total Balance</span>
+                    <span className="text-xs font-mono text-white/40 uppercase">Live On-Chain Balances</span>
                     <button
-                      onClick={handlePing}
+                      onClick={() => pulseLive.refresh()}
                       className="text-[11px] text-[#ABF600] hover:underline font-mono flex items-center gap-1"
                     >
                       <RefreshCw className="w-3 h-3" /> Refresh
                     </button>
                   </div>
-                  <div className="text-3xl font-black font-mono text-white">
-                    ${userWalletUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  <div className="text-lg font-black font-mono text-white">
+                    {pulseLive.account.slice(0, 6)}…{pulseLive.account.slice(-4)}
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06] space-y-2 font-mono text-xs">
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5 text-white/60">
-                        <span className="w-2 h-2 rounded-full bg-cyan-400" /> USDC / cUSD:
+                        <span className="w-2 h-2 rounded-full bg-cyan-400" /> Creditcoin (CTC):
                       </span>
-                      <span className="text-white font-bold">${userWalletUSD.toLocaleString()}</span>
+                      <span className="text-white font-bold">{walletBalances?.ctc?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? '…'} CTC</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5 text-white/60">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400" /> Creditcoin (CTC):
+                        <span className="w-2 h-2 rounded-full bg-blue-400" /> cUSD (testnet stablecoin):
                       </span>
-                      <span className="text-white font-bold">{userWalletCTC.toLocaleString()} CTC</span>
+                      <span className="text-white font-bold">{walletBalances?.cusd?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? '…'} cUSD</span>
                     </div>
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-1.5 text-white/60">
-                        <span className="w-2 h-2 rounded-full bg-[#ABF600]" /> Pulse Token:
+                        <span className="w-2 h-2 rounded-full bg-orange-400" /> DePIN Token:
                       </span>
-                      <span className="text-[#ABF600] font-bold">12,450 PULSE</span>
+                      <span className="text-white font-bold">{walletBalances?.depin?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? '…'} DEPIN</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="flex items-center gap-1.5 text-white/60">
+                        <span className="w-2 h-2 rounded-full bg-[#ABF600]" /> Pulse rewards (on-chain units):
+                      </span>
+                      <span className="text-[#ABF600] font-bold">
+                        {pulseLive.node
+                          ? `${pulseLive.node.totalRewardUnits.toLocaleString(undefined, { maximumFractionDigits: 2 })} PULSE`
+                          : '—'}
+                      </span>
                     </div>
                   </div>
+                  <p className="text-[10px] text-white/40 font-mono">
+                    Balances read straight from CC3 — no simulated values. PULSE units are the registry ledger's accounting
+                    unit, not an ERC-20 token.
+                  </p>
                 </GlassCard>
 
-                {/* Wallet Address & Quick Actions */}
+                {/* Wallet Address & Real Actions */}
                 <GlassCard className="lg:col-span-7 p-6 space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-white/40 uppercase">Connected Wallet Address</span>
+                    <span className="text-xs font-mono text-white/40 uppercase">Operator Wallet</span>
                     <a
-                      href={`https://creditcoin.network/address/${address || '0x4928'}`}
+                      href={`${CREDITCOIN_BLOCKSCOUT}/address/${pulseLive.account}`}
                       target="_blank"
                       rel="noreferrer"
                       className="text-[11px] text-cyan-400 hover:underline font-mono flex items-center gap-1"
@@ -1331,14 +1308,12 @@ const DePINTab: React.FC = () => {
 
                   <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] flex items-center justify-between">
                     <span className="text-xs font-mono text-white/90 truncate mr-2">
-                      {address ? `${address.slice(0, 14)}...${address.slice(-10)}` : '0x71C...4928b9F'}
+                      {pulseLive.account.slice(0, 14)}...{pulseLive.account.slice(-10)}
                     </span>
                     <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(address || '0x71C839...4928b9F');
-                        addToast('success', 'Address Copied', 'Wallet address copied to clipboard.');
-                      }}
+                      onClick={copyNexusAddress}
                       className="p-1.5 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-white/60 transition"
+                      title="Copy address"
                     >
                       <Copy className="w-4 h-4" />
                     </button>
@@ -1346,134 +1321,160 @@ const DePINTab: React.FC = () => {
 
                   <div className="grid grid-cols-3 gap-3 pt-1">
                     <button
-                      onClick={() => addToast('info', 'Deposit Flow', 'Deposit CTC or cUSD to fund your DePIN operations.')}
-                      className="py-2.5 rounded-xl bg-[#ABF600] hover:brightness-110 text-black font-extrabold text-xs font-mono transition"
+                      onClick={() => pulseLive.anchorEpoch()}
+                      disabled={pulseLive.busy !== null}
+                      className="py-2.5 rounded-xl bg-[#ABF600] hover:brightness-110 text-black font-extrabold text-xs font-mono transition disabled:opacity-50"
                     >
-                      Deposit
+                      {pulseLive.busy === 'anchor' ? 'Anchoring…' : 'Anchor Epoch'}
                     </button>
                     <button
-                      onClick={() => addToast('info', 'Withdraw Flow', 'Withdraw liquid CTC back to your primary wallet.')}
-                      className="py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs font-mono transition"
+                      onClick={() => pulseLive.claim()}
+                      disabled={pulseLive.busy !== null || !pulseLive.node || pulseLive.unpaid <= 0}
+                      className="py-2.5 rounded-xl bg-white/[0.04] border border-[#ABF600]/30 hover:bg-[#ABF600]/10 text-[#ABF600] font-bold text-xs font-mono transition disabled:opacity-40"
                     >
-                      Withdraw
+                      {pulseLive.busy === 'claim' ? 'Claiming…' : 'Claim PULSE'}
                     </button>
                     <button
-                      onClick={() => addToast('info', 'Swap Routing', 'Swap CTC to cUSD or Pulse tokens directly in the AMM.')}
-                      className="py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs font-mono transition"
+                      onClick={() => pulseLive.refresh()}
+                      disabled={pulseLive.busy !== null}
+                      className="py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs font-mono transition disabled:opacity-50"
                     >
-                      Swap
+                      <RefreshCw className={`inline w-3 h-3 mr-1 ${pulseLive.loading ? 'animate-spin' : ''}`} />Refresh
                     </button>
                   </div>
+
+                  {pulseLive.lastTx && (
+                    <div className="text-[10px] font-mono text-emerald-400">
+                      last tx{' '}
+                      <a href={`${CREDITCOIN_BLOCKSCOUT}/tx/${pulseLive.lastTx}`} target="_blank" rel="noreferrer" className="underline hover:text-emerald-300">
+                        {pulseLive.lastTx.slice(0, 10)}…
+                      </a>{' '}
+                      broadcast on CC3
+                    </div>
+                  )}
                 </GlassCard>
               </div>
 
-              {/* Earn More Rewards by Staking */}
+              {/* PULSE Reward Units (on-chain, real) */}
               <GlassCard className="p-6 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div>
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Earn More Rewards</h3>
-                    <p className="text-xs text-white/50 mt-0.5">You can earn more CredX Pulse Rewards by staking your tokens.</p>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">PULSE Reward Units</h3>
+                    <p className="text-xs text-white/50 mt-0.5">
+                      Reward units minted on-chain for your anchored epochs — claimable at any time (unit, not an ERC-20 token).
+                    </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 font-bold">
-                      APR: {pulseStakingAPR}% + CTS Boost
+                    <span className="text-xs font-mono px-3 py-1 rounded-full bg-[#ABF600]/10 border border-[#ABF600]/30 text-[#ABF600] font-bold">
+                      Reward/Epoch: {pulseLive.state ? `${pulseLive.state.rewardPerEpoch.toLocaleString()} PULSE × grade` : '…'}
                     </span>
+                    <button onClick={() => pulseLive.refresh()} className="text-xs text-white/50 hover:text-white font-mono">
+                      <RefreshCw className={`inline w-3 h-3 mr-1 ${pulseLive.loading ? 'animate-spin' : ''}`} />Refresh
+                    </button>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
                   <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl font-mono text-xs">
-                    <span className="text-white/40 text-[10px] block">Staked</span>
-                    <span className="text-base font-bold text-white mt-1 block">{pulseStakedCTC.toLocaleString()} CTC</span>
+                    <span className="text-white/40 text-[10px] block">Earned (all time)</span>
+                    <span className="text-base font-bold text-white mt-1 block">
+                      {pulseLive.node ? pulseLive.node.totalRewardUnits.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                    </span>
                   </div>
                   <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl font-mono text-xs">
-                    <span className="text-white/40 text-[10px] block">Unstaked</span>
-                    <span className="text-base font-bold text-white mt-1 block">{(userWalletCTC - pulseStakedCTC).toLocaleString()} CTC</span>
+                    <span className="text-white/40 text-[10px] block">Claimed</span>
+                    <span className="text-base font-bold text-white mt-1 block">
+                      {pulseLive.node ? pulseLive.node.claimedUnits.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                    </span>
                   </div>
                   <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl font-mono text-xs">
-                    <span className="text-white/40 text-[10px] block">Withdrawals</span>
-                    <span className="text-base font-bold text-white mt-1 block">0 CTC</span>
+                    <span className="text-white/40 text-[10px] block">Unclaimed</span>
+                    <span className="text-base font-bold text-[#ABF600] mt-1 block">
+                      {pulseLive.node ? pulseLive.unpaid.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
+                    </span>
                   </div>
                   <div className="p-3 bg-black/40 border border-white/[0.06] rounded-xl font-mono text-xs">
-                    <span className="text-white/40 text-[10px] block">Pending Rewards</span>
-                    <span className="text-base font-bold text-[#ABF600] mt-1 block">+18.4 CTC</span>
+                    <span className="text-white/40 text-[10px] block">Epochs Anchored</span>
+                    <span className="text-base font-bold text-emerald-400 mt-1 block">
+                      {pulseLive.node ? pulseLive.node.epochCount : '—'}
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
-                  <input
-                    type="number"
-                    value={pulseStakeInput}
-                    onChange={(e) => setPulseStakeInput(e.target.value)}
-                    placeholder="Enter CTC amount to stake"
-                    className="flex-1 bg-black/50 border border-white/10 rounded-xl px-4 py-2.5 text-white font-mono text-xs outline-none focus:border-[#ABF600]"
-                  />
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <button
-                      onClick={handleStakePulse}
-                      className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-[#ABF600] hover:brightness-110 text-black font-extrabold text-xs font-mono transition"
-                    >
-                      Stake CTC
-                    </button>
-                    <button
-                      onClick={() => addToast('success', 'Rewards Claimed', 'Claimed +18.4 CTC to your wallet.')}
-                      className="flex-1 sm:flex-none px-5 py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs font-mono transition"
-                    >
-                      Claim Rewards
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => pulseLive.claim()}
+                    disabled={pulseLive.busy !== null || !pulseLive.node || pulseLive.unpaid <= 0}
+                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-[#ABF600] hover:brightness-110 text-black font-extrabold text-xs font-mono transition disabled:opacity-40"
+                  >
+                    {pulseLive.busy === 'claim' ? 'Claiming…' : 'Claim PULSE Rewards'}
+                  </button>
+                  <p className="flex-1 text-[11px] text-white/40 font-mono leading-relaxed">
+                    CTC staking & lending pools live in the <span className="text-[#ABF600] font-bold">Validator Staking</span> tab
+                    (real registry deployment). No pooled CTC staking exists in the Pulse Node protocol yet.
+                  </p>
                 </div>
               </GlassCard>
 
-              {/* Transaction History Table */}
+              {/* Transaction History: real broadcast + anchored ledger */}
               <GlassCard className="p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-bold text-white uppercase tracking-wider">Transaction History</h3>
-                  <span className="text-[10px] font-mono text-white/40">GENESIS LOG</span>
+                  <span className="text-[10px] font-mono text-[#ABF600]">CC3 BROADCASTS + LEDGER ANCHORS</span>
                 </div>
 
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left font-mono text-xs">
-                    <thead>
-                      <tr className="text-white/40 border-b border-white/10 pb-2 text-[10px] uppercase">
-                        <th className="pb-2">Type</th>
-                        <th className="pb-2">Transaction Hash</th>
-                        <th className="pb-2">Status</th>
-                        <th className="pb-2">Date & Time</th>
-                        <th className="pb-2 text-right">Token Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/[0.06]">
-                      <tr>
-                        <td className="py-3 font-bold text-white flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-[#ABF600]" /> Attestcoin Epoch Proof
-                        </td>
-                        <td className="py-3 text-cyan-400">0x8f2d...c419</td>
-                        <td className="py-3"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px]">VERIFIED</span></td>
-                        <td className="py-3 text-white/50">Sep 09, 2026 23:14:02</td>
-                        <td className="py-3 text-right font-bold text-[#ABF600]">+35 CTS Boost</td>
-                      </tr>
-                      <tr>
-                        <td className="py-3 font-bold text-white flex items-center gap-1.5">
-                          <ArrowDownRight className="w-3.5 h-3.5 text-cyan-400" /> Pulse Pool Stake
-                        </td>
-                        <td className="py-3 text-cyan-400">0x4a19...9b82</td>
-                        <td className="py-3"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px]">CONFIRMED</span></td>
-                        <td className="py-3 text-white/50">Sep 08, 2026 19:42:55</td>
-                        <td className="py-3 text-right font-bold text-white">1,500 CTC</td>
-                      </tr>
-                      <tr>
-                        <td className="py-3 font-bold text-white flex items-center gap-1.5">
-                          <Coins className="w-3.5 h-3.5 text-amber-400" /> Genesis Node Activation
-                        </td>
-                        <td className="py-3 text-cyan-400">0x18fe...01d4</td>
-                        <td className="py-3"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px]">CONFIRMED</span></td>
-                        <td className="py-3 text-white/50">Aug 25, 2026 14:08:12</td>
-                        <td className="py-3 text-right font-bold text-white">Genesis Node #01</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                {pulseLive.txLog.length === 0 && pulseLive.ledger.length === 0 ? (
+                  <div className="text-xs font-mono text-white/50 py-10 text-center uppercase tracking-wider border border-white/[0.06] rounded-xl">
+                    no signed transactions yet — anchor an epoch above to generate the first one
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left font-mono text-xs">
+                      <thead>
+                        <tr className="text-white/40 border-b border-white/10 pb-2 text-[10px] uppercase">
+                          <th className="pb-2">Type</th>
+                          <th className="pb-2">Reference</th>
+                          <th className="pb-2">Status</th>
+                          <th className="pb-2">Date & Time</th>
+                          <th className="pb-2 text-right">Token Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.06]">
+                        {pulseLive.ledger.map((l, i) => (
+                          <tr key={`tx-${l.epochId}-${i}`}>
+                            <td className="py-3 font-bold text-white flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-[#ABF600]" /> Epoch {l.epochId} Bandwidth Anchor
+                            </td>
+                            <td className="py-3">
+                              <a
+                                href={`${CREDITCOIN_BLOCKSCOUT}/tx/${l.anchorHash}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-cyan-400 hover:underline"
+                              >
+                                {l.anchorHash.slice(0, 10)}…
+                              </a>
+                            </td>
+                            <td className="py-3"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px]">ON-CHAIN</span></td>
+                            <td className="py-3 text-white/50">{new Date(l.timestamp * 1000).toLocaleString()}</td>
+                            <td className="py-3 text-right font-bold text-[#ABF600]">+{l.rewardUnits.toLocaleString()} PULSE</td>
+                          </tr>
+                        ))}
+                        {pulseLive.txLog.map((line, i) => (
+                          <tr key={`txlog-${i}`}>
+                            <td className="py-3 font-bold text-white flex items-center gap-1.5">
+                              <Coins className="w-3.5 h-3.5 text-amber-400" /> TX Broadcast
+                            </td>
+                            <td className="py-3 text-cyan-400">{line.split('→')[1]?.trim().slice(0, 16) || '…'}</td>
+                            <td className="py-3"><span className="px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 text-[10px]">BROADCAST</span></td>
+                            <td className="py-3 text-white/50">{line.split('→')[0]}</td>
+                            <td className="py-3 text-right font-bold text-white">—</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </GlassCard>
             </div>
           )}
@@ -1483,143 +1484,147 @@ const DePINTab: React.FC = () => {
           {/* --------------------------------------------------------------------- */}
           {activePulseTab === 'allocation' && (
             <div className="space-y-6">
-              {/* Top Stats Banner (Dynamically Calculated) */}
+              {/* Real Registry Banner */}
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <GlassCard className="p-4 text-center space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-white/40">Network Points</span>
-                  <div className="text-xl font-black font-mono text-cyan-300">{pulseNetworkPoints.toFixed(2)}</div>
+                  <span className="text-[10px] font-mono uppercase text-white/40">Current Epoch</span>
+                  <div className="text-xl font-black font-mono text-cyan-300">{pulseLive.state?.currentEpoch ?? '…'}</div>
                 </GlassCard>
                 <GlassCard className="p-4 text-center space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-white/40">Uptime Points</span>
-                  <div className="text-xl font-black font-mono text-[#ABF600]">{pulseUptimePoints.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                  <span className="text-[10px] font-mono uppercase text-white/40">Nodes Registered</span>
+                  <div className="text-xl font-black font-mono text-white">{pulseLive.state?.nodeCount ?? '…'}</div>
                 </GlassCard>
                 <GlassCard className="p-4 text-center space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-white/40">Days Active</span>
-                  <div className="text-xl font-black font-mono text-white">30</div>
+                  <span className="text-[10px] font-mono uppercase text-white/40">Epochs Settled</span>
+                  <div className="text-xl font-black font-mono text-white">{pulseLive.state?.totalEpochsSettled ?? '…'}</div>
                 </GlassCard>
                 <GlassCard className="p-4 text-center space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-white/40">Devices</span>
-                  <div className="text-xl font-black font-mono text-white">{pulseNetworks.length} Nodes</div>
+                  <span className="text-[10px] font-mono uppercase text-white/40">GB On Ledger</span>
+                  <div className="text-xl font-black font-mono text-white">
+                    {pulseLive.state ? `${(pulseLive.state.totalBandwidthMB / 1024).toFixed(1)}` : '…'}
+                  </div>
                 </GlassCard>
                 <GlassCard className="p-4 text-center space-y-1">
-                  <span className="text-[10px] font-mono uppercase text-white/40">Referrals</span>
-                  <div className="text-xl font-black font-mono text-white">0</div>
+                  <span className="text-[10px] font-mono uppercase text-white/40">My Unclaimed</span>
+                  <div className="text-xl font-black font-mono text-[#ABF600]">
+                    {pulseLive.node ? pulseLive.unpaid.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}
+                  </div>
                 </GlassCard>
               </div>
 
-              {/* Allocation Card & Points Journey Area Chart */}
+              {/* My Allocation + Cumulative Chart */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* Your Allocation Card (Dynamically computed from points & CTS) */}
+                {/* My Allocation Card (real on-chain units) */}
                 <GlassCard className="lg:col-span-5 p-6 space-y-4 flex flex-col justify-between">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">Your Allocation</h3>
-                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-white/[0.04] text-white/60">
-                        Snapshot - Genesis Epoch {pulseEpoch}
+                      <h3 className="text-sm font-bold text-white uppercase tracking-wider">My Allocation</h3>
+                      <span className="text-xs font-mono px-2 py-0.5 rounded bg-[#ABF600]/10 text-[#ABF600] font-bold">
+                        Epoch {pulseLive.state?.currentEpoch ?? '…'} · ON-CHAIN LEDGER
                       </span>
                     </div>
 
                     <div className="pt-2">
-                      <span className="text-[10px] uppercase font-mono text-white/40 block">Dynamic Computed Allocation</span>
-                      <div className="text-3xl font-black font-mono text-white mt-1">
-                        {pulseClaimableRewardUSD > 0 ? `${dynamicAllocationUSDC} USDC` : '0.00 USDC (CLAIMED)'}
+                      <span className="text-[10px] uppercase font-mono text-white/40 block">PULSE units earned across settled epochs</span>
+                      <div className="text-3xl font-black font-mono text-[#ABF600] mt-1">
+                        {pulseLive.node ? pulseLive.node.totalRewardUnits.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '…'}
                       </div>
                     </div>
 
                     <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.06] space-y-2 font-mono text-xs">
                       <div className="flex justify-between">
-                        <span className="text-white/60">Calculated Yield:</span>
-                        <span className="text-white font-bold">{pulseClaimableRewardUSD > 0 ? `${dynamicAllocationUSDC} USDC` : 'Settled'}</span>
+                        <span className="text-white/60">Claimed:</span>
+                        <span className="text-white font-bold">{pulseLive.node ? pulseLive.node.claimedUnits.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-white/60">CTS Multiplier:</span>
-                        <span className="text-emerald-400 font-bold">{(score / 750).toFixed(2)}x (CTS: {score})</span>
+                        <span className="text-white/60">Unclaimed:</span>
+                        <span className="text-emerald-400 font-bold">{pulseLive.node ? pulseLive.unpaid.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-white/60">Network Fee:</span>
-                        <span className="text-emerald-400 font-bold">0.00 CTC (Covered by USC)</span>
+                        <span className="text-white/60">Reward per Epoch:</span>
+                        <span className="text-[#ABF600] font-bold">
+                          {pulseLive.state ? `${pulseLive.state.rewardPerEpoch.toLocaleString()} PULSE × grade 1–4` : '…'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-white/60">Trust Score (Creditcoin CTS):</span>
+                        <span className="text-cyan-300 font-bold">
+                          {walletProfile?.creditScore != null ? walletProfile.creditScore : '—'}
+                        </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-white/60">Distribution Chain:</span>
-                        <span className="text-cyan-400 font-bold">Creditcoin L1 (Attestcoin)</span>
+                        <span className="text-cyan-400 font-bold">Creditcoin L1 · PulseBandwidthRegistry</span>
                       </div>
                     </div>
 
                     <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-mono flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 shrink-0" />
-                      <span>Device telemetry displayed locally (SIMULATED — not yet attested to Creditcoin L1 in this panel)</span>
+                      <span>All numbers above are read from the live registry ledger — no simulated allocation.</span>
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => claimPulseAllocation(parseFloat(dynamicAllocationUSDC))}
-                    disabled={pulseClaimableRewardUSD <= 0}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ABF600] to-emerald-400 hover:brightness-105 text-black font-extrabold text-xs font-mono transition shadow-lg shadow-[#ABF600]/20 disabled:opacity-40"
-                  >
-                    {pulseClaimableRewardUSD > 0 ? `CLAIM ${dynamicAllocationUSDC} USDC` : 'ALLOCATION CLAIMED ✅'}
-                  </button>
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => pulseLive.claim()}
+                      disabled={pulseLive.busy !== null || !pulseLive.node || pulseLive.unpaid <= 0}
+                      className="w-full py-3 rounded-xl bg-gradient-to-r from-[#ABF600] to-emerald-400 hover:brightness-105 text-black font-extrabold text-xs font-mono transition shadow-lg shadow-[#ABF600]/20 disabled:opacity-40"
+                    >
+                      {pulseLive.busy === 'claim' ? 'Claiming…' : 'CLAIM UNCLAIMED PULSE'}
+                    </button>
+                    <button
+                      onClick={() => pulseLive.anchorEpoch()}
+                      disabled={pulseLive.busy !== null}
+                      className="w-full py-2.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white font-bold text-xs font-mono transition disabled:opacity-40"
+                    >
+                      Anchor Current Epoch First
+                    </button>
+                  </div>
                 </GlassCard>
 
-                {/* Points Journey Area Chart */}
+                {/* Cumulative PULSE Chart (real ledger) */}
                 <GlassCard className="lg:col-span-7 p-6 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Your Points Journey</h3>
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider">Cumulative PULSE Earned</h3>
                     <div className="flex items-center gap-3 text-xs font-mono">
-                      <span className="flex items-center gap-1 text-[#ABF600]"><span className="w-2 h-2 rounded-full bg-[#ABF600]" /> Uptime</span>
-                      <span className="flex items-center gap-1 text-cyan-400"><span className="w-2 h-2 rounded-full bg-cyan-400" /> Network</span>
+                      <span className="flex items-center gap-1 text-[#ABF600]"><span className="w-2 h-2 rounded-full bg-[#ABF600]" /> PULSE units (on-chain)</span>
                     </div>
                   </div>
 
-                  {/* SVG Area Chart */}
-                  <div className="h-52 w-full pt-4">
-                    <svg viewBox="0 0 500 160" className="w-full h-full overflow-visible">
-                      <defs>
-                        <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#ABF600" stopOpacity="0.4" />
-                          <stop offset="100%" stopColor="#ABF600" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-                      {/* Grid Lines */}
-                      <line x1="0" y1="30" x2="500" y2="30" stroke="#ffffff10" strokeDasharray="4" />
-                      <line x1="0" y1="70" x2="500" y2="70" stroke="#ffffff10" strokeDasharray="4" />
-                      <line x1="0" y1="110" x2="500" y2="110" stroke="#ffffff10" strokeDasharray="4" />
-                      <line x1="0" y1="150" x2="500" y2="150" stroke="#ffffff20" />
-
-                      {/* Area */}
-                      <path
-                        d="M 0,140 Q 120,135 240,120 T 360,90 T 500,20 L 500,150 L 0,150 Z"
-                        fill="url(#areaGradient)"
-                      />
-                      {/* Line */}
-                      <path
-                        d="M 0,140 Q 120,135 240,120 T 360,90 T 500,20"
-                        fill="none"
-                        stroke="#ABF600"
-                        strokeWidth="3"
-                        strokeLinecap="round"
-                      />
-                      {/* Secondary Line (Network Points) */}
-                      <path
-                        d="M 0,145 Q 120,142 240,130 T 360,105 T 500,35"
-                        fill="none"
-                        stroke="#38bdf8"
-                        strokeWidth="2"
-                        strokeDasharray="4"
-                      />
-                    </svg>
-
-                    <div className="flex justify-between text-[10px] font-mono text-white/40 pt-2 border-t border-white/10">
-                      <span>Genesis E0 (Week 1)</span>
-                      <span>E0 (Week 2)</span>
-                      <span>E0 (Week 3)</span>
-                      <span>E0 (Week 4)</span>
-                      <span className="text-[#ABF600] font-bold">Today (Active)</span>
+                  {pulseLive.ledger.length === 0 ? (
+                    <div className="h-52 w-full flex items-center justify-center text-xs font-mono text-white/40 uppercase tracking-wider border border-white/[0.06] rounded-xl">
+                      no settled epochs yet — anchor the current epoch above
                     </div>
-                  </div>
-
-                  <p className="text-[11px] text-white/40 font-mono text-center pt-2">
-                    Uptime and Network Points accrued over time, locked as of the Genesis Epoch 0 snapshot.
-                  </p>
+                  ) : (
+                    <>
+                      <div className="h-52 w-full pt-4 flex items-end justify-between gap-1.5 px-2 border-b border-white/10">
+                        {(() => {
+                          const sorted = [...pulseLive.ledger].sort((a, b) => a.epochId - b.epochId).slice(-24);
+                          let running = 0;
+                          const points = sorted.map((l) => {
+                            running += l.rewardUnits;
+                            return { epoch: l.epochId, cumulative: running };
+                          });
+                          const maxCumul = Math.max(...points.map((p) => p.cumulative), 1);
+                          return points.map((p, i) => {
+                            const h = Math.max(4, (p.cumulative / maxCumul) * 100);
+                            return (
+                              <div key={`cum-${p.epoch}-${i}`} className="flex-1 flex flex-col items-center gap-1 group relative" title={`After epoch ${p.epoch}: ${p.cumulative.toLocaleString()} PULSE`}>
+                                <span className="text-[8px] font-mono leading-none text-white/60">
+                                  {p.cumulative >= 10000 ? `${(p.cumulative / 1000).toFixed(0)}k` : p.cumulative.toLocaleString()}
+                                </span>
+                                <div className="w-full max-w-[20px] rounded-t bg-[#ABF600]/80 group-hover:bg-[#ABF600] transition" style={{ height: `${h}%` }} />
+                                <span className="text-[8px] font-mono mt-1 text-white/40">E{p.epoch}</span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                      <p className="text-[11px] text-white/40 font-mono text-center pt-2">
+                        Running total of reward units minted by your node per settled epoch, straight from the chain.
+                      </p>
+                    </>
+                  )}
                 </GlassCard>
               </div>
             </div>
