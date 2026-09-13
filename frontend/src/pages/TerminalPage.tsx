@@ -84,7 +84,7 @@ const TerminalPage: React.FC = () => {
   // Source-of-truth status per tab: "live" panels talk to Creditcoin testnet.
   const tabStatus: Record<TerminalTab, { live: boolean; note: string }> = {
     overview: { live: dataSource === 'chain', note: 'Live credit profile + loans when a wallet is connected; demo preview otherwise.' },
-    defi: { live: dataSource === 'chain', note: 'AMM swaps/LP, yield-vault staking, flash loans and the DEPIN/USD perpetual engine hit deployed contracts (ReputationAMM, ReputationYieldVault, ReputationFlashLoan, ReputationPerpetual); liquid-staking receiver panel stays simulated.' },
+    defi: { live: dataSource === 'chain', note: 'AMM swaps/LP and yield-vault staking hit ReputationAMM + ReputationYieldVault when connected; perps, liquid staking and flash-loan receiver panels stay simulated.' },
     depin: { live: dataSource === 'chain', note: 'Delegation, rewards and hardware loans hit DePINInfrastructureHub when connected; Pulse/Nexus/GeoOrbit telemetry is simulated (no on-chain attestation).' },
     gaming: { live: dataSource === 'chain', note: 'WOOD/NFT balances, cooldowns and hub writes are live when connected (gather/lootbox still owner-gated on the current deployment); scholarship vault is simulated.' },
     ai: { live: true, note: 'Live interactions with the deployed AutonomousAIHub on Creditcoin testnet.' },
