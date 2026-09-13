@@ -844,12 +844,15 @@ export interface YieldVaultEvent {
   txHash: string;
   block: number;
   user: string;
+  amount: number | null;
 }
 
 /**
- * Real on-chain activity feed for the ReputationYieldVault (Staked / Unstaked /
- * claimed rewards). The vault has no activity yet (single deployment tx), so it
- * returns [] — the UI shows the honest empty state instead of a mocked stream.
+ * Real on-chain activity ledger for the ReputationYieldVault (Staked / Unstaked /
+ * RewardsClaimed). The vault was seeded on-chain: 25,250 cUSD staked by the demo
+ * root wallet + a 1,000,000 DEPIN reward pool — so this returns real events, and
+ * it grows every time a vault action is broadcast. Returns [] when the RPC log
+ * scan is unavailable — the UI shows the honest empty state.
  */
 export async function fetchYieldVaultEvents(limit = 30): Promise<YieldVaultEvent[]> {
   try {
@@ -872,11 +875,18 @@ export async function fetchYieldVaultEvents(limit = 30): Promise<YieldVaultEvent
         }
       }
       logs.slice(-limit).forEach((l) => {
+        let amount: number | null = null;
+        try {
+          if (l.data && String(l.data).length >= 66) amount = parseFloat(ethers.formatUnits(String(l.data).startsWith('0x') ? BigInt(l.data) : BigInt('0x' + l.data), 18));
+        } catch {
+          /* non-numeric or empty data */
+        }
         out.push({
           type,
           txHash: String(l.transactionHash),
           block: Number(l.blockNumber),
           user: l.topics[1] ? '0x' + l.topics[1].slice(26) : '',
+          amount,
         });
       });
     }
@@ -884,6 +894,22 @@ export async function fetchYieldVaultEvents(limit = 30): Promise<YieldVaultEvent
     return out.slice(0, limit);
   } catch {
     return [];
+  }
+}
+
+/** Real on-chain token balances held inside the ReputationYieldVault right now. */
+export async function fetchVaultPool(): Promise<{ cusd: number | null; depin: number | null }> {
+  try {
+    const { stakingToken, rewardToken } = await resolveYieldVaultPair();
+    const vaultAddr = CONTRACTS.reputationYieldVault;
+    const [sc, rc] = [readContract(stakingToken.address, ERC20_META_ABI), readContract(rewardToken.address, ERC20_META_ABI)];
+    const [cb, rb] = await Promise.all([sc.balanceOf(vaultAddr), rc.balanceOf(vaultAddr)]);
+    return {
+      cusd: parseFloat(ethers.formatUnits(cb, stakingToken.decimals)),
+      depin: parseFloat(ethers.formatUnits(rb, rewardToken.decimals)),
+    };
+  } catch {
+    return { cusd: null, depin: null };
   }
 }
 

@@ -53,6 +53,8 @@ import { useWeb3 } from '../../context/Web3Context';
 import {
   fetchCUSDBalance,
   fetchYieldVaultState,
+  fetchYieldVaultEvents,
+  fetchVaultPool,
   vaultStake,
   vaultUnstake,
   vaultClaimRewards,
@@ -281,6 +283,8 @@ export const YieldVaultsView: React.FC = () => {
   const [vaultState, setVaultState] = useState<Awaited<ReturnType<typeof fetchYieldVaultState>>>(null);
   const [walletCUSDBalance, setWalletCUSDBalance] = useState(0);
   const [stakingAction, setStakingAction] = useState<'stake' | 'unstake' | 'claim' | null>(null);
+  const [vaultLedger, setVaultLedger] = useState<Awaited<ReturnType<typeof fetchYieldVaultEvents>>>([]);
+  const [vaultPool, setVaultPool] = useState<Awaited<ReturnType<typeof fetchVaultPool>>>({ cusd: null, depin: null });
 
   const stakingTokenSymbol = vaultState?.stakingToken.symbol ?? 'cUSD';
   const rewardTokenSymbol = vaultState?.rewardToken.symbol ?? 'DEPIN';
@@ -856,6 +860,21 @@ export const YieldVaultsView: React.FC = () => {
       cancelled = true;
     };
   }, [effConnected, effAddress]);
+
+  // Real on-chain vault ledger + token pool snapshot (30s)
+  useEffect(() => {
+    let dead = false;
+    const sync = async () => {
+      const [ledger, pool] = await Promise.all([fetchYieldVaultEvents(20), fetchVaultPool()]);
+      if (!dead) {
+        setVaultLedger(ledger);
+        setVaultPool(pool);
+      }
+    };
+    sync();
+    const id = setInterval(sync, 30000);
+    return () => { dead = true; clearInterval(id); };
+  }, []);
 
   // Filtered Vaults for Catalog
   const filteredVaults = useMemo(() => {
@@ -1561,6 +1580,8 @@ export const YieldVaultsView: React.FC = () => {
     } catch {
       // keep last known state
     }
+    fetchYieldVaultEvents(20).then(setVaultLedger).catch(() => {});
+    fetchVaultPool().then(setVaultPool).catch(() => {});
   };
 
   const handleExecuteDeposit = async () => {
@@ -2791,7 +2812,7 @@ export const YieldVaultsView: React.FC = () => {
           {/* SIM: Trading Vault performance journal (product vision) */}
           <div className="flex items-center gap-2">
             <span className="px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-[9px] font-mono font-bold text-amber-300 uppercase">SIMULATED</span>
-            <span className="text-[10px] font-mono text-slate-500">Interactive product vision of a trading-vault performance journal — static entries for demonstration.</span>
+            <span className="text-[10px] font-mono text-slate-500">PnL, calendar &amp; charts are product-vision demo data. The Vault Ledger, pool balances and staked figures are REAL on-chain reads from the deployed ReputationYieldVault.</span>
           </div>
           {/* Top Row: 4 Metric Cards with Exact Image 3 Figures */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
@@ -2938,36 +2959,38 @@ export const YieldVaultsView: React.FC = () => {
               </div>
             </div>
 
-            {/* Right: Closed Strategy Execution Radar List (lg:col-span-3) */}
-            <div className="lg:col-span-3 rounded-3xl p-5 bg-[#080c14] border border-white/10 shadow-2xl space-y-3 font-mono">
+            {/* Right: REAL On-chain Vault Ledger (lg:col-span-3) */}
+            <div className="lg:col-span-3 rounded-3xl p-5 bg-[#080c14] border border-emerald-500/20 shadow-2xl space-y-3 font-mono">
               <div className="flex items-center justify-between pb-2 border-b border-white/5">
-                <span className="text-xs font-bold text-white">Strategy Executions</span>
-                <span className="text-[10px] text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 font-bold">Closed</span>
+                <span className="text-xs font-bold text-white">Vault Ledger</span>
+                <span className="text-[10px] text-emerald-400 px-2 py-0.5 rounded bg-emerald-500/10 font-bold">REAL on-chain</span>
               </div>
 
-              <div className="space-y-2 text-xs">
-                {[
-                  { pair: 'EURNZD', type: 'Short', strategy: 'Liquidity Sweep Reversal', r: '-1.01 R:R', pnl: '-$1,882.17', loss: true },
-                  { pair: 'MSFT', type: 'Long', strategy: 'Mean Reversion Fade', r: '+2.38 R:R', pnl: '+$4,721.49', loss: false },
-                  { pair: 'AAPL', type: 'Short', strategy: 'VWAP Trend Pullback', r: '-1.00 R:R', pnl: '-$1,826.36', loss: true },
-                  { pair: 'GBPUSD', type: 'Long', strategy: 'VWAP Trend Pullback', r: '+4.11 R:R', pnl: '+$7,144.20', loss: false },
-                  { pair: 'EURUSD', type: 'Short', strategy: 'Higher Timeframe Breakout', r: '-1.01 R:R', pnl: '-$1,814.63', loss: true },
-                ].map((trade, i) => (
-                  <div key={i} className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-1">
-                    <div className="flex items-center justify-between font-bold">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-white">{trade.pair}</span>
-                        <span className="text-[9px] px-1 rounded bg-white/10 text-slate-400">{trade.type}</span>
+              {vaultLedger.length === 0 ? (
+                <div className="text-[11px] text-slate-500 leading-relaxed p-2">
+                  No vault activity logged by the RPC yet. Stake, unstake or claim via the demo wallet in the Yield Vault tab and the transaction appears here instantly.
+                </div>
+              ) : (
+                <div className="space-y-2 text-xs">
+                  {vaultLedger.slice(0, 12).map((ev, i) => (
+                    <div key={`${ev.txHash}-${i}`} className="p-2.5 rounded-xl bg-black/40 border border-white/5 space-y-1">
+                      <div className="flex items-center justify-between font-bold">
+                        <div className="flex items-center gap-1.5">
+                          <span className={ev.type === 'Claimed' ? 'text-emerald-400' : 'text-cyan-300'}>
+                            {ev.type === 'Staked' ? 'Staked' : ev.type === 'Unstaked' ? 'Unstaked' : 'Claimed'}
+                          </span>
+                          {ev.amount != null && <span className="text-slate-400">{fmtNum(ev.amount, 0)}</span>}
+                        </div>
+                        <span className="text-slate-500 text-[10px]">#{fmtNum(ev.block, 0)}</span>
                       </div>
-                      <span className={trade.loss ? 'text-rose-400' : 'text-emerald-400'}>{trade.pnl}</span>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>{ev.user ? `0x${ev.user.slice(0, 6)}…${ev.user.slice(-4)}` : '—'}</span>
+                        <span className="text-emerald-400/80">{ev.txHash.slice(0, 12)}…</span>
+                      </div>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-slate-500">
-                      <span>{trade.strategy}</span>
-                      <span className={trade.loss ? 'text-rose-400/80' : 'text-emerald-400/80'}>{trade.r}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
