@@ -50,7 +50,7 @@ const TerminalPage: React.FC = () => {
     if (hash.includes('lending')) return 'lending';
     if (hash.includes('sbt')) return 'sbt';
     if (hash.includes('proof')) return 'lending';
-    return 'depin'; // Default directly to DePIN for focused experience
+    return 'overview'; // Default to Overview - live credit profile, the judge-facing dashboard
   };
 
   const [activeTab, setActiveTab] = useState<TerminalTab>(getInitialTab);
@@ -76,8 +76,8 @@ const TerminalPage: React.FC = () => {
   }, []);
 
   const tabs: { id: TerminalTab; label: string; icon: React.FC<{ className?: string }> }[] = [
-    { id: 'depin', label: 'DePIN Infra', icon: Server },
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'depin', label: 'DePIN Infra', icon: Server },
     { id: 'defi', label: 'DeFi Hub', icon: Zap },
     { id: 'gaming', label: 'Gaming Guild', icon: Gamepad2 },
     { id: 'ai', label: 'AI Risk Vectors', icon: Bot },
