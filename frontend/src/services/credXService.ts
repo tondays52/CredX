@@ -511,6 +511,18 @@ export async function fetchCUSDBalance(address: string): Promise<number> {
   }
 }
 
+/** Read any ERC20 balance for a user (used for real pool-token wallet balances). */
+export async function fetchTokenBalance(user: string, tokenAddress: string): Promise<number> {
+  try {
+    const meta = await tokenMeta(tokenAddress);
+    const tok = new ethers.Contract(tokenAddress, CUSD_ABI, readProvider());
+    const b = await tok.balanceOf(user);
+    return parseFloat(ethers.formatUnits(b, meta.decimals));
+  } catch {
+    return 0;
+  }
+}
+
 /** Get a signer from the injected EIP-1193 provider (MetaMask / EVM wallet). */
 async function getSigner(): Promise<ethers.Signer> {
   const win = window as any;
@@ -680,6 +692,29 @@ async function tokenMeta(address: string): Promise<TokenMeta> {
   }
 }
 
+/**
+ * ReputationAMM does not expose token0()/token1(); the deployed pair is read from
+ * its three immutable-address getters (verified selectors). Two of the three
+ * returned addresses are the pool's ERC20 pair (cUSD + DEPIN); the third is the
+ * governance hub (not an ERC20, so tokenMeta resolves to 'TOKEN' and is dropped).
+ */
+const AMM_PAIR_GETTER_SELECTORS = ['0x443ec74d', '0xa4e2096c', '0x5ee04d78'];
+
+export async function resolveAmmPair(): Promise<{ token0: TokenMeta; token1: TokenMeta }> {
+  const provider = readProvider();
+  const ammAddr = CONTRACTS.reputationAMM;
+  const raw = await Promise.all(
+    AMM_PAIR_GETTER_SELECTORS.map((sel) => provider.call({ to: ammAddr, data: sel }))
+  );
+  const addrs = raw.map((r) => ethers.getAddress('0x' + r.slice(26)));
+  const metas = await Promise.all(addrs.map((a) => tokenMeta(a)));
+  const pair = metas.filter((m) => m.symbol !== 'TOKEN');
+  if (pair.length !== 2) throw new Error('AMM pair not resolvable');
+  // Token0 on-chain is the cUSD side (addLiquidity arg order), so keep cUSD first.
+  pair.sort((a, b) => (a.address.toLowerCase() === CONTRACTS.cUSD.toLowerCase() ? -1 : 0));
+  return { token0: pair[0], token1: pair[1] };
+}
+
 export async function fetchAMMState(user: string): Promise<{
   token0: TokenMeta;
   token1: TokenMeta;
@@ -687,31 +722,99 @@ export async function fetchAMMState(user: string): Promise<{
   reserve1: number;
   lpTotalSupply: number;
   lpBalance: number;
-  quote0To1: number;
-  quote1To0: number;
+  quote0To1: number | null;
+  quote1To0: number | null;
 } | null> {
   try {
+    const { token0, token1 } = await resolveAmmPair();
     const amm = readContract(CONTRACTS.reputationAMM, AMM_ABI);
-    const [t0, t1] = await Promise.all([amm.token0(), amm.token1()]);
-    const [m0, m1] = await Promise.all([tokenMeta(t0), tokenMeta(t1)]);
     const [r0, r1, ts, lb] = await Promise.all([
-      amm.reserve0(), amm.reserve1(), amm.totalSupply(), amm.balanceOf(user),
+      amm.reserve0(),
+      amm.reserve1(),
+      amm.totalSupply(),
+      user ? amm.balanceOf(user) : Promise.resolve(0n),
     ]);
-    const [q01, q10] = await Promise.all([
-      amm.getAmountOut(ethers.parseUnits('1', m0.decimals), t0, user),
-      amm.getAmountOut(ethers.parseUnits('1', m1.decimals), t1, user),
-    ]);
+    // Quotes require non-zero reserves (the contract reverts otherwise), so each
+    // direction is best-effort and may surface as null while the pool is empty.
+    const quote = async (from: TokenMeta, to: TokenMeta): Promise<number | null> => {
+      if (r0 <= 0n || r1 <= 0n) return null;
+      try {
+        const q = await amm.getAmountOut(
+          ethers.parseUnits('1', from.decimals),
+          from.address,
+          user || ethers.ZeroAddress
+        );
+        return parseFloat(ethers.formatUnits(q, to.decimals));
+      } catch {
+        return null;
+      }
+    };
     return {
-      token0: m0, token1: m1,
-      reserve0: parseFloat(ethers.formatUnits(r0, m0.decimals)),
-      reserve1: parseFloat(ethers.formatUnits(r1, m1.decimals)),
+      token0, token1,
+      reserve0: parseFloat(ethers.formatUnits(r0, token0.decimals)),
+      reserve1: parseFloat(ethers.formatUnits(r1, token1.decimals)),
       lpTotalSupply: parseFloat(ethers.formatUnits(ts, 18)),
       lpBalance: parseFloat(ethers.formatUnits(lb, 18)),
-      quote0To1: parseFloat(ethers.formatUnits(q01, m1.decimals)),
-      quote1To0: parseFloat(ethers.formatUnits(q10, m0.decimals)),
+      quote0To1: await quote(token0, token1),
+      quote1To0: await quote(token1, token0),
     };
   } catch {
     return null;
+  }
+}
+
+/** Verified event topics emitted by the deployed ReputationAMM. */
+export const AMM_EVENTS = {
+  Swap: '0x6d2535bccee43630e01014525de773080b47e1a82c56ef6a30802933a48c9e34',
+  Add: '0x4c209b5fc8ad50758f13e2e1088ba56a560dff690a1c6fef26394f4c03821c4f',
+  Remove: '0x49995e5dd6158cf69ad3e9777c46755a1a826a446c6416992167462dad033b2a',
+} as const;
+
+export interface AMMEvent {
+  type: keyof typeof AMM_EVENTS;
+  txHash: string;
+  block: number;
+  sender: string;
+}
+
+/**
+ * Real on-chain activity feed for the ReputationAMM pool (Swap / LiquidityAdded /
+ * LiquidityRemoved). The pool has no activity yet, so it returns [] — the UI shows
+ * the honest empty state instead of a mocked transaction stream.
+ */
+export async function fetchAMMEvents(limit = 30): Promise<AMMEvent[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const out: AMMEvent[] = [];
+    for (const [type, topic] of Object.entries(AMM_EVENTS) as [keyof typeof AMM_EVENTS, string][]) {
+      let logs: any[] = [];
+      for (const win of [1200000, 600000, 300000, 150000, 60000]) {
+        try {
+          logs = await provider.getLogs({
+            address: CONTRACTS.reputationAMM,
+            topics: [topic],
+            fromBlock: Math.max(1, latest - win),
+            toBlock: 'latest',
+          });
+          if (logs.length > 0) break;
+        } catch {
+          /* try a narrower window */
+        }
+      }
+      logs.slice(-limit).forEach((l) => {
+        out.push({
+          type,
+          txHash: String(l.transactionHash),
+          block: Number(l.blockNumber),
+          sender: l.topics[1] ? '0x' + l.topics[1].slice(26) : '',
+        });
+      });
+    }
+    out.sort((a, b) => b.block - a.block);
+    return out.slice(0, limit);
+  } catch {
+    return [];
   }
 }
 
@@ -732,16 +835,14 @@ async function ensureTokenApproval(
 
 export async function addAMMLiquidity(amount0: number, amount1: number): Promise<string> {
   const signer = await getSigner();
-  const amm = readContract(CONTRACTS.reputationAMM, AMM_ABI);
-  const ammAddr = await amm.getAddress();
-  const [t0, t1] = await Promise.all([amm.token0(), amm.token1()]);
-  const [m0, m1] = await Promise.all([tokenMeta(t0), tokenMeta(t1)]);
-  await ensureTokenApproval(signer, t0, ammAddr, ethers.parseUnits(amount0.toString(), m0.decimals));
-  await ensureTokenApproval(signer, t1, ammAddr, ethers.parseUnits(amount1.toString(), m1.decimals));
-  const writeAmm = new ethers.Contract(CONTRACTS.reputationAMM, AMM_ABI, signer);
+  const ammAddr = CONTRACTS.reputationAMM;
+  const { token0, token1 } = await resolveAmmPair();
+  await ensureTokenApproval(signer, token0.address, ammAddr, ethers.parseUnits(amount0.toString(), token0.decimals));
+  await ensureTokenApproval(signer, token1.address, ammAddr, ethers.parseUnits(amount1.toString(), token1.decimals));
+  const writeAmm = new ethers.Contract(ammAddr, AMM_ABI, signer);
   const tx = await writeAmm.addLiquidity(
-    ethers.parseUnits(amount0.toString(), m0.decimals),
-    ethers.parseUnits(amount1.toString(), m1.decimals),
+    ethers.parseUnits(amount0.toString(), token0.decimals),
+    ethers.parseUnits(amount1.toString(), token1.decimals),
     { gasLimit: 500000 }
   );
   const receipt = await tx.wait();
@@ -762,18 +863,16 @@ export async function removeAMMLiquidity(liquidity: number): Promise<string> {
 
 export async function swapViaAMM(amountIn: number, tokenInAddress: string, user: string): Promise<string> {
   const signer = await getSigner();
-  const amm = readContract(CONTRACTS.reputationAMM, AMM_ABI);
-  const ammAddr = await amm.getAddress();
-  const [t0, t1] = await Promise.all([amm.token0(), amm.token1()]);
-  const inMeta = await tokenMeta(tokenInAddress);
-  const outToken = tokenInAddress.toLowerCase() === t0.toLowerCase() ? t1 : t0;
-  const outMeta = await tokenMeta(outToken);
-  const amountInParsed = ethers.parseUnits(amountIn.toString(), inMeta.decimals);
+  const ammAddr = CONTRACTS.reputationAMM;
+  const amm = readContract(ammAddr, AMM_ABI);
+  const { token0, token1 } = await resolveAmmPair();
+  const outToken = tokenInAddress.toLowerCase() === token0.address.toLowerCase() ? token1 : token0;
+  const amountInParsed = ethers.parseUnits(amountIn.toString(), tokenInAddress === token0.address ? token0.decimals : token1.decimals);
   const amountOut = await amm.getAmountOut(amountInParsed, tokenInAddress, user);
   await ensureTokenApproval(signer, tokenInAddress, ammAddr, amountInParsed);
-  const writeAmm = new ethers.Contract(CONTRACTS.reputationAMM, AMM_ABI, signer);
+  const writeAmm = new ethers.Contract(ammAddr, AMM_ABI, signer);
   const [r0, r1] = await Promise.all([writeAmm.reserve0(), writeAmm.reserve1()]);
-  const is0In = tokenInAddress.toLowerCase() === t0.toLowerCase();
+  const is0In = tokenInAddress.toLowerCase() === token0.address.toLowerCase();
   const tx = await writeAmm.swap(
     is0In ? 0n : amountOut,
     is0In ? amountOut : 0n,
