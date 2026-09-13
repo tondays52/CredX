@@ -36,7 +36,7 @@ CredX fulfills all Attestcoin Protocol requirements:
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │                             SOURCE NETWORKS (EVM)                                │
-│          Ethereum Mainnet | Sepolia | Base | Arbitrum | DePIN Networks           │
+│      Ethereum Mainnet | Sepolia | DePIN Networks  (Base & Arbitrum: roadmap)       │
 └──────────────────────────────────────────────────────────────────────────────────┘
                                          │ (RLP Receipts & Merkle Proofs)
                                          ▼

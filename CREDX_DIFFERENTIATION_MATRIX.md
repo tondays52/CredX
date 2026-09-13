@@ -34,4 +34,4 @@ Stress-testing CredX against the field — cluster by cluster, honestly. "They s
 - **No bridges, no asset mobility** — by design (zero bridge risk), but positions like "cross-chain lending of the asset itself" belong to other builders.
 - **No TEE attestations / confidential computing** — workload *integrity* is out of scope; *proof-of-event* is in scope.
 
-Every numbered claim is reproducible from `main`: `npx hardhat test` (126/126), `npm run usc:verify`, `npm run deploy:policy`, `npm run deploy:flagship`, and the live product at https://credx-protocol.vercel.app.
+Every numbered claim is reproducible from `main`: `npx hardhat test` (186/186), `npm run usc:verify`, `npm run deploy:policy`, `npm run deploy:flagship`, and the live product at https://credx-protocol.vercel.app.

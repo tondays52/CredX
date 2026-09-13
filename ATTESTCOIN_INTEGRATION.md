@@ -33,6 +33,7 @@ Two Attestcoin paths coexist in this repo; both are **running code in this proje
 | `verify` on `0x0FD2` | ✅ **SUCCESS** |
 | `verifyAndEmit` (TransactionVerified) | `0x7dff1ed946c291a2f82adb9e4f1baa9b4c83d8cdf3b378fd90215a8ea9b0dd29` |
 | Anchored via oracle (`anchorVerifiedTransaction`) | `0xd0b88f9e7b596e1f23b5d99db9f72261c0d45ab208cd5381c623bca1a8befd69`, `anchoredCount=1` |
+| **Live re-run (2026-09-13)** | Sepolia `#11693190`, tx `0xbead3f388ea4af91117f8e7437f126eada9259d012fd3cd23b51844e2d74c428`, `verify` SUCCESS, `verifyAndEmit` `0x5cd0a17db0279b5a55813cc2143b05c6547c1fb88caa91001e972efeb810c64d`, anchored `0x9b5a880b9108758a3b11046dc7c42b537d9538983a1857ec4731c1d753ccd112`, `anchoredCount=2` |
 | Oracle contract (verified on Blockscout) | [`0x4d11b60809724b0B67B28DA2f38438aE97f1C671`](https://creditcoin-testnet.blockscout.com/address/0x4d11b60809724b0B67B28DA2f38438aE97f1C671#code) |
 
 Both txs above chain into a single credit proof; run `npm run usc:verify` any time to reproduce
@@ -101,7 +102,7 @@ Aligned with the [Attestcoin Protocol Chains and Environments](http://docs.attes
 | :--- | :--- | :--- | :--- |
 | **Source Chain 1** | **Ethereum Mainnet** | `1` | High-value DeFi loan repayments (Aave, Compound), Uniswap LP, ENS identity |
 | **Source Chain 2** | **Ethereum Sepolia** | `11155111` | Testnet development & test harness attestation source |
-| **Source Chain 3** | **Base / Arbitrum** | `8453` / `42161` | High-frequency AI trading proofs & DePIN node uptime logs |
+| **Source Chain 3 (roadmap)** | **Base / Arbitrum** | `8453` / `42161` | High-frequency AI trading proofs & DePIN node uptime logs (planned; *not* yet attested on testnet) |
 | **Settlement Chain** | **Creditcoin Testnet** | `102031` | CredXHub, AutonomousAIHub, Soulbound Credit Passports (CX-SBT), and Lending Pools |
 
 ---

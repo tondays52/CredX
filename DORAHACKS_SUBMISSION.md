@@ -11,7 +11,7 @@
 * **Track**: **Creditcoin Ecosystem / DeFi / RWA / DePIN / AI / Gaming** (Multi-Track)
 * **GitHub Repository**: `https://github.com/tondays52/CredX`
 * **Target Network**: Creditcoin L1 (Chain ID: `102031`)
-* **Source Blockchains Attested**: Ethereum Mainnet (Chain ID `1`), Ethereum Sepolia (Chain ID `11155111`), Base, Arbitrum
+* **Source Blockchains Attested**: Ethereum Mainnet (Chain ID `1`), Ethereum Sepolia (Chain ID `11155111`) — Base & Arbitrum run through the same Attestcoin pipeline on our roadmap
 
 ---
 
@@ -52,7 +52,7 @@ CredX bridges the gap between historical cross-chain creditworthiness and capita
 
 CredX is architected from the ground up around Creditcoin's Attestcoin Protocol:
 
-> **✅ Integration status (LIVE):** Core, present, and functional. `BlockProverAttestationOracle` (`contracts/core/tracks/BlockProverAttestationOracle.sol`, verified on Blockscout at `0x4d11b60809724b0B67B28DA2f38438aE97f1C671`) wraps Creditcoin's native Attestcoin precompiles — BlockProver `0x0FD2` and ChainInfo `0x0FD3` — using the exact `@gluwa/usc-sdk` ABI. A real **Ethereum Sepolia** transaction was proven from Creditcoin's official proof-builder service and verified **SUCCESS** on `0x0FD2`; the canonical `TransactionVerified` event was emitted (`0x7dff1ed946c291a2f82adb9e4f1baa9b4c83d8cdf3b378fd90215a8ea9b0dd29`) and the proof anchored on-chain (`0xd0b88f9e7b596e1f23b5d99db9f72261c0d45ab208cd5381c623bca1a8befd69`, `anchoredCount=1`). Reproduce any time: `npm run usc:verify`. A distinctly-labeled always-pass `MockAttestationOracle` remains only as a gasless fallback for score boosts inside CredXHub/AutonomousAIHub and is never presented as the real precompile (see `ATTESTCOIN_INTEGRATION.md` for the full transcript and code).
+> **✅ Integration status (LIVE):** Core, present, and functional. `BlockProverAttestationOracle` (`contracts/core/tracks/BlockProverAttestationOracle.sol`, verified on Blockscout at `0x4d11b60809724b0B67B28DA2f38438aE97f1C671`) wraps Creditcoin's native Attestcoin precompiles — BlockProver `0x0FD2` and ChainInfo `0x0FD3` — using the exact `@gluwa/usc-sdk` ABI. A real **Ethereum Sepolia** transaction was proven from Creditcoin's official proof-builder service and verified **SUCCESS** on `0x0FD2`; the canonical `TransactionVerified` event was emitted (`0x7dff1ed946c291a2f82adb9e4f1baa9b4c83d8cdf3b378fd90215a8ea9b0dd29`) and the proof anchored on-chain (`0xd0b88f9e7b596e1f23b5d99db9f72261c0d45ab208cd5381c623bca1a8befd69`, `anchoredCount=1`). Re-run live on 2026-09-13 against Sepolia `#11693190` (`0xbead3f388ea4af91117f8e7437f126eada9259d012fd3cd23b51844e2d74c428`): verified SUCCESS, anchored (`0x9b5a880b9108758a3b11046dc7c42b537d9538983a1857ec4731c1d753ccd112`), `anchoredCount=2`. Reproduce any time: `npm run usc:verify`. A distinctly-labeled always-pass `MockAttestationOracle` remains only as a gasless fallback for score boosts inside CredXHub/AutonomousAIHub and is never presented as the real precompile (see `ATTESTCOIN_INTEGRATION.md` for the full transcript and code).
 
 * **Precompile Target (live)**: `BlockProverAttestationOracle` is verified on-chain and talks to the BlockProver precompile at `0x0000000000000000000000000000000000000FD2` (`0x0FD2`) and ChainInfo precompile `0x0FD3`.
 * **Verified, not simulated**: `verifySourceTransaction(...)` forwards to the `0x0FD2` precompile `verify`; `anchorVerifiedTransaction(...)` calls `verifyAndEmit` (emitting the canonical `TransactionVerified` event), then records the proof on-chain with replay protection (`ProofAnchored`, `anchoredCount`).
@@ -65,7 +65,7 @@ CredX is architected from the ground up around Creditcoin's Attestcoin Protocol:
 * **Consensus-Level Security**: The Attestcoin verifier cryptographically validates the Merkle path against the attested block header agreed upon by Creditcoin validators.
 * **Deterministic Replay Defense**: CredX computes a unique key `keccak256(sourceChainId, txHash, txIndex)` to prevent the same transaction from ever being credited twice.
 * **ThirdCheck 3-Tier Proof Auditing**: Closes the "valid proof, wrong event" attack vector by enforcing consensus validation (`0x0FD2`), semantic log decoding (`Topic0` and transfer/repay argument extraction), and nullifier registration.
-* **Cross-Chain Collateral Deadswitch**: Protects lenders against malicious collateral drains on source chains (Ethereum/Base/Arbitrum) via automatic grace-period liquidation and credit freezes upon verified withdrawal proofs.
+* **Cross-Chain Collateral Deadswitch**: Protects lenders against malicious collateral drains on attested source chains (Ethereum Mainnet / Sepolia today) via automatic grace-period liquidation and credit freezes upon verified withdrawal proofs.
 * **Zero Bridge Risk**: Assets remain safely on their native chains; only cryptographic proofs of historical events cross over to Creditcoin.
 
 ---
@@ -183,7 +183,7 @@ $$\text{CTS} = \text{Base} + S_{\text{vol}} + S_{\text{proto}} + S_{\text{chain}
 
 ## 🧪 8. Testing, Verification & Demonstration Evidence
 
-* **Automated Unit & Integration Test Suite**: **126 passing tests (100% pass rate, ~8s)** covering all 5 hackathon tracks:
+* **Automated Unit & Integration Test Suite**: **186 passing tests (100% pass rate, ~9s)** covering all 5 hackathon tracks:
   - OCCR multi-factor scoring calculation (300 to 850 CTS)
   - Multi-protocol action weights & replay attack defense
   - Batch proof import & size limits
@@ -277,7 +277,7 @@ CredX includes a production Manifest V3 browser extension (`chrome-extension/`) 
 Every claim in this submission is reproducible and labeled honestly — no hidden demos, no faked telemetry:
 
 * **Honest-labeling policy**: every screen that shows a simulated or gasless path carries an explicit **SIMULATED COMING LIVE / LIVE** badge. The live `0x0FD2` verification path is real and re-runnable. The `MockAttestationOracle` is distinctively named and documented as a gasless fallback; it is never presented as the precompile.
-* **Test suite**: `npx hardhat test` → **126/126 passing** (22 contracts, scoring math, replay defense, batch import limits, deadswitch/covenant guard, 5-track hubs, Reputation Arena, purpose-bound funding, usage metering + prepaid credits, verified escrow).
+* **Test suite**: `npx hardhat test` → **186/186 passing** (25+ contracts, scoring math, replay defense, batch import limits, deadswitch/covenant guard, 5-track hubs, Reputation Arena, Validator Staking, purpose-bound funding, usage metering + prepaid credits, verified escrow).
 * **Security gate**: GitHub Actions CI runs `npm ci --ignore-scripts`, full JS + Solidity test suite, and **CodeQL** (all alerts fixed or dismissed with justification) + **SonarCloud** quality gate **PASSED (Rating A / A / A, 0 bugs, 0 vulnerabilities, 0 security hotspots)** at commit `b11698a`.
 * **Dependency posture**: `npm audit --omit=dev` = **0 production vulnerabilities**. All open Dependabot alerts are dev-toolchain-only (Hardhat) transitive packages in the root package-lock; risk accepted and documented in `SECURITY.md`.
 * **Reproducibility**: `npm run usc:verify` re-verifies the live Sepolia transaction through the deployed 0x0FD2 precompile at any time. Contract source verified on Blockscout.
