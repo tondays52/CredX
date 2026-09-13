@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { ethers } from 'ethers';
 import GlassCard from '../common/GlassCard';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
@@ -57,7 +58,7 @@ import AiComputeView from './AiComputeView';
 import ValidatorStakingView from './ValidatorStakingView';
 import GoogleMapView from '../common/GoogleMapView';
 import { Loader2, CircleCheck } from 'lucide-react';
-import { CONTRACTS, CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
+import { CONTRACTS, CREDITCOIN_BLOCKSCOUT, CREDITCOIN_RPC } from '../../config/contracts';
 import { scanRealBluetoothDevice } from '../../utils/realHardwareConnect';
 import { Modal } from '../common/Modal';
 import { GPUCluster } from '../../types/tracks';
@@ -88,11 +89,14 @@ import SimulationBadge from '../common/SimulationBadge';
 import {
   fetchDePINState,
   fetchBorrowerProfile,
+  fetchCUSDBalance,
   depinDelegateStake,
   depinUndelegateStake,
   requestHardwareLoan,
   repayHardwareLoan,
-  txHashShort
+  txHashShort,
+  scoreToTier,
+  BorrowerProfile
 } from '../../services/credXService';
 
 export type DePINSector = 'pulse' | 'nodle' | 'geodnet' | 'credxsor' | 'staking';
@@ -207,6 +211,62 @@ const DePINTab: React.FC = () => {
   const [loanInput, setLoanInput] = useState('1000');
   const [depinState, setDepinState] = useState<Awaited<ReturnType<typeof fetchDePINState>>>(null);
   const [delegationAmount, setDelegationAmount] = useState<number | null>(null);
+
+  // Real on-chain Nexus wallet balances (read fresh from CC3 for the active account)
+  const [walletNonce, setWalletNonce] = useState(0);
+  const [walletBalances, setWalletBalances] = useState<{ ctc: number | null; cusd: number | null; depin: number | null } | null>(null);
+  const [walletProfile, setWalletProfile] = useState<BorrowerProfile | null | undefined>(undefined);
+
+  useEffect(() => {
+    let cancelled = false;
+    const acct = nexusLive.account;
+    if (!acct) {
+      setWalletBalances(null);
+      setWalletProfile(undefined);
+      return;
+    }
+    setWalletBalances(null);
+    setWalletProfile(undefined);
+    (async () => {
+      try {
+        const provider = new ethers.JsonRpcProvider(CREDITCOIN_RPC);
+        const [ctcWei, cusd, depinState] = await Promise.all([
+          provider.getBalance(acct),
+          fetchCUSDBalance(acct),
+          fetchDePINState(acct, null),
+        ]);
+        if (!cancelled) {
+          setWalletBalances({
+            ctc: parseFloat(ethers.formatEther(ctcWei)),
+            cusd,
+            depin: depinState?.depinBalance ?? 0,
+          });
+        }
+      } catch (err) {
+        console.warn('Nexus wallet balance fetch failed:', err);
+        if (!cancelled) setWalletBalances({ ctc: null, cusd: null, depin: null });
+      }
+    })();
+    fetchBorrowerProfile(acct)
+      .then((p) => {
+        if (!cancelled) setWalletProfile(p);
+      })
+      .catch(() => {
+        if (!cancelled) setWalletProfile(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [nexusLive.account, walletNonce]);
+
+  const copyNexusAddress = async () => {
+    try {
+      await navigator.clipboard.writeText(nexusLive.account);
+      addToast('success', 'Address Copied', `${nexusLive.account.slice(0, 8)}… copied to clipboard`);
+    } catch {
+      addToast('info', 'Nexus Operator', `${nexusLive.account}`);
+    }
+  };
 
   // CredX GeoOrbit Local State
   const [orbitSubTab, setOrbitSubTab] = useState<'explorer' | 'coverage' | 'hardware' | 'tokenomics'>('explorer');
@@ -2874,68 +2934,91 @@ const DePINTab: React.FC = () => {
           {nexusViewMode === 'wallet' && (
             <div className="max-w-md mx-auto w-full">
               <div className="p-6 rounded-[28px] bg-gradient-to-b from-[#0C121D] via-[#070B12] to-black border border-white/10 shadow-2xl space-y-6">
-                {/* Header (from Screenshot 3) */}
-                <div className="space-y-1">
+                {/* Header */}
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-white/40 font-mono">TOTAL BALANCE</span>
+                    <span className="text-xs text-white/40 font-mono">NEXUS OPERATOR WALLET</span>
                     <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 font-mono text-[10px] font-bold">
-                        CREDITCOIN L1
+                      <span className="px-2 py-0.5 rounded-full bg-[#ABF600]/15 border border-[#ABF600]/40 text-[#ABF600] font-mono text-[10px] font-bold">
+                        LIVE ON-CHAIN
                       </span>
-                      <span className="text-white/60 font-mono text-xs">tdead.credx.cc</span>
                     </div>
                   </div>
-                  <div className="text-4xl font-black font-mono text-white tracking-tight">
-                    ${(userWalletUSD + 2500).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </div>
+                  <a
+                    href={`${CREDITCOIN_BLOCKSCOUT}/address/${nexusLive.account}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-white/60 font-mono text-xs hover:text-white hover:underline"
+                  >
+                    {nexusLive.account.slice(0, 6)}…{nexusLive.account.slice(-4)} ↗
+                  </a>
+                  <p className="text-[10px] text-white/40 font-mono">Balances are read fresh from CC3 testnet — no simulated values.</p>
                 </div>
 
-                {/* 3 Circular Action Buttons (from Screenshot 3) */}
+                {/* Account card */}
+                <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.08] space-y-1">
+                  <span className="text-[10px] font-mono text-white/40 uppercase block">Account</span>
+                  <span className="text-lg font-black font-mono text-[#ABF600]">
+                    {nexusLive.account.slice(0, 6)}…{nexusLive.account.slice(-4)}
+                  </span>
+                  <span className="text-[10px] text-white/40 font-mono block">
+                    {nexusLive.isConnected ? 'connected wallet' : 'demo operator account'} · CC3 testnet
+                  </span>
+                </div>
+
+                {/* Real actions */}
                 <div className="grid grid-cols-3 gap-3">
                   <button
-                    onClick={() => addToast('info', 'Send Tokens', 'Enter recipient Creditcoin address or ENS.')}
-                    className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-center space-y-1.5 transition"
+                    onClick={() => nexusLive.claim()}
+                    disabled={nexusLive.busy !== null || !nexusLive.edge || nexusLive.unpaid <= 0}
+                    className="p-3 rounded-2xl bg-[#ABF600]/10 border border-[#ABF600]/30 hover:bg-[#ABF600]/20 disabled:opacity-40 disabled:cursor-not-allowed text-center space-y-1.5 transition"
                   >
-                    <div className="w-10 h-10 mx-auto rounded-full bg-white/[0.06] flex items-center justify-center text-white">
-                      <ArrowUpRight className="w-5 h-5" />
+                    <div className="w-10 h-10 mx-auto rounded-full bg-[#ABF600]/15 flex items-center justify-center text-[#ABF600]">
+                      {nexusLive.busy === 'claim' ? <Loader2 className="w-5 h-5 animate-spin" /> : <Coins className="w-5 h-5" />}
                     </div>
-                    <span className="text-xs font-mono font-bold text-white block">SEND</span>
+                    <span className="text-xs font-mono font-bold text-[#ABF600] block">CLAIM NEXUS</span>
+                    <span className="text-[9px] text-white/40 font-mono block">
+                      {nexusLive.edge ? `${nexusLive.unpaid.toFixed(2)} unclaimed on-chain` : 'live…'}
+                    </span>
                   </button>
 
                   <button
-                    onClick={() => addToast('info', 'Receive Address', `Your address: ${address || '0x49...b820'}`)}
+                    onClick={copyNexusAddress}
                     className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-center space-y-1.5 transition"
                   >
                     <div className="w-10 h-10 mx-auto rounded-full bg-white/[0.06] flex items-center justify-center text-white">
                       <ArrowDown className="w-5 h-5" />
                     </div>
                     <span className="text-xs font-mono font-bold text-white block">RECEIVE</span>
+                    <span className="text-[9px] text-white/40 font-mono block">copy address</span>
                   </button>
 
                   <button
-                    onClick={() => addToast('info', 'DEX Swap', 'CredX DEX router ready for NEXUS / CTC / USDC swaps.')}
+                    onClick={() => setWalletNonce((n) => n + 1)}
                     className="p-3 rounded-2xl bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.08] text-center space-y-1.5 transition"
                   >
                     <div className="w-10 h-10 mx-auto rounded-full bg-white/[0.06] flex items-center justify-center text-white">
-                      <Repeat className="w-5 h-5" />
+                      <RefreshCw className="w-5 h-5" />
                     </div>
-                    <span className="text-xs font-mono font-bold text-white block">SWAP</span>
+                    <span className="text-xs font-mono font-bold text-white block">REFRESH</span>
+                    <span className="text-[9px] text-white/40 font-mono block">re-read chain</span>
                   </button>
                 </div>
 
-                {/* Add funds card (from Screenshot 3) */}
+                {/* Testnet assets note */}
                 <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06] space-y-1.5">
-                  <h5 className="text-white font-bold text-xs">Add funds to your wallet</h5>
+                  <h5 className="text-white font-bold text-xs">Testnet assets</h5>
                   <p className="text-[11px] text-white/50 leading-snug">
-                    Deposit or buy crypto from Binance, Coinbase, and 300+ exchanges • Powered by Creditcoin
+                    cUSD is the suite's MockERC20 stablecoin on CC3; CTC, cUSD and DEPIN balances shown below are the
+                    account's live on-chain balances.
                   </p>
                 </div>
 
                 {/* TOKENS List (from Screenshot 3) */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between font-mono text-xs">
-                    <span className="text-white/40 uppercase text-[10px]">TOKENS</span>
-                    <span className="text-emerald-400 text-[10px] cursor-pointer hover:underline">See more</span>
+                    <span className="text-white/40 uppercase text-[10px]">TOKENS · ON-CHAIN</span>
+                    <span className="text-[#ABF600] text-[10px]">{walletBalances ? 'live' : 'reading…'}</span>
                   </div>
 
                   <div className="space-y-2">
@@ -2956,24 +3039,45 @@ const DePINTab: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Token 2: USDC */}
+                    {/* Token 2: cUSD (testnet stablecoin) */}
                     <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-400 font-bold">
                           $
                         </div>
                         <div>
-                          <span className="text-white font-bold text-xs block">USDC</span>
-                          <span className="text-[11px] text-white/40 font-mono">2,500.00 USDC</span>
+                          <span className="text-white font-bold text-xs block">cUSD</span>
+                          <span className="text-[11px] text-white/40 font-mono">MockERC20 stablecoin · live balance</span>
                         </div>
                       </div>
                       <div className="text-right font-mono">
-                        <span className="text-white font-bold text-xs block">$ 2,500.00</span>
-                        <span className="text-[10px] text-white/40">0.00%</span>
+                        <span className="text-white font-bold text-xs block">
+                          {walletBalances?.cusd?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? '…'}
+                        </span>
+                        <span className="text-[10px] text-white/40">cUSD</span>
                       </div>
                     </div>
 
-                    {/* Token 3: Creditcoin (CTC) */}
+                    {/* Token: DePIN Infrastructure Token */}
+                    <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 font-bold">
+                          D
+                        </div>
+                        <div>
+                          <span className="text-white font-bold text-xs block">DePIN Token</span>
+                          <span className="text-[11px] text-white/40 font-mono">DePINInfrastructureHub · live balance</span>
+                        </div>
+                      </div>
+                      <div className="text-right font-mono">
+                        <span className="text-white font-bold text-xs block">
+                          {walletBalances?.depin?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? '…'}
+                        </span>
+                        <span className="text-[10px] text-white/40">DEPIN</span>
+                      </div>
+                    </div>
+
+                    {/* Token 3: Creditcoin (CTC) native gas */}
                     <div className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 font-bold">
@@ -2981,16 +3085,18 @@ const DePINTab: React.FC = () => {
                         </div>
                         <div>
                           <span className="text-white font-bold text-xs block">Creditcoin (CTC)</span>
-                          <span className="text-[11px] text-white/40 font-mono">{userWalletCTC.toLocaleString()} CTC</span>
+                          <span className="text-[11px] text-white/40 font-mono">native CC3 gas · live balance</span>
                         </div>
                       </div>
                       <div className="text-right font-mono">
-                        <span className="text-white font-bold text-xs block">$ {userWalletUSD.toFixed(2)}</span>
-                        <span className="text-[10px] text-emerald-400">+4.2%</span>
+                        <span className="text-white font-bold text-xs block">
+                          {walletBalances?.ctc?.toLocaleString(undefined, { maximumFractionDigits: 4 }) ?? '…'}
+                        </span>
+                        <span className="text-[10px] text-white/40">CTC</span>
                       </div>
                     </div>
 
-                    {/* Token 4: CTS Trust Score */}
+                    {/* Token 4: Trust Score (real on-chain profile) */}
                     <div className="p-3.5 rounded-2xl bg-purple-950/20 border border-purple-500/30 flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 rounded-full bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 font-bold">
@@ -2998,12 +3104,20 @@ const DePINTab: React.FC = () => {
                         </div>
                         <div>
                           <span className="text-white font-bold text-xs block">Trust Score (CTS)</span>
-                          <span className="text-[11px] text-purple-300 font-mono">{score} Points (Super-Prime)</span>
+                          <span className="text-[11px] text-purple-300 font-mono">
+                            {walletProfile === undefined
+                              ? 'reading…'
+                              : walletProfile
+                              ? `${walletProfile.creditScore} Points · ${scoreToTier(walletProfile.creditScore)}`
+                              : 'no on-chain profile'}
+                          </span>
                         </div>
                       </div>
                       <div className="text-right font-mono">
-                        <span className="text-emerald-400 font-bold text-xs block">+25 Ready</span>
-                        <span className="text-[10px] text-white/40">USC 0x0FD2</span>
+                        <span className="text-emerald-400 font-bold text-xs block">
+                          {walletProfile ? `${walletProfile.totalAttestationsCount} attestations` : '—'}
+                        </span>
+                        <span className="text-[10px] text-white/40">CredXHub profile</span>
                       </div>
                     </div>
                   </div>
@@ -3012,8 +3126,8 @@ const DePINTab: React.FC = () => {
                 {/* ACTIVITY Feed (from Screenshot 3) */}
                 <div className="space-y-3 pt-2">
                   <div className="flex items-center justify-between font-mono text-xs">
-                    <span className="text-white/40 uppercase text-[10px]">ACTIVITY</span>
-                    <span className="text-emerald-400 text-[10px] cursor-pointer hover:underline">See more</span>
+                    <span className="text-white/40 uppercase text-[10px]">ACTIVITY · REGISTRY TOTALS</span>
+                    <span className="text-[#ABF600] text-[10px]">live</span>
                   </div>
 
                   <div className="space-y-2 font-mono text-xs">
