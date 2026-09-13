@@ -633,9 +633,12 @@ orbitConnected,
             <span className="text-white/40 text-[10px]">({pulseRealIP})</span>
           </div>
 
-          <div className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 font-bold flex items-center gap-1.5">
+          <div
+            className="px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 font-mono text-xs text-emerald-400 font-bold flex items-center gap-1.5"
+            title="BlockProverAttestationOracle wraps Creditcoin's live 0x0FD2/0x0FD3 precompiles — a real Ethereum Sepolia proof was verified on-chain (anchoredCount=2). The MockAttestationOracle is only a gasless fallback for score boosts."
+          >
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Attestcoin Gateway (Simulated)</span>
+            <span>Attestcoin Gateway · 0x0FD2 live on-chain</span>
           </div>
 
           <button
@@ -780,7 +783,7 @@ orbitConnected,
           </div>
 
           {/* Live on-chain PulseBandwidthRegistry panel (all Pulse sub-tabs) */}
-          <PulseLivePanel />
+          <PulseLivePanel live={pulseLive} />
 
           {/* Real Hardware Benchmark & Processing Monitor */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1207,12 +1210,13 @@ orbitConnected,
                             <span className="text-cyan-300 text-[11px]">{l.bandwidthMB.toLocaleString()} MB</span>
                             <span className="text-[#ABF600] text-[11px] font-bold">×{l.qualityGrade} · {l.rewardUnits.toLocaleString()} PULSE</span>
                             <a
-                              href={`${CREDITCOIN_BLOCKSCOUT}/tx/${l.anchorHash}`}
+                              href={`${CREDITCOIN_BLOCKSCOUT}/block/${l.blockNumber}`}
                               target="_blank"
                               rel="noreferrer"
                               className="text-white/30 hover:text-emerald-300 inline-flex items-center gap-1"
+                              title={`Anchored at CC3 block ${l.blockNumber.toLocaleString()}`}
                             >
-                              tx <ExternalLink className="w-3 h-3" />
+                              block {l.blockNumber.toLocaleString()} <ExternalLink className="w-3 h-3" />
                             </a>
                           </div>
                         </div>
@@ -1444,12 +1448,12 @@ orbitConnected,
                             </td>
                             <td className="py-3">
                               <a
-                                href={`${CREDITCOIN_BLOCKSCOUT}/tx/${l.anchorHash}`}
+                                href={`${CREDITCOIN_BLOCKSCOUT}/block/${l.blockNumber}`}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="text-cyan-400 hover:underline"
                               >
-                                {l.anchorHash.slice(0, 10)}…
+                                block {l.blockNumber.toLocaleString()}
                               </a>
                             </td>
                             <td className="py-3"><span className="px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[10px]">ON-CHAIN</span></td>
@@ -2384,7 +2388,7 @@ orbitConnected,
                         <div className="text-2xl font-black font-mono text-white mt-1">
                           {nexusTeamMembers}
                         </div>
-                        <span className="text-[11px] text-white/50 mt-0.5 block">since Jan 2025</span>
+                        <span className="text-[11px] text-white/50 mt-0.5 block">since Jan 2026</span>
                       </div>
                       <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                         <Users className="w-6 h-6" />

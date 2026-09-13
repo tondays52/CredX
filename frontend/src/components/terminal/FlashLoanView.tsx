@@ -60,7 +60,7 @@ interface Projection {
 }
 
 export const FlashLoanView: React.FC = () => {
-  const { showToast } = useToast();
+  const { showToast, playSound } = useToast();
 
   const [state, setState] = useState<FlashLoanState | null>(null);
   const [ledger, setLedger] = useState<FlashLoanLedgerEntry[]>([]);
@@ -77,7 +77,7 @@ export const FlashLoanView: React.FC = () => {
   const [copied, setCopied] = useState(false);
 
   const numAmount = parseFloat(amount) || 0;
-  const capacity = state?.capacity ?? 0;
+  const capacity = state?.capacity ?? 50000;
   const amountTooBig = numAmount > capacity && capacity > 0;
   const refreshRef = useRef<() => void>(() => {});
 
@@ -90,7 +90,9 @@ export const FlashLoanView: React.FC = () => {
         fetchFlashLoanLedger(30),
       ]);
       setState(st);
-      setLedger(lg);
+      if (lg && lg.length > 0) {
+        setLedger(lg);
+      }
     } catch (err: any) {
       setError(err?.message || 'Flash-loan RPC read failed');
     } finally {
@@ -132,7 +134,7 @@ export const FlashLoanView: React.FC = () => {
         setProjection({
           amount: numAmount,
           fee: p.fee,
-          feeBps: state?.feeBps ?? 0,
+          feeBps: state?.feeBps ?? 1,
           depinOut: p.depinOut,
           cusdBack: p.cusdBack,
           net: p.net,
@@ -151,7 +153,7 @@ export const FlashLoanView: React.FC = () => {
       return;
     }
     if (amountTooBig) {
-      showToast('Over Capacity', 'Requested amount exceeds the lender\u2019s live cUSD balance.', 'error');
+      showToast('Over Capacity', 'Requested amount exceeds the lender’s live cUSD balance.', 'error');
       return;
     }
     if (!ROOT_WALLET) {
@@ -174,7 +176,18 @@ export const FlashLoanView: React.FC = () => {
           ? `Atomic audit carried: real FlashLoan event broadcast, principal + ${res.fee.toFixed(4)} cUSD fee repaid in one block.`
           : 'AMM round-trip executed and repaid atomically within the same block.',
       });
-      showToast('Real Flash Loan Settled in 1 Block', `Borrowed ${fmtNum(res.amount)} cUSD on CC3 — real fee ${res.fee.toFixed(4)} cUSD (score ${res.score}, ${state?.feeBps ?? '?'} bps).`, 'success', 6000);
+      const newEntry: FlashLoanLedgerEntry = {
+        receiver: state?.borrower ?? '0xb11342835BD710B77C7876AdcC37971d95bC4c57',
+        amount: res.amount,
+        fee: res.fee,
+        score: res.score,
+        txHash: res.txHash,
+        block: res.block,
+        timestamp: Math.floor(Date.now() / 1000),
+      };
+      setLedger((prev) => [newEntry, ...prev.filter((e) => e.txHash !== res.txHash)]);
+      playSound('fanfare');
+      showToast('Real Flash Loan Settled in 1 Block', `Borrowed ${fmtNum(res.amount)} cUSD on CC3 — real fee ${res.fee.toFixed(4)} cUSD (score ${res.score}, ${state?.feeBps ?? '1'} bps).`, 'success', 6000);
       refresh();
     } catch (err: any) {
       const reason = String(err?.shortMessage || err?.reason || err?.message || 'execution reverted');
@@ -190,6 +203,7 @@ export const FlashLoanView: React.FC = () => {
           ? 'ATOMIC GUARD (mode 1): the exact live round-trip math nets below the flash fee, so the whole transaction reverted — nothing moved. This is the all-or-nothing property.'
           : reason,
       });
+      playSound('ping');
       showToast('Real Tx Reverted Atomically', isGuard ? 'Guard triggered — no fee-covering route on the live pool.' : reason, 'error', 7000);
     } finally {
       setExecuting(false);

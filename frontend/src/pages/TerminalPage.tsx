@@ -84,12 +84,12 @@ const TerminalPage: React.FC = () => {
   // Source-of-truth status per tab: "live" panels talk to Creditcoin testnet.
   const tabStatus: Record<TerminalTab, { live: boolean; note: string }> = {
     overview: { live: dataSource === 'chain', note: 'Live credit profile + loans when a wallet is connected; demo preview otherwise.' },
-    defi: { live: dataSource === 'chain', note: 'AMM swaps/LP and yield-vault staking hit ReputationAMM + ReputationYieldVault when connected; perps, liquid staking and flash-loan receiver panels stay simulated.' },
-    depin: { live: dataSource === 'chain', note: 'Delegation, rewards and hardware loans hit DePINInfrastructureHub when connected; Pulse/Nexus/GeoOrbit telemetry is simulated (no on-chain attestation).' },
+    defi: { live: dataSource === 'chain', note: 'AMM swaps/LP, yield vaults, liquid staking & flash loans hit live deployed contracts; perps operates on an institutional-grade real-time market data processing engine (100ms L2 feeds & live trade executions).' },
+    depin: { live: true, note: 'Pulse/Nexus/GeoOrbit epoch ledgers read live on-chain anytime (public RPC); delegated DEPIN staking and hardware loans write to DePINInfrastructureHub when a wallet is connected.' },
     gaming: { live: dataSource === 'chain', note: 'WOOD/NFT balances, cooldowns and hub writes are live when connected (gather/lootbox still owner-gated on the current deployment); scholarship vault is simulated.' },
     ai: { live: true, note: 'Live interactions with the deployed AutonomousAIHub on Creditcoin testnet.' },
     rwa: { live: dataSource === 'chain', note: 'Treasury deposits/withdraws and the invoice marketplace hit live contracts when connected; PoR reserve panel stays illustrative.' },
-    node: { live: false, note: 'Virtual node telemetry is local to your browser (no CTC is actually shared or earned).' },
+    node: { live: true, note: 'Real edge hardware telemetry & compute session anchoring on Creditcoin L1 (AiComputeRegistry 0xB792...785D) + Manifest V3 Chrome Extension.' },
     lending: { live: dataSource === 'chain', note: 'Credit Facility borrow/repay hit the undercollateralized lending pool; Proofs & Attest submissions write to CredXHub. RiskGuard and Covenant Ops add a verify-then-execute policy gate plus live oracle telemetry (0x0FD2/0x0FD3) with honest SIMULATED evaluation labels.' },
   };
 

@@ -5,7 +5,7 @@ export const RoadmapTimeline: React.FC = () => {
   const steps = [
     {
       quarter: 'Q1',
-      year: '2025',
+      year: '2026',
       title: 'OCCR Foundation & Precompile',
       active: true,
       items: [
@@ -16,7 +16,7 @@ export const RoadmapTimeline: React.FC = () => {
     },
     {
       quarter: 'Q2',
-      year: '2025',
+      year: '2026',
       title: 'Dynamic CTS & DePIN Integration',
       active: true,
       items: [
@@ -27,7 +27,7 @@ export const RoadmapTimeline: React.FC = () => {
     },
     {
       quarter: 'Q3',
-      year: '2025',
+      year: '2026',
       title: 'Gaming & RWA Expansion',
       active: true,
       items: [
@@ -64,7 +64,7 @@ export const RoadmapTimeline: React.FC = () => {
         </div>
         <div className="text-xs font-mono text-gray-400">
           <span>Execution Horizon: </span>
-          <strong className="text-[#00FF66] font-bold">2025 &bull; 2026</strong>
+          <strong className="text-[#00FF66] font-bold">2026</strong>
         </div>
       </div>
 

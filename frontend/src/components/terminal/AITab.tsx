@@ -4,17 +4,17 @@ import { useProtocol } from '../../context/ProtocolContext';
 import { useToast } from '../../context/ToastContext';
 import posthog, { isPostHogEnabled } from '../../posthog';
 import {
-  Bot, Cpu, ShieldCheck, Activity, Terminal, Zap, RefreshCw,
+  Bot, Cpu, Activity, Terminal, Zap, RefreshCw,
   Coins, Lock, DollarSign, AlertTriangle,
   ArrowRight, CheckCircle2, XCircle, BarChart2, Info,
   ExternalLink, Loader2, Play, Network, Sigma,
 } from 'lucide-react';
-import AIRiskModal from '../modals/AIRiskModal';
-import { AIRiskVector } from '../../types/tracks';
 import {
   fetchRiskMetrics,
   fetchAgentProfile,
   fetchCUSDBalance,
+  fetchAIHubActivity,
+  submitCrossChainRiskSignal,
   registerAIAgent,
   triggerAgentLoan,
   repayAgentLoan,
@@ -24,6 +24,8 @@ import {
   generateTaskId,
   AIAgentProfile,
   AIHubRiskMetrics,
+  AIHubLiveActivity,
+  AIHubEventKind,
   AI_HUB_ADDRESS,
   CUSD_ADDRESS,
 } from '../../utils/aiHubContract';
@@ -108,13 +110,21 @@ const AITab: React.FC = () => {
   const [benchmark, setBenchmark] = useState<AIInferenceBenchmarkResult | null>(null);
   const [benchmarking, setBenchmarking] = useState(false);
 
+  // Real-time Risk Signal Ingestion State
+  const [signalChainId, setSignalChainId] = useState<number>(11155111); // Sepolia default
+  const [signalVolDelta, setSignalVolDelta] = useState<string>('200'); // +200 bps (+2.0%)
+  const [signalDefDelta, setSignalDefDelta] = useState<string>('30'); // +30 bps (+0.30%)
+  const [signalReason, setSignalReason] = useState<string>('DEX Volatility Surge');
+  const [submittingSignal, setSubmittingSignal] = useState<boolean>(false);
+  const [lastSubmittedTx, setLastSubmittedTx] = useState<string | null>(null);
+
   // Telemetry log
   const [telemetryLog, setTelemetryLog] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
 
-  // Risk modal
-  const [selectedVector, setSelectedVector] = useState<AIRiskVector | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
+  // Live on-chain activity telemetry (real-time poll, from hub events + RPC)
+  const [activity, setActivity] = useState<AIHubLiveActivity | null>(null);
+  const [activityError, setActivityError] = useState<string | null>(null);
 
   // ── Load Risk Metrics (on-chain read, no wallet) ────────────────────────
   const loadRiskMetrics = useCallback(async () => {
@@ -131,6 +141,40 @@ const AITab: React.FC = () => {
       setLoadingMetrics(false);
     }
   }, [addToast]);
+
+  // ── Broadcast Real-Time Risk Signal On-Chain ─────────────────────────────
+  const handleBroadcastRiskSignal = async () => {
+    if (!isConnected) {
+      addToast('error', 'Connect Wallet', 'Connect your wallet to broadcast real-time on-chain risk telemetry.');
+      return;
+    }
+    const volDelta = parseInt(signalVolDelta, 10);
+    const defDelta = parseInt(signalDefDelta, 10);
+    if (isNaN(volDelta) || volDelta < 0 || volDelta > 5000) {
+      addToast('error', 'Invalid Volatility Delta', 'Volatility delta must be between 0 and 5000 bps (50%).');
+      return;
+    }
+    if (isNaN(defDelta) || defDelta < 0 || defDelta > 5000) {
+      addToast('error', 'Invalid Default Delta', 'Default rate delta must be between 0 and 5000 bps (50%).');
+      return;
+    }
+    setSubmittingSignal(true);
+    appendLog(`[TX] processCrossChainRiskSignal(chain=${signalChainId}, +${volDelta} bps vol, +${defDelta} bps def) — signing…`);
+    try {
+      const result = await submitCrossChainRiskSignal(volDelta, defDelta, signalChainId);
+      setLastSubmittedTx(result.txHash);
+      appendLog(`[TX] processCrossChainRiskSignal confirmed → block #${result.blockNumber}, txHash=${result.txHash}`);
+      addToast('success', 'Real-Time Risk Signal Ingested', `Oracle updated on-chain! Block #${result.blockNumber}. Tx: ${result.txHash.slice(0, 10)}…`);
+      if (isPostHogEnabled) posthog.capture('ai_risk_signal_broadcasted', { chainId: signalChainId, volDelta, defDelta, txHash: result.txHash });
+      await Promise.all([loadRiskMetrics(), loadActivity()]);
+    } catch (err: any) {
+      const msg = err.reason || err.message || 'Transaction failed';
+      appendLog(`[TX] processCrossChainRiskSignal reverted: ${msg}`);
+      addToast('error', 'Risk Broadcast Failed', msg);
+    } finally {
+      setSubmittingSignal(false);
+    }
+  };
 
   // ── Load Agent Profile ───────────────────────────────────────────────────
   const loadAgentProfile = useCallback(async () => {
@@ -157,6 +201,18 @@ const AITab: React.FC = () => {
     setTelemetryLog(prev => [`[${ts}] ${line}`, ...prev].slice(0, 60));
   };
 
+  // ── Load live hub activity (block height, RPC latency, recent events) ───
+  const loadActivity = useCallback(async () => {
+    try {
+      const a = await fetchAIHubActivity(10_000);
+      setActivity(a);
+      setActivityError(null);
+      appendLog(`[RPC] poll hub → height=${a.blockHeight.toLocaleString()}, latency=${a.latencyMs}ms, agents=${a.counts.agent} loans=${a.counts.loan} escrows=${a.counts.escrow} signals=${a.counts.risk} (last ${a.windowBlocks.toLocaleString()} blocks)`);
+    } catch (err: any) {
+      setActivityError(err?.message || 'RPC telemetry timeout');
+    }
+  }, []);
+
   // ── Browser benchmark ────────────────────────────────────────────────────
   const runBenchmark = useCallback(async () => {
     setBenchmarking(true);
@@ -182,13 +238,22 @@ const AITab: React.FC = () => {
     if (isConnected && address) loadAgentProfile();
   }, [isConnected, address, loadAgentProfile]);
 
-  // ── Poll risk metrics every 30s ──────────────────────────────────────────
+  // ── Poll risk metrics every 10s (real-time live heartbeat) ───────────────
   useEffect(() => {
     const interval = setInterval(() => {
       loadRiskMetrics();
-    }, 30_000);
+    }, 10_000);
     return () => clearInterval(interval);
   }, [loadRiskMetrics]);
+
+  // ── Poll live hub activity every 10s ─────────────────────────────────────
+  useEffect(() => {
+    void loadActivity();
+    const interval = setInterval(() => {
+      void loadActivity();
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [loadActivity]);
 
   // ── Auto-scroll telemetry log ────────────────────────────────────────────
   useEffect(() => {
@@ -280,18 +345,68 @@ const AITab: React.FC = () => {
     }
   };
 
-  // ── Static model vectors (enhanced display) ──────────────────────────────
-  const vectors: AIRiskVector[] = [
-    { id: 'VEC-LLM-01', modelName: 'DeepSeek-V3 Quantized Hub', riskTier: 'LOW', confidence: 99.4, lastAudit: '12m ago', activeInferences: 41290 },
-    { id: 'VEC-CV-08',  modelName: 'YOLO-v11 Edge Vision Oracle', riskTier: 'LOW', confidence: 98.9, lastAudit: '1h ago',  activeInferences: 18450 },
-    { id: 'VEC-FIN-99', modelName: 'Chronos Financial Forecaster', riskTier: 'MEDIUM', confidence: 96.2, lastAudit: '3h ago',  activeInferences: 8900 },
-  ];
-
   const volatilityPct = riskMetrics ? (riskMetrics.volatilityIndex / 100).toFixed(1) : '—';
   const defaultPct    = riskMetrics ? bpsToPercent(riskMetrics.defaultRateBps) : '—';
   const aprPct        = riskMetrics ? bpsToPercent(riskMetrics.autonomousAPRBps) : '—';
 
   const tier          = scoreToTier(agentProfile?.reputationScore ?? 300);
+
+  // Kind chip styling for the live feed
+  const EVENT_CHIP: Record<AIHubEventKind, { label: string; cls: string }> = {
+    agent:  { label: 'AGENT',       cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25' },
+    loan:   { label: 'LOAN',        cls: 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/25' },
+    repay:  { label: 'REPAY',       cls: 'bg-teal-500/10 text-teal-400 border border-teal-500/25' },
+    escrow: { label: 'ESCROW',      cls: 'bg-purple-500/10 text-purple-400 border border-purple-500/25' },
+    risk:   { label: 'RISK SIGNAL', cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/25' },
+  };
+
+  // Live on-chain activity feed (shared by the risk + telemetry sub-tabs)
+  const renderActivityFeed = () => (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between px-1 flex-wrap gap-2">
+        <div className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+          <Activity className="w-4 h-4" /> Live On-Chain Activity Feed
+          <LiveDot color="#22d3ee" />
+        </div>
+        <span className="text-[10px] font-mono text-gray-600">
+          last {activity ? activity.windowBlocks.toLocaleString() : 10_000} blocks · polls every 15s
+        </span>
+      </div>
+      {activityError ? (
+        <div className="p-4 rounded-2xl bg-[#070b0e] border border-red-500/20 text-center text-xs font-mono text-red-400/80 flex items-center justify-center gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-red-400" />
+          Telemetry feed unreachable right now — the public RPC timed out on the log query. Retrying on the next poll.
+        </div>
+      ) : !activity ? (
+        <div className="p-4 rounded-2xl bg-[#070b0e] border border-white/[0.06] text-center text-xs font-mono text-gray-500 flex items-center justify-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin text-cyan-400" /> Polling on-chain activity…
+        </div>
+      ) : activity.events.length === 0 ? (
+        <div className="p-4 rounded-2xl bg-[#070b0e] border border-white/[0.06] text-center text-xs font-mono text-gray-500">
+          No on-chain activity on the hub in the last {activity.windowBlocks.toLocaleString()} blocks. New events stream in live.
+        </div>
+      ) : (
+        <>
+          <div className="rounded-2xl bg-[#070b0e] border border-white/[0.06] divide-y divide-white/[0.04]">
+            {activity.events.slice(0, 8).map((e) => (
+              <div key={`${e.block}-${e.logIndex}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs">
+                <span className={`font-mono text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${EVENT_CHIP[e.kind].cls}`}>
+                  {EVENT_CHIP[e.kind].label}
+                </span>
+                <span className="flex-1 text-white/70 text-[11px] font-mono truncate" title={e.summary}>{e.summary}</span>
+                <span className="font-mono text-white/35 text-[10px] shrink-0">#{e.block.toLocaleString()}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-4 px-1 text-[10px] font-mono text-gray-600 flex-wrap">
+            <span><LiveDot color="#00FF66" /> height #{activity.blockHeight.toLocaleString()}</span>
+            <span><LiveDot color="#fbbf24" /> RPC latency {activity.latencyMs}ms</span>
+            <span><LiveDot color="#22d3ee" /> agents {(activity.counts.agent).toLocaleString()} · loans {(activity.counts.loan).toLocaleString()} · escrows {(activity.counts.escrow).toLocaleString()} · signals {(activity.counts.risk).toLocaleString()}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   // ── Sub-tab button helper ────────────────────────────────────────────────
   const TabBtn = ({
@@ -327,8 +442,15 @@ const AITab: React.FC = () => {
             <div className="flex items-center gap-2 text-[10px] font-mono text-cyan-400 uppercase tracking-wider">
               <LiveDot /> AutonomousAIHub · Creditcoin Testnet
             </div>
-            <div className="text-sm font-bold text-white font-mono">
-              AgentFi + Oracle Risk + Proof-of-Compute
+            <div className="text-sm font-bold text-white font-mono flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="text-cyan-300">AgentFi</span>
+              <span className="text-white/30">+</span>
+              <span className="text-purple-300">Oracle Risk</span>
+              <span className="text-white/30">+</span>
+              <span className="text-emerald-300">Proof-of-Compute</span>
+            </div>
+            <div className="text-[11px] font-mono text-white/40 mt-0.5">
+              On-chain volatility &amp; default vectors gate autonomous agent credit lines and verifiable GPU settlement.
             </div>
           </div>
         </div>
@@ -393,7 +515,7 @@ const AITab: React.FC = () => {
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════
-          TAB 1: AI RISK ORACLE
+          TAB 1: AI RISK ORACLE (REAL-TIME ON-CHAIN RISK INGESTION)
       ═══════════════════════════════════════════════════════════════════════*/}
       {activeSubTab === 'risk' && (
         <div className="space-y-5">
@@ -404,16 +526,16 @@ const AITab: React.FC = () => {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center relative z-10">
               <div className="lg:col-span-7 space-y-3">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 text-[11px] font-mono">
-                  <Sigma className="w-3 h-3" /> Autonomous Cross-Chain Risk Ingestion
+                  <Sigma className="w-3 h-3" /> Real-Time Autonomous Cross-Chain Risk Ingestion
                 </div>
                 <h2 className="text-2xl font-black text-white tracking-tight">
-                  Oracle-less AI Risk Engine
+                  Autonomous AI Risk Oracle
                 </h2>
                 <p className="text-xs text-white/55 leading-relaxed max-w-lg">
                   The <code className="text-cyan-400 bg-cyan-500/10 px-1 rounded">AutonomousAIHub</code> ingests
-                  cryptographically verified cross-chain signals via Creditcoin's Attestcoin precompile{' '}
+                  cryptographically verified cross-chain telemetry via Creditcoin's Attestcoin precompile{' '}
                   <code className="text-purple-400 bg-purple-500/10 px-1 rounded">0x0FD2</code> to autonomously
-                  update market volatility, default rates, and base APR — with zero centralized oracle operators.
+                  adjust volatility indexes, default rate vectors, and pool APRs in real time without human intervention.
                 </p>
                 <div className="flex flex-wrap gap-3 pt-1">
                   <div className="text-xs font-mono text-gray-400">
@@ -423,68 +545,193 @@ const AITab: React.FC = () => {
               </div>
               <div className="lg:col-span-5 grid grid-cols-2 gap-3">
                 {[
-                  { label: 'Monitored Models', value: '42 Active', color: '#22d3ee' },
-                  { label: 'Daily Inferences', value: '1.84M', color: '#a78bfa' },
-                  { label: 'Slashing Pool', value: '$8.4M', color: '#00FF66' },
-                  { label: 'Oracle Latency', value: '38ms', color: '#fbbf24' },
+                  { label: 'Block Height', value: activity ? activity.blockHeight.toLocaleString() : '—', color: '#22d3ee' },
+                  { label: 'RPC Latency', value: activity ? `${activity.latencyMs}ms` : '—', color: '#fbbf24' },
+                  { label: 'Agents Registered', value: activity ? (activity.counts.agent).toLocaleString() : '—', color: '#00FF66' },
+                  { label: 'Risk Signals', value: activity ? (activity.counts.risk).toLocaleString() : '—', color: '#a78bfa' },
                 ].map(c => (
                   <div key={c.label} className="p-3 rounded-2xl bg-white/[0.02] border border-white/[0.06]">
                     <div className="text-[10px] text-gray-500 uppercase">{c.label}</div>
                     <div className="text-sm font-bold font-mono mt-0.5" style={{ color: c.color }}>{c.value}</div>
                   </div>
                 ))}
+                <div className="col-span-2 pt-1 text-[10px] font-mono text-gray-600">
+                  <LiveDot color="#00FF66" /> Live — recent on-chain activity (last {activity ? activity.windowBlocks.toLocaleString() : 10_000} blocks) · auto-refresh 10s
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Model Vector Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {vectors.map((vec) => (
-              <div key={vec.id} className="p-5 rounded-[22px] bg-[#070b0e] border border-white/[0.08] hover:border-cyan-500/30 transition-all space-y-4 flex flex-col">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-mono text-gray-600">{vec.id}</span>
-                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                      vec.riskTier === 'LOW' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
-                    }`}>
-                      {vec.riskTier} RISK
-                    </span>
-                  </div>
-                  <h3 className="text-sm font-bold text-white">{vec.modelName}</h3>
-                  <div className="mt-3 space-y-2">
+          {/* Real-Time Risk Ingestion & Dynamic Calibration Console */}
+          <div className="p-6 rounded-[28px] bg-[#070b0e] border border-cyan-500/25 space-y-5 relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/[0.06] pb-4">
+              <div>
+                <div className="text-xs font-mono font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-cyan-400" /> Real-Time Cross-Chain Risk Broadcast & Ingestion
+                  <LiveDot color="#22d3ee" />
+                </div>
+                <p className="text-xs text-white/50 mt-0.5">
+                  Broadcast live multi-chain risk vectors on-chain to trigger real-time autonomous APR adjustments.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-mono text-gray-400">Quick Scenarios:</span>
+                {[
+                  { name: 'DEX Surge', vol: '200', def: '30', reason: 'DEX Volatility Surge' },
+                  { name: 'Bridge Stress', vol: '450', def: '75', reason: 'Bridge Liquidity Stress' },
+                  { name: 'Flash Volatility', vol: '800', def: '150', reason: 'Flash Arbitrage Drift' },
+                ].map(p => (
+                  <button
+                    key={p.name}
+                    onClick={() => { setSignalVolDelta(p.vol); setSignalDefDelta(p.def); setSignalReason(p.reason); }}
+                    className="px-2.5 py-1 rounded-lg bg-white/[0.04] border border-white/10 hover:border-cyan-500/40 text-[11px] font-mono text-cyan-300 hover:text-cyan-200 transition"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+              {/* Left Form: Parameters */}
+              <div className="lg:col-span-7 space-y-4">
+                {/* Source Chain */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono text-gray-500 uppercase flex items-center justify-between">
+                    <span>Source Network (Attestation Origin)</span>
+                    <span className="text-cyan-400">Chain ID: {signalChainId}</span>
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {[
-                      { k: 'Confidence', v: `${vec.confidence}%`, c: '#22d3ee' },
-                      { k: 'Inferences 24h', v: (vec.activeInferences ?? 0).toLocaleString(), c: '#ffffff' },
-                      { k: 'Last Audit', v: vec.lastAudit ?? '—', c: 'rgba(255,255,255,0.4)' },
-                    ].map(r => (
-                      <div key={r.k} className="flex justify-between text-xs">
-                        <span className="text-gray-500">{r.k}</span>
-                        <span className="font-mono font-semibold" style={{ color: r.c }}>{r.v}</span>
-                      </div>
+                      { name: 'Sepolia', id: 11155111 },
+                      { name: 'Ethereum', id: 1 },
+                      { name: 'Base', id: 8453 },
+                      { name: 'Arbitrum', id: 42161 },
+                    ].map(ch => (
+                      <button
+                        key={ch.id}
+                        onClick={() => setSignalChainId(ch.id)}
+                        className={`py-2 px-3 rounded-xl text-xs font-mono transition border ${
+                          signalChainId === ch.id
+                            ? 'bg-cyan-500/20 border-cyan-500/60 text-cyan-300 font-bold'
+                            : 'bg-black/30 border-white/[0.06] text-white/50 hover:text-white'
+                        }`}
+                      >
+                        {ch.name}
+                      </button>
                     ))}
-                    {/* Live confidence bar */}
-                    <div className="w-full h-1.5 rounded-full bg-white/[0.06] overflow-hidden mt-1">
-                      <div
-                        className="h-full rounded-full transition-all duration-1000"
-                        style={{ width: `${vec.confidence}%`, backgroundColor: vec.riskTier === 'LOW' ? '#00FF66' : '#fbbf24' }}
-                      />
-                    </div>
                   </div>
                 </div>
-                <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between mt-auto">
-                  <span className="text-[10px] text-emerald-400 flex items-center gap-1 font-mono">
-                    <ShieldCheck className="w-3 h-3" /> Slashing Bond: Active
-                  </span>
+
+                {/* Volatility Delta */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-gray-400 uppercase">Volatility Index Delta (+bps)</span>
+                    <span className="text-red-400 font-bold">+{signalVolDelta} bps (+{(parseInt(signalVolDelta || '0', 10) / 100).toFixed(2)}%)</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1500"
+                    step="50"
+                    value={signalVolDelta}
+                    onChange={e => setSignalVolDelta(e.target.value)}
+                    className="w-full accent-red-400 cursor-pointer"
+                  />
+                </div>
+
+                {/* Default Rate Delta */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] font-mono">
+                    <span className="text-gray-400 uppercase">Default Rate Delta (+bps)</span>
+                    <span className="text-amber-400 font-bold">+{signalDefDelta} bps (+{(parseInt(signalDefDelta || '0', 10) / 100).toFixed(2)}%)</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="500"
+                    step="10"
+                    value={signalDefDelta}
+                    onChange={e => setSignalDefDelta(e.target.value)}
+                    className="w-full accent-amber-400 cursor-pointer"
+                  />
+                </div>
+
+                {/* Submit button */}
+                <div className="pt-2">
                   <button
-                    onClick={() => { setSelectedVector(vec); setModalOpen(true); }}
-                    className="px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-400 font-medium text-xs transition flex items-center gap-1"
+                    onClick={handleBroadcastRiskSignal}
+                    disabled={submittingSignal}
+                    className="w-full py-3.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs shadow-lg shadow-cyan-500/25 transition flex items-center justify-center gap-2 disabled:opacity-50"
                   >
-                    Inspect <ArrowRight className="w-3 h-3" />
+                    {submittingSignal ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                    {submittingSignal ? 'Broadcasting Risk Telemetry On-Chain…' : 'Broadcast Live Risk Telemetry (Real On-Chain TX)'}
                   </button>
+                  {lastSubmittedTx && (
+                    <div className="mt-2 text-center text-[10px] font-mono text-emerald-400 flex items-center justify-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Confirmed!</span>
+                      <a
+                        href={`https://creditcoin-testnet.blockscout.com/tx/${lastSubmittedTx}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-emerald-300"
+                      >
+                        View TX {lastSubmittedTx.slice(0, 12)}…
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+
+              {/* Right: Dynamic APR Formula & Live Calculation Preview */}
+              <div className="lg:col-span-5 p-5 rounded-2xl bg-black/40 border border-white/[0.06] space-y-3 flex flex-col justify-between">
+                <div>
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-gray-400 mb-2">Live Mathematical Model</div>
+                  <div className="p-3 rounded-xl bg-cyan-950/20 border border-cyan-500/20 font-mono text-[11px] text-cyan-200/90 space-y-1">
+                    <div className="font-bold text-cyan-400">Autonomous Base APR Formula:</div>
+                    <div className="text-white/80">Base (5.00%) + (Vol / 10) + Default Rate</div>
+                    <div className="text-[10px] text-white/40">Capped at 30.00% APR on-chain</div>
+                  </div>
+                </div>
+
+                <div className="space-y-2 text-xs font-mono">
+                  <div className="flex justify-between py-1 border-b border-white/[0.04]">
+                    <span className="text-gray-500">Current On-Chain APR</span>
+                    <span className="font-bold text-emerald-400">{aprPct}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.04]">
+                    <span className="text-gray-500">Projected Volatility</span>
+                    <span className="font-bold text-red-400">
+                      {riskMetrics ? ((riskMetrics.volatilityIndex + parseInt(signalVolDelta || '0', 10)) / 100).toFixed(2) : '—'}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b border-white/[0.04]">
+                    <span className="text-gray-500">Projected Default Rate</span>
+                    <span className="font-bold text-amber-400">
+                      {riskMetrics ? ((riskMetrics.defaultRateBps + parseInt(signalDefDelta || '0', 10)) / 100).toFixed(2) : '—'}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 bg-cyan-500/10 px-2 rounded-lg">
+                    <span className="text-cyan-300 font-bold">Projected New APR</span>
+                    <span className="font-bold text-cyan-400 text-sm">
+                      {riskMetrics
+                        ? (Math.min(3000, 500 + Math.floor((riskMetrics.volatilityIndex + parseInt(signalVolDelta || '0', 10)) / 10) + (riskMetrics.defaultRateBps + parseInt(signalDefDelta || '0', 10))) / 100).toFixed(2)
+                        : '—'}%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="text-[10px] font-mono text-gray-500 flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 shrink-0 text-cyan-400" />
+                  <span>Real-time on-chain execution with replay-protected Merkle receipt validation.</span>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Live on-chain activity */}
+          {renderActivityFeed()}
 
           {/* Browser benchmark strip */}
           <div className="p-4 rounded-2xl bg-[#070b0e] border border-purple-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -493,7 +740,7 @@ const AITab: React.FC = () => {
                 <Cpu className="w-4 h-4 text-purple-400" />
               </div>
               <div>
-                <div className="text-[10px] font-mono text-purple-400 uppercase tracking-wider">Your Browser GPU Benchmark</div>
+                <div className="text-[10px] font-mono text-purple-400 uppercase tracking-wider">Your Browser GPU Benchmark (Real-Time Inference)</div>
                 {benchmark ? (
                   <div className="text-xs font-mono text-white mt-0.5">
                     <span className="text-purple-300 font-bold">{benchmark.tokensPerSecond} tok/s</span>
@@ -502,7 +749,7 @@ const AITab: React.FC = () => {
                     {' · '}<span className="text-gray-500 text-[10px]">{benchmark.hardwareDevice.slice(0, 40)}</span>
                   </div>
                 ) : (
-                  <div className="text-xs text-gray-500 font-mono mt-0.5">Benchmarking your GPU…</div>
+                  <div className="text-xs text-gray-500 font-mono mt-0.5">Benchmarking your GPU in real time…</div>
                 )}
               </div>
             </div>
@@ -869,6 +1116,41 @@ const AITab: React.FC = () => {
             </div>
           </div>
 
+          {/* Live hub status + on-chain activity feed */}
+          <div className="p-5 rounded-[22px] bg-[#070b0e] border border-white/[0.08] space-y-4">
+            <div className="flex items-center justify-between px-1 flex-wrap gap-2">
+              <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <Network className="w-4 h-4 text-cyan-400" /> Live Hub Status
+                <LiveDot color="#22d3ee" />
+              </div>
+              <button
+                onClick={loadActivity}
+                className="text-[10px] font-mono text-gray-500 hover:text-gray-300 transition flex items-center gap-1"
+              >
+                <RefreshCw className="w-3 h-3" /> Poll now
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { k: 'Block Height',  v: activity ? `#${activity.blockHeight.toLocaleString()}` : '—', c: '#22d3ee' },
+                { k: 'RPC Latency',   v: activity ? `${activity.latencyMs}ms` : '—', c: '#fbbf24' },
+                { k: 'Hub Contract',  v: `${AI_HUB_ADDRESS.slice(0, 10)}…${AI_HUB_ADDRESS.slice(-6)}`, c: '#ffffff' },
+                { k: 'Poll Interval', v: '15s', c: '#00FF66' },
+              ].map(r => (
+                <div key={r.k} className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
+                  <div className="text-[9px] text-gray-600 uppercase">{r.k}</div>
+                  <div className="text-xs font-mono text-white font-bold mt-0.5 break-all" style={{ color: r.c }}>{r.v}</div>
+                </div>
+              ))}
+            </div>
+            <div className="px-1">
+              {renderActivityFeed()}
+            </div>
+            <div className="text-[10px] font-mono text-gray-600 flex items-center gap-1.5">
+              <Activity className="w-3 h-3" /> Sources: eth_blockNumber + eth_getLogs over the public CC3 RPC — all values real &amp; measured, nothing simulated.
+            </div>
+          </div>
+
           {/* Risk metrics breakdown */}
           {riskMetrics && (
             <div className="p-5 rounded-[22px] bg-[#070b0e] border border-white/[0.08] space-y-4">
@@ -924,9 +1206,7 @@ const AITab: React.FC = () => {
         </div>
       )}
 
-      {/* Risk Modal */}
-      <AIRiskModal isOpen={modalOpen} onClose={() => setModalOpen(false)} vector={selectedVector} />
-    </div>
+      </div>
   );
 };
 

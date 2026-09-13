@@ -9,10 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@types/jszip": "^3.4.0",
     "@types/three": "^0.185.4",
     "chart.js": "^4.4.8",
     "clsx": "^2.1.1",
     "ethers": "^6.13.5",
+    "jszip": "^3.10.2",
     "lucide-react": "^0.475.0",
     "posthog-js": "^1.428.11",
     "react": "^18.3.1",

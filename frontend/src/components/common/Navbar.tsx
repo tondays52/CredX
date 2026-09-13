@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ShieldCheck, Wallet, ArrowUpRight, Swords, Menu, X } from 'lucide-react';
+import { ShieldCheck, Wallet, ArrowUpRight, Swords, Menu, X, Chrome } from 'lucide-react';
 import { useWeb3 } from '../../context/Web3Context';
+import { ExtensionModal } from '../modals/ExtensionModal';
 
 interface NavbarProps {
   currentRoute: 'landing' | 'app' | 'arena';
@@ -10,6 +11,7 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({ currentRoute, onNavigate }) => {
   const { isConnected, address, toggleConnect } = useWeb3();
   const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
+  const [extensionModalOpen, setExtensionModalOpen] = useState<boolean>(false);
 
   const handleHomeClick = () => {
     setMobileMenuOpen(false);
@@ -113,6 +115,15 @@ export const Navbar: React.FC<NavbarProps> = ({ currentRoute, onNavigate }) => {
           >
             Roadmap
           </button>
+
+          <button
+            onClick={() => setExtensionModalOpen(true)}
+            className="transition-all hover:text-cyan-300 text-cyan-400/90 flex items-center gap-1.5 cursor-pointer py-1 px-2.5 rounded-lg bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20"
+            title="Download CredX Virtual Node Chrome Extension"
+          >
+            <Chrome className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="font-mono text-[11px]">Extension</span>
+          </button>
         </nav>
 
         {/* Right Actions: Connect Wallet + Launch App + Mobile Hamburger */}
@@ -189,6 +200,16 @@ export const Navbar: React.FC<NavbarProps> = ({ currentRoute, onNavigate }) => {
             >
               Roadmap
             </button>
+            <button
+              onClick={() => {
+                setMobileMenuOpen(false);
+                setExtensionModalOpen(true);
+              }}
+              className="text-left px-3 py-2 rounded-lg hover:bg-white/[0.05] text-cyan-400 flex items-center gap-2 transition-colors"
+            >
+              <Chrome className="w-4 h-4" />
+              <span>Node Extension (Manifest V3)</span>
+            </button>
           </div>
 
           <div className="pt-2 border-t border-white/[0.06]">
@@ -205,6 +226,12 @@ export const Navbar: React.FC<NavbarProps> = ({ currentRoute, onNavigate }) => {
           </div>
         </div>
       )}
+
+      {/* Extension Installation Modal */}
+      <ExtensionModal
+        isOpen={extensionModalOpen}
+        onClose={() => setExtensionModalOpen(false)}
+      />
     </header>
   );
 };

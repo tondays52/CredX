@@ -784,7 +784,7 @@ function buyMarketItem(btn) {
 
 // ==================== TRACK 4: AUTONOMOUS AI MODAL CONTROLLERS ====================
 
-// 1. AI Dynamic Risk Oracle
+// 1. AI Dynamic Risk Oracle (Real-Time Autonomous Risk Engine)
 function executeAIRiskUpdateDemo() {
   updateAIRiskCalc();
   openGameModal('aiRiskModal');
@@ -796,8 +796,8 @@ function updateAIRiskCalc() {
   document.getElementById('aiVolDisplay').textContent = `${vol.toFixed(1)}%`;
   document.getElementById('aiDefDisplay').textContent = `${defRate.toFixed(1)}%`;
 
-  // On-chain formula: Base APR = 4.0% + (volatility * 0.15) + (defaultRate * 0.25)
-  const calcAPR = (4.0 + (vol * 0.15) + (defRate * 0.25)).toFixed(2);
+  // AutonomousAIHub / AIRiskOracle formula: Base APR = 5.0% + (volatility / 10) + defaultRate (capped at 30%)
+  const calcAPR = Math.min(30.0, 5.0 + (vol * 0.10) + defRate).toFixed(2);
   document.getElementById('aiCalcAPR').textContent = `${calcAPR}% APR`;
 }
 
@@ -805,15 +805,15 @@ function runAIRiskPushSimulation() {
   playSoundEffect('harvest');
   const btn = document.getElementById('btnPushAIRisk');
   btn.disabled = true;
-  btn.textContent = "Broadcasting AI telemetry across chains...";
+  btn.textContent = "Broadcasting Real-Time AI Telemetry across chains...";
 
   setTimeout(() => {
     playSoundEffect('success');
-    btn.textContent = "✅ Risk Telemetry Ingested into AIRiskOracle.sol";
+    btn.textContent = "✅ Real-Time Telemetry Ingested into AutonomousAIHub";
     setTimeout(() => {
       closeGameModal('aiRiskModal');
       const apr = document.getElementById('aiCalcAPR').textContent;
-      showStatus(`🤖 AI Risk Oracle Updated! Base credit APR re-indexed to ${apr} autonomously.`, "success");
+      showStatus(`🤖 Real-Time AI Risk Oracle Updated! Base credit APR re-indexed to ${apr} autonomously.`, "success");
       btn.disabled = false;
     }, 900);
   }, 1000);

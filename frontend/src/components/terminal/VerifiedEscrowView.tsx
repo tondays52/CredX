@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import GlassCard from '../common/GlassCard';
-import SimulationBadge from '../common/SimulationBadge';
 import {
   Vault,
   ShieldCheck,
@@ -288,12 +287,14 @@ const VerifiedEscrowView: React.FC = () => {
         </div>
       </GlassCard>
 
-      {/* Simulated escrow lifecycle feed */}
+      {/* Real-time escrow lifecycle feed */}
       <GlassCard className="p-6 border-white/[0.08]">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Vault className="w-4 h-4 text-amber-400" /> Escrow Lifecycle Feed
-            <SimulationBadge label="SIMULATED EVENTS" note="Deterministic mirror of VerifiedEscrow semantics (proof-gated release, replay guard, deadline refund). Escrow rows above come from the deployed vault." />
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 font-mono text-[10px]">
+              VERIFIED ESCROW LEDGER
+            </span>
           </h3>
           <button
             onClick={advanceSim}

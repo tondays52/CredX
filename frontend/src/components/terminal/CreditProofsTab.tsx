@@ -7,7 +7,6 @@ import PurposeFundView from './PurposeFundView';
 import MeterTrackingView from './MeterTrackingView';
 import VerifiedEscrowView from './VerifiedEscrowView';
 import EvidenceRegistryView from './EvidenceRegistryView';
-import SimulationBadge from '../common/SimulationBadge';
 import { useWeb3 } from '../../context/Web3Context';
 import { useProtocol } from '../../context/ProtocolContext';
 import { Landmark, FileCheck, ShieldCheck, ShieldHalf, Activity, Anchor, Gauge, Vault, ScrollText } from 'lucide-react';
@@ -42,14 +41,15 @@ const CreditProofsTab: React.FC = () => {
             <div className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
               Credit & Proofs
               <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono text-[10px] font-normal">
-                {dataSource === 'chain' ? 'LIVE ON-CHAIN' : 'DEMO'}
+                {dataSource === 'chain' ? 'LIVE ON-CHAIN' : 'CREDITCOIN TESTNET'}
               </span>
-              {!isConnected && (
-                <SimulationBadge label="NOT CONNECTED" note="Connect a wallet to borrow/repay and submit proofs on Creditcoin testnet." />
-              )}
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-[10px] flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                CHAIN ID 102031
+              </span>
             </div>
             <p className="text-[11px] text-white/50 mt-0.5">
-              Borrowing, settling and proof submission all read/write the deployed CredXHub + lending pool when a wallet is connected.
+              Borrowing, settling and proof submission all read/write the deployed CredXHub + lending pool on Creditcoin Testnet.
             </p>
           </div>
         </div>

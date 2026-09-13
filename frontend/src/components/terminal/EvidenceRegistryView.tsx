@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import GlassCard from '../common/GlassCard';
-import SimulationBadge from '../common/SimulationBadge';
 import {
   ScrollText,
   ShieldCheck,

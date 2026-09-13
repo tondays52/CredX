@@ -1,27 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "CredX Virtual Node & Credit Passport",
-  "version": "1.1.0",
-  "description": "DePIN Virtual Node for Creditcoin — Share verified idle network telemetry to build your on-chain credit reputation.",
+  "name": "CredX Quantum Node & Credit Passport",
+  "version": "2.0.0",
+  "description": "Creditcoin L1 DePIN Virtual Node, 0x0FD2 Attestcoin Daemon & Cryptographic Credit Passport — Real-time telemetry, 3D holographic mesh, and in-browser ZK Merkle audits.",
   "permissions": [
     "storage",
     "alarms"
   ],
+  "host_permissions": [
+    "https://rpc.cc3-testnet.creditcoin.network/*"
+  ],
   "background": {
     "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "CredX Quantum Node & Passport"
   },
   "content_scripts": [
     {
       "matches": ["http://*/*", "https://*/*"],
       "js": ["content.js"],
-      "run_at": "document_idle",
-      "world": "MAIN"
+      "run_at": "document_idle"
     }
   ],
-  "action": {
-    "default_popup": "popup/popup.html",
-    "default_title": "CredX Virtual Node"
-  },
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

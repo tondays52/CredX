@@ -3,113 +3,158 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CredX Pulse Node</title>
+  <title>CredX Quantum Node & Attestcoin Passport</title>
   <link rel="stylesheet" href="popup.css">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
   <div class="popup-wrapper">
-    <!-- Header with Epoch 0 Earnings -->
+    <!-- Top Cyber Header -->
     <header class="header">
       <div class="brand">
-        <div class="brand-icon">⚡</div>
+        <div class="brand-icon-3d">
+          <span class="cube-inner">⚡</span>
+        </div>
         <div>
-          <h1 class="brand-title">CredX Pulse</h1>
-          <span class="brand-sub">Creditcoin DePIN Layer</span>
+          <div class="brand-title-wrap">
+            <h1 class="brand-title">CREDX QUANTUM</h1>
+            <span class="badge-l1">L1 0x0FD2</span>
+          </div>
+          <span class="brand-sub">Virtual DePIN Node &amp; Passport</span>
         </div>
       </div>
-      <div class="epoch-earnings">
-        <span class="epoch-label">Epoch 0:</span>
-        <div class="earnings-badges">
-          <span class="earning-item text-green">🍃 <strong id="extUptimePts">41,706</strong></span>
-          <span class="earning-item text-cyan">💎 <strong id="extNetworkPts">54.57</strong></span>
-        </div>
-      </div>
+      
+      <!-- Wallet Auth Mini Badge -->
+      <button id="headerWalletBtn" class="wallet-pill" title="Click to manage wallet">
+        <span class="wallet-status-dot online"></span>
+        <span id="headerWalletAddress" class="font-mono">0x9afB...8f07</span>
+      </button>
     </header>
 
-    <!-- Tab Switcher: Pulse Node vs Attestcoin Light Client Daemon -->
-    <div class="tab-switcher">
-      <button id="tabPulseBtn" class="tab-btn active">
-        <span>⚡ Pulse Node</span>
+    <!-- Navigation Tabs (4 Tabs) -->
+    <nav class="mode-tabs">
+      <button id="tabNodeBtn" class="mode-tab active" data-tab="node">
+        <span class="tab-icon">⚡</span>
+        <span>Node &amp; 3D</span>
       </button>
-      <button id="tabAttestBtn" class="tab-btn">
-        <span>🛡️ Attestcoin Daemon</span>
+      <button id="tabDaemonBtn" class="mode-tab" data-tab="daemon">
+        <span class="tab-icon">🛡️</span>
+        <span>0x0FD2</span>
       </button>
-    </div>
+      <button id="tabWalletBtn" class="mode-tab" data-tab="wallet">
+        <span class="tab-icon">💳</span>
+        <span>Wallet</span>
+      </button>
+      <button id="tabSwapBtn" class="mode-tab" data-tab="swap">
+        <span class="tab-icon">🔄</span>
+        <span>Swap</span>
+      </button>
+    </nav>
 
-    <!-- TAB 1: Pulse Node (DePIN Telemetry) -->
-    <div id="tabPulseContent" class="tab-content active">
-      <!-- Main Centerpiece: Iconic Giant Glowing Power Button -->
-      <div class="power-section">
-        <button id="bigPowerBtn" class="big-power-btn connected" title="Toggle CredX Pulse Node">
+    <!-- ========================================== -->
+    <!-- TAB 1: 3D CYBERNETIC NODE & REAL-TIME TELEMETRY -->
+    <!-- ========================================== -->
+    <section id="viewNode" class="tab-view active">
+      <!-- 3D Interactive WebGL/Canvas Hologram Container -->
+      <div class="hologram-card">
+        <div class="canvas-container">
+          <canvas id="nodeCanvas3D" width="130" height="130"></canvas>
+          <div class="canvas-overlay-ring"></div>
+        </div>
+        <div class="hologram-telemetry">
+          <div class="holo-value font-mono" id="pointsValue">12,450.8 <span class="holo-unit">PTS</span></div>
+          <div class="holo-label">Accumulated DePIN Telemetry</div>
+          <div class="holo-rate font-mono" id="earningRateLabel">+4.5 PTS / 3s Active Session</div>
+          <div class="epoch-countdown font-mono" id="epochCountdown">Epoch 0 closes in: 04h 18m 32s</div>
+        </div>
+      </div>
+
+      <!-- Power Button Toggle -->
+      <div class="power-strip">
+        <button id="bigPowerBtn" class="power-toggle-btn connected" title="Toggle Node Active/Standby">
           <svg class="power-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
             <line x1="12" y1="2" x2="12" y2="12"></line>
           </svg>
-          <div class="pulse-ring"></div>
         </button>
-        <div class="power-status">
-          <span id="powerStatusTitle" class="power-title">Pulse is Connected</span>
-          <span id="powerStatusSubtitle" class="power-sub">You're doing great! Keep contributing to earn.</span>
+        <div class="power-info">
+          <span id="powerStatusTitle" class="power-title text-lime">Node is Connected &amp; Mining</span>
+          <span id="powerStatusSubtitle" class="power-sub">Relaying telemetry to Creditcoin L1</span>
         </div>
       </div>
 
-      <!-- Network Quality Progress Bar -->
+      <!-- Telemetry Stats Grid -->
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-icon">⏱️</span>
+            <span class="stat-label">Session Time</span>
+          </div>
+          <span class="stat-value font-mono text-white" id="uptimeValue">11:35:06</span>
+          <span class="stat-hint text-lime">99.98% SLA Guaranteed</span>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-icon">📡</span>
+            <span class="stat-label">Relayed Data</span>
+          </div>
+          <span class="stat-value font-mono text-cyan" id="bandwidthValue">54.57 MB</span>
+          <span class="stat-hint font-mono" id="downlinkSpeedHint">Downlink: 100 Mbps</span>
+        </div>
+      </div>
+
+      <!-- Live Network Quality & Ping -->
       <div class="quality-card">
         <div class="quality-header">
-          <span>Network Quality:</span>
-          <strong id="qualityPercent" class="text-lime">98%</strong>
+          <span class="quality-title font-mono">Edge Ping &amp; Quality</span>
+          <strong id="qualityPercent" class="text-lime font-mono">98%</strong>
         </div>
         <div class="progress-track">
           <div id="qualityBar" class="progress-fill" style="width: 98%;"></div>
         </div>
-        <div class="quality-footer">
-          <span id="hwPingValue">18 ms ping</span>
-          <span>0.00% Packet Loss</span>
+        <div class="quality-footer font-mono">
+          <span id="hwPingValue">18 ms (rpc.cc3-testnet)</span>
+          <span class="text-green">0.00% Loss</span>
         </div>
       </div>
 
-      <!-- Real Machine Hardware Specs Pill -->
+      <!-- Hardware Sensor Banner -->
       <div class="hardware-banner">
         <div class="hw-item">
-          <span class="hw-label">CPU Cores</span>
-          <span class="hw-value" id="hwCoresValue">-- Cores</span>
+          <span class="hw-label font-mono">CPU</span>
+          <span class="hw-value font-mono" id="hwCoresValue">8 Cores</span>
         </div>
         <div class="hw-divider"></div>
         <div class="hw-item">
-          <span class="hw-label">RAM</span>
-          <span class="hw-value" id="hwMemoryValue">-- GB</span>
+          <span class="hw-label font-mono">RAM</span>
+          <span class="hw-value font-mono" id="hwMemoryValue">16 GB</span>
         </div>
         <div class="hw-divider"></div>
         <div class="hw-item">
-          <span class="hw-label">Accelerator</span>
-          <span class="hw-value truncate" id="hwGpuValue">WebGL</span>
+          <span class="hw-label font-mono">GPU</span>
+          <span class="hw-value font-mono truncate" id="hwGpuValue">WebGL 2.0</span>
         </div>
       </div>
 
-      <!-- Action Buttons -->
+      <!-- Actions -->
       <div class="actions">
         <button id="syncChainBtn" class="btn btn-primary">
-          <span>⚡ Sync to Creditcoin (+35 CTS)</span>
-        </button>
-        <button id="openDashboardBtn" class="btn btn-secondary">
-          <span>Desktop Dashboard ↗</span>
+          <span>⚡ Sync Proof to Creditcoin (+35 CTS)</span>
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- TAB 2: Attestcoin Light Client Daemon -->
-    <div id="tabAttestContent" class="tab-content">
-      <!-- Light Client Status Card -->
+    <!-- ========================================== -->
+    <!-- TAB 2: ATTESTCOIN 0x0FD2 DAEMON & MPT PROOFS -->
+    <!-- ========================================== -->
+    <section id="viewDaemon" class="tab-view">
       <div class="daemon-card">
         <div class="daemon-header">
           <div class="daemon-badge">
             <span class="pulse-dot"></span>
-            <span>DAEMON ACTIVE</span>
+            <span>0x0FD2 ATTEST DAEMON</span>
           </div>
-          <span class="daemon-precompile">Precompile 0x0FD2</span>
+          <span class="daemon-precompile font-mono text-lime">EVM Native</span>
         </div>
 
         <div class="daemon-stats-grid">
@@ -119,7 +164,7 @@
           </div>
           <div class="d-stat">
             <span class="d-stat-label">Proofs Audited</span>
-            <span class="d-stat-val text-cyan" id="proofsAuditedCount">1,842</span>
+            <span class="d-stat-val text-cyan font-mono" id="proofsAuditedCount">1,842</span>
           </div>
           <div class="d-stat">
             <span class="d-stat-label">MPT Validation</span>
@@ -127,73 +172,210 @@
           </div>
           <div class="d-stat">
             <span class="d-stat-label">Relay Latency</span>
-            <span class="d-stat-val">1.2s avg</span>
+            <span class="d-stat-val font-mono">1.1s avg</span>
           </div>
         </div>
       </div>
 
-      <!-- Monitored Cross-Chain Heads -->
+      <!-- Cross-Chain Monitored Heads -->
       <div class="chains-card">
-        <div class="chains-title">Monitored Header Roots</div>
+        <div class="chains-title font-mono">Monitored Header Roots</div>
         <div class="chain-row">
           <span class="chain-name">Sepolia Testnet</span>
           <span class="chain-block font-mono" id="sepoliaBlock">#7,219,842</span>
-          <span class="chain-status text-green">● Synced</span>
+          <span class="chain-status text-green">● Live</span>
         </div>
         <div class="chain-row">
           <span class="chain-name">Base Mainnet</span>
           <span class="chain-block font-mono" id="baseBlock">#21,804,119</span>
-          <span class="chain-status text-green">● Synced</span>
+          <span class="chain-status text-green">● Live</span>
         </div>
         <div class="chain-row">
           <span class="chain-name">Arbitrum One</span>
           <span class="chain-block font-mono" id="arbBlock">#274,019,233</span>
+          <span class="chain-status text-green">● Live</span>
+        </div>
+        <div class="chain-row">
+          <span class="chain-name">Creditcoin L1 (102031)</span>
+          <span class="chain-block font-mono" id="ccBlock">#1,489,102</span>
           <span class="chain-status text-green">● Synced</span>
         </div>
       </div>
 
-      <!-- Live Merkle Verification Stream -->
+      <!-- Live MPT Proof Audit Stream -->
       <div class="live-proofs-card">
         <div class="live-proofs-header">
-          <span>In-Browser Proof Audit Stream</span>
-          <span class="text-lime text-xs">Live MPT</span>
+          <span class="font-mono">In-Browser MPT Proof Stream</span>
+          <span class="text-lime text-xs font-mono">RLP Verified</span>
         </div>
         <div class="proof-stream-list" id="proofStreamList">
           <div class="stream-item">
             <div class="stream-top">
               <span class="stream-hash font-mono">0x8f2a...c419</span>
-              <span class="stream-badge text-green">VERIFIED</span>
+              <span class="stream-badge text-green font-mono">VERIFIED</span>
             </div>
-            <div class="stream-sub">Sepolia Aave V3 Repay • 2,500 USDC • RLP Root Valid</div>
+            <div class="stream-sub">Sepolia Aave V3 Repay • 2,500 USDC • Merkle Leaf Proven</div>
           </div>
           <div class="stream-item">
             <div class="stream-top">
               <span class="stream-hash font-mono">0x14d0...e89b</span>
-              <span class="stream-badge text-green">VERIFIED</span>
+              <span class="stream-badge text-green font-mono">VERIFIED</span>
             </div>
-            <div class="stream-sub">Base Compound V3 • 1.8 ETH • Merkle Leaf Proven</div>
+            <div class="stream-sub">Base Compound V3 • 1.8 ETH • State Root Valid</div>
           </div>
         </div>
       </div>
 
-      <!-- Daemon Actions -->
       <div class="actions">
         <button id="auditNowBtn" class="btn btn-primary">
-          <span>🛡️ Audit & Verify Test MPT Proof</span>
+          <span>🛡️ Audit &amp; Verify Real MPT Proof</span>
         </button>
       </div>
-    </div>
+    </section>
 
-    <!-- Live Status -->
+    <!-- ========================================== -->
+    <!-- TAB 3: WALLET AUTHENTICATION & CREDIT PASSPORT -->
+    <!-- ========================================== -->
+    <section id="viewWallet" class="tab-view">
+      <!-- Passport Score Card -->
+      <div class="passport-card">
+        <div class="pass-header">
+          <span class="pass-title">CREDIT PASSPORT (CTS)</span>
+          <span class="pass-chip font-mono">SUPER-PRIME</span>
+        </div>
+        <div class="pass-score font-mono" id="scoreValue">845 <span class="score-denom">CTS</span></div>
+        <div class="pass-status font-mono text-lime" id="scoreHint">AAA Rating • Max Borrow Power $50,000</div>
+      </div>
+
+      <!-- Real-Time Wallet Balances -->
+      <div class="balance-grid">
+        <div class="bal-card">
+          <span class="bal-label font-mono">CTC Balance</span>
+          <span class="bal-val font-mono text-cyan" id="ctcBalanceVal">1,248.50 CTC</span>
+          <span class="bal-usd font-mono">≈ $811.52 USD</span>
+        </div>
+        <div class="bal-card">
+          <span class="bal-label font-mono">cUSD Liquidity</span>
+          <span class="bal-val font-mono text-lime" id="cusdBalanceVal">4,500.00 cUSD</span>
+          <span class="bal-usd font-mono">1.00 USD peg</span>
+        </div>
+      </div>
+
+      <!-- Wallet Management & Key Authentication -->
+      <div class="wallet-auth-box">
+        <div class="auth-box-title font-mono">Wallet Key &amp; Authentication</div>
+        
+        <div class="auth-radio-group">
+          <label class="radio-label">
+            <input type="radio" name="walletType" value="demo" id="radioDemo" checked>
+            <span>Demo Super-Prime Key (0x9afB...8f07)</span>
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="walletType" value="custom" id="radioCustom">
+            <span>Custom Private Key / Address</span>
+          </label>
+        </div>
+
+        <div id="customKeyContainer" class="custom-key-row hidden">
+          <input id="customKeyInput" type="text" placeholder="0x... or 64-char hex private key" spellcheck="false" class="font-mono">
+          <button id="applyKeyBtn" class="btn-micro font-mono">Auth</button>
+        </div>
+
+        <div class="auth-action-buttons">
+          <button id="signAuthTokenBtn" class="btn btn-secondary">
+            <span>✍️ Sign OCCR Auth Token</span>
+          </button>
+          <button id="claimFaucetBtn" class="btn btn-secondary">
+            <span>🚰 Sync 100 CTC Faucet</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: DIRECT TOKEN SWAP WIDGET -->
+    <!-- ========================================== -->
+    <section id="viewSwap" class="tab-view">
+      <div class="swap-card">
+        <div class="swap-header font-mono">
+          <span>Instant Creditcoin DEX Swap</span>
+          <span class="text-lime">0.05% Fee</span>
+        </div>
+
+        <!-- From Token -->
+        <div class="swap-token-box">
+          <div class="swap-token-top">
+            <span class="swap-label font-mono">Pay</span>
+            <span class="swap-bal font-mono" id="swapFromBal">Bal: 1,248.50</span>
+          </div>
+          <div class="swap-input-row">
+            <input id="swapInputAmount" type="number" step="any" placeholder="0.0" value="50" class="font-mono swap-num-input">
+            <select id="swapFromToken" class="swap-select font-mono">
+              <option value="CTC">CTC</option>
+              <option value="cUSD">cUSD</option>
+              <option value="CTS">CTS</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Swap Direction Inverter Button -->
+        <div class="swap-divider">
+          <button id="invertSwapBtn" class="invert-btn" title="Invert Tokens">⇅</button>
+        </div>
+
+        <!-- To Token -->
+        <div class="swap-token-box">
+          <div class="swap-token-top">
+            <span class="swap-label font-mono">Receive (Estimated)</span>
+            <span class="swap-bal font-mono" id="swapToBal">Bal: 4,500.00</span>
+          </div>
+          <div class="swap-input-row">
+            <input id="swapOutputAmount" type="number" readonly placeholder="0.0" value="32.50" class="font-mono swap-num-input readonly-input">
+            <select id="swapToToken" class="swap-select font-mono">
+              <option value="cUSD" selected>cUSD</option>
+              <option value="CTC">CTC</option>
+              <option value="CTS">CTS</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Swap Rate Details -->
+        <div class="swap-details font-mono">
+          <div class="swap-detail-row">
+            <span>Rate</span>
+            <span id="swapRateLabel">1 CTC ≈ 0.65 cUSD</span>
+          </div>
+          <div class="swap-detail-row">
+            <span>Estimated Gas</span>
+            <span class="text-green">0.00012 CTC ($0.00008)</span>
+          </div>
+          <div class="swap-detail-row">
+            <span>Routing</span>
+            <span class="text-cyan">CredX Constant Product AMM</span>
+          </div>
+        </div>
+
+        <!-- Swap Action Button -->
+        <button id="executeSwapBtn" class="btn btn-primary">
+          <span>🔄 Swap CTC ➔ cUSD</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Real-time Status Notice Bar -->
     <div id="txStatus" class="tx-status hidden"></div>
 
+    <!-- Terminal Footer -->
     <footer class="footer">
-      <span class="net-indicator">●</span>
-      <span>Creditcoin Testnet • Precompile 0x0FD2</span>
+      <div class="footer-chain">
+        <span class="net-pulse">●</span>
+        <span>Creditcoin Testnet (102031)</span>
+      </div>
+      <a href="http://localhost:5175/" target="_blank" class="footer-link">Open Terminal ↗</a>
     </footer>
   </div>
 
-  <script src="../lib/ethers.umd.min.js"></script>
+  <!-- Pure Self-Contained Popup Logic (Zero CSP / eval conflicts) -->
   <script src="popup.js"></script>
 </body>
 </html>

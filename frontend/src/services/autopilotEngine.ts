@@ -476,15 +476,24 @@ export class AutopilotEngine {
     const events: EngineEvent[] = [];
     let txRef: string | null = null;
     const gate = GATES[this.config.tolerance];
+    const now = Date.now();
     try {
       const vs = await fetchYieldVaultState(this.signer.address);
       const amm = await fetchAMMState(this.signer.address);
       const depinPriceCusd = amm && amm.reserve0 > 0 && amm.reserve1 > 0 ? amm.reserve0 / amm.reserve1 : null;
 
       let depinNow = vs?.pendingRewards ?? 0;
+      if (depinNow <= 0) {
+        events.push(
+          this.tenantEvent('[HARVEST] Route execution: no pending rewards on-chain — nothing to harvest this run.', 'info', 'HARVEST', 'alpha')
+        );
+        return { events, txRef };
+      }
       if (depinNow > 0) {
         const hash = await vaultClaimRewards(this.signer);
         txRef = hash;
+        this.cooldownUntil.alpha = now + gate.cooldownMs;
+        this.pendingClaimedDepin = depinNow;
         events.push(
           this.tenantEvent(
             '[HARVEST] Route execution: claimed ' + Math.round(depinNow).toLocaleString() + ' DEPIN rewards — tx ' + hash.slice(0, 14) + '…',
@@ -521,6 +530,9 @@ export class AutopilotEngine {
           } else {
             const hash = await swapViaAMM(amountIn, amm.token1.address, this.signer.address, this.signer);
             txRef = txRef ?? hash;
+            this.cooldownUntil.gamma = now + gate.cooldownMs;
+            this.calledCapitalCusd += quotedOut;
+            this.pendingClaimedDepin = 0;
             events.push(
               this.tenantEvent(
                 '[ARBITRAGE] Route execution: swapped ' + Math.round(amountIn).toLocaleString() + ' DEPIN → ' + Math.round(quotedOut).toLocaleString() + ' cUSD — tx ' + hash.slice(0, 14) + '…',
@@ -532,6 +544,8 @@ export class AutopilotEngine {
             );
             if (quotedOut >= gate.minStakeCusd) {
               const hash2 = await vaultStake(quotedOut, this.signer);
+              this.cooldownUntil.beta = now + gate.cooldownMs;
+              this.calledCapitalCusd = 0;
               events.push(
                 this.tenantEvent(
                   '[SETTLED] Route execution: compounded ' + Math.round(quotedOut).toLocaleString() + ' cUSD into ReputationYieldVault — tx ' + hash2.slice(0, 14) + '…',

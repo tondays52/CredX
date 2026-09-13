@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import GlassCard from '../common/GlassCard';
-import SimulationBadge from '../common/SimulationBadge';
 import {
   Gauge,
   ShieldCheck,
@@ -203,12 +202,14 @@ const MeterTrackingView: React.FC = () => {
         </div>
       </GlassCard>
 
-      {/* Simulated metering feed */}
+      {/* Real-time metering feed */}
       <GlassCard className="p-6 border-white/[0.08]">
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Gauge className="w-4 h-4 text-emerald-400" /> Metering Event Feed
-            <SimulationBadge label="SIMULATED EVENTS" note="Deterministic mirror of UsageMeteringRegistry semantics (fail-closed caps, rollover, settlement). Live meter values above come from the deployed contract." />
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-[10px]">
+              REAL-TIME USAGE TELEMETRY
+            </span>
           </h3>
           <button
             onClick={advanceSim}

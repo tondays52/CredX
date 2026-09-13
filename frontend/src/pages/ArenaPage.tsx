@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import GlassCard from '../components/common/GlassCard';
 import ArenaChart from '../components/arena/ArenaChart';
 import OrderTicket from '../components/arena/OrderTicket';
@@ -291,10 +291,12 @@ export const ArenaPage: React.FC = () => {
   }, [round]);
 
   useEffect(() => {
-    if (round) {
+    if (round && round.strikePrice > 0) {
       setStrikePrice(normalizeStrike(round.strikePrice));
+    } else if (strikePrice === 0 && currentPrice > 0) {
+      setStrikePrice(currentPrice);
     }
-  }, [round]);
+  }, [round, currentPrice, strikePrice]);
 
   useEffect(() => {
     let isMounted = true;
@@ -443,9 +445,10 @@ export const ArenaPage: React.FC = () => {
 
   const handleSelectAsset = (sym: AssetSymbol) => {
     setSelectedAsset(sym);
-    const initialPrice = ACCURATE_BASE_PRICES[sym] || currentAssetConfig.basePrice;
+    const initialPrice = ACCURATE_BASE_PRICES[sym] || (ASSETS_REGISTRY[sym]?.basePrice || 100);
     setCurrentPrice(initialPrice);
     currentPriceRef.current = initialPrice;
+    setStrikePrice(initialPrice);
   };
 
   const handleSelectTimeframe = (tf: Timeframe) => {

@@ -24,6 +24,8 @@ export interface AnchorResult {
   txHash: string | null;
 }
 
+export type UsePulseLive = ReturnType<typeof usePulseLive>;
+
 function usePulseLive() {
   const { active, getSigner, openPicker, activeSignerLabel } = useWalletPicker();
   const account = active?.address ?? DEMO_ACCOUNT;
@@ -55,7 +57,9 @@ function usePulseLive() {
       const [st, my, lg] = await Promise.all([fetchPulseState(), fetchPulseNode(account), fetchPulseLedger(50)]);
       setState(st);
       setNode(my);
-      setLedger(lg);
+      // A transient RPC / getLogs failure resolves the ledger as []; keep the
+      // last good read so an intermittent blip never blanks the charts/feed.
+      setLedger((prev) => (lg.length > 0 ? lg : prev.length > 0 ? prev : lg));
     } catch (err: any) {
       setError(err?.message || 'Failed to read PulseBandwidthRegistry');
     } finally {

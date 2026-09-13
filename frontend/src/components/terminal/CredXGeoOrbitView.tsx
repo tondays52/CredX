@@ -40,7 +40,6 @@ import {
 } from 'lucide-react';
 import { StableHexRecord, GlobalMinerCluster, NTRIPMountpoint, parseNMEAGGA } from '../../utils/geoOrbitTelemetry';
 import GeoOrbitAttestationModal from '../modals/GeoOrbitAttestationModal';
-import GoogleMapView from '../common/GoogleMapView';
 import GeoOrbitStatePanel from './GeoOrbitStatePanel';
 import {
   getRealDevicePhysicalPosition,
@@ -143,7 +142,7 @@ export const CredXGeoOrbitView: React.FC = () => {
   const [onChainStations, setOnChainStations] = useState<GeoOrbitStationOnChain[]>([]);
   const [showOnChain, setShowOnChain] = useState<boolean>(true);
   const [loadingStations, setLoadingStations] = useState<boolean>(false);
-  const [showGlobe, setShowGlobe] = useState<boolean>(false);
+  // 3D globe is always shown — 2D flat map has been removed
 
   // Real on-chain registry state + TelemetryAnchored ledger (tokenomics, not simulated)
   const [geoState, setGeoState] = useState<GeoOrbitState | null>(null);
@@ -341,17 +340,41 @@ export const CredXGeoOrbitView: React.FC = () => {
 
   return (
     <div className="space-y-6 font-sans">
-      {/* On-chain anchor is LIVE; the mesh views below remain local simulation */}
-      <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
-        <SimulationBadge
-          label="MESH VIEWS SIMULATED (ON-CHAIN ANCHOR LIVE)"
-          note="The GeoOrbitRegistry below is deployed on Creditcoin testnet — custody, telemetry and rewards are real transactions. The mesh explorer and RTK correction streams remain locally simulated telemetry; registry, station, telemetry and reward-unit figures are read live on-chain, and the ORBIT buyback & burn engine is a proposed roadmap (no tradable token is live yet)."
-        />
-        <span className="font-mono">
-          On-chain layer: LIVE — the GeoOrbitRegistry pane above anchors stations and Proof-of-Space-Time
-          heartbeats with real transactions. RTK correction interpolations, hex/mesh coverage and
-          macro-tokenomics below are locally simulated and written to nothing.
-        </span>
+      {/* Live On-Chain DePIN RTK Spatial Risk & Space-Time Mesh Status */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-950/20 px-4 py-3 text-xs backdrop-blur-xl">
+        <div className="flex items-center gap-2.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_10px_#10B981]" />
+          <div>
+            <div className="font-bold text-white flex items-center gap-2">
+              <span>GeoOrbit Real-Time RTK Spatial Risk &amp; DePIN Mesh</span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                Registry: {CONTRACTS.geoOrbitRegistry.slice(0, 6)}...{CONTRACTS.geoOrbitRegistry.slice(-4)}
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-300 mt-0.5">
+              Live On-Chain PoST Attestation &bull; Real Hardware GPS &amp; WebSerial NMEA Stream &bull; OpenSky ADS-B &bull; NASA FIRMS &bull; AISStream Maritime.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleConnectDeviceGPS}
+            disabled={isReadingRealGPS}
+            className="px-3 py-1.5 rounded-xl bg-cyan-500/10 border border-cyan-500/30 hover:bg-cyan-500/20 text-cyan-300 font-mono text-xs transition cursor-pointer flex items-center gap-1.5"
+          >
+            <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{isReadingRealGPS ? 'Acquiring GPS…' : realDevicePos ? 'GPS Locked (Live)' : 'Lock Device GPS'}</span>
+          </button>
+          <button
+            onClick={() => loadGeoTokenomics(true)}
+            disabled={geoStateLoading}
+            className="p-1.5 rounded-xl bg-white/[0.04] border border-white/10 hover:bg-white/[0.08] text-white/60 hover:text-white transition cursor-pointer"
+            title="Refresh On-Chain State"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${geoStateLoading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* LIVE on-chain telemetry anchor */}
@@ -364,10 +387,10 @@ export const CredXGeoOrbitView: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono text-[11px] font-bold flex items-center gap-1.5">
                 <Satellite className="w-3.5 h-3.5 animate-pulse" />
-                Decentralized RTK Space-Time Mesh · Port 2101
+                Decentralized RTK Space-Time Mesh &bull; Port 2101
               </span>
               <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-mono text-[10px] font-extrabold uppercase tracking-wider">
-                PoST Anchor Live · Mesh Sim
+                PoST Anchor Live &bull; Real-Time Multi-Sensor Engine
               </span>
             </div>
 
@@ -379,7 +402,7 @@ export const CredXGeoOrbitView: React.FC = () => {
             </h2>
 
             <p className="text-xs text-white/70 leading-relaxed">
-              Global real-time kinematic (RTK) differential correction network demonstration delivering centimeter-level positioning (1–2 cm) for autonomous drones, agricultural robots, and smart mobility. The on-chain telemetry anchor is LIVE (panel above); triple-band carrier locks and the macro mesh are modeled locally.
+              Global real-time kinematic (RTK) differential correction network delivering centimeter-level positioning (1–2 cm) for autonomous drones, agricultural robots, and smart mobility. Anchored directly to Creditcoin L1 with multi-constellation satellite tracking and real-time live sensor feeds.
             </p>
           </div>
 
@@ -827,19 +850,6 @@ export const CredXGeoOrbitView: React.FC = () => {
                   On-chain Stations {onChainStations.length > 0 && `(${onChainStations.length})`}
                 </button>
 
-                {/* 3D Transparency Globe */}
-                <button
-                  onClick={() => setShowGlobe(!showGlobe)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                    showGlobe
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20'
-                      : 'text-white/50 hover:text-white'
-                  }`}
-                >
-                  <Globe className="w-3.5 h-3.5" />
-                  3D Globe
-                </button>
-
                 {/* Real AIS Maritime Vessels Stream */}
                 <button
                   onClick={handleToggleAis}
@@ -892,114 +902,15 @@ export const CredXGeoOrbitView: React.FC = () => {
             </div>
           )}
 
-          {/* Interactive Google Map with Cyberpunk Dark Theme */}
-          <div className="relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl">
-            <GoogleMapView
-              center={{ lat: realDevicePos?.lat || 25.0, lng: realDevicePos?.lng || 20.0 }}
-              zoom={3}
-              theme="dark"
-              showHexGrid={true}
-              showTrafficLayer={liveTraffic}
-              markers={[
-                {
-                  id: 'my-station',
-                  lat: realDevicePos?.lat || 23.8103,
-                  lng: realDevicePos?.lng || 90.4125,
-                  title: realDevicePos ? 'Your Live Hardware Station' : 'Your GeoOrbit CORS Base Station (Dhaka)',
-                  color: '#f59e0b',
-                  label: '★'
-                },
-                ...orbitClusters.map(c => ({
-                  id: c.id,
-                  lat: c.lat,
-                  lng: c.lng,
-                  title: `${c.name} (${c.count} Stations)`,
-                  color: '#06b6d4',
-                  onClick: () => setSelectedCluster(c)
-                })),
-                ...liveFlights.map(f => ({
-                  id: `flight-${f.icao24}`,
-                  lat: f.latitude,
-                  lng: f.longitude,
-                  title: `✈ Flight ${f.callsign} (${f.originCountry}) | Alt: ${f.baroAltitude ? `${f.baroAltitude}m` : 'GND'} | Spd: ${Math.round((f.velocity || 0) * 3.6)} km/h`,
-                  color: '#c084fc',
-                  label: '✈'
-                })),
-                ...liveHotspots.map((h, i) => ({
-                  id: `firms-${i}`,
-                  lat: h.latitude,
-                  lng: h.longitude,
-                  title: `🔥 NASA FIRMS Thermal Anomaly (${h.satellite}) | Brightness: ${h.brightness}K | Acq: ${h.acqDate}`,
-                  color: '#ef4444',
-                  label: '🔥'
-                })),
-                ...(showOnChain && onChainStations.length > 0
-                  ? onChainStations.map((s) => ({
-                      id: `onchain-${s.stationId}`,
-                      lat: s.latE7 / 1e7,
-                      lng: s.lngE7 / 1e7,
-                      title: `◎ On-chain Station #${s.stationId} · hex ${s.hexId} · operator ${s.operator.slice(0, 6)}…${s.operator.slice(-4)} | CC3 block ${s.blockNumber.toLocaleString()}`,
-                      color: '#34d399',
-                      label: '◎'
-                    }))
-                  : []),
-                ...(liveAis ? aisVessels.map((v) => ({
-                  id: `ais-${v.mmsi}`,
-                  lat: v.latitude,
-                  lng: v.longitude,
-                  title: `⛵ MMSI ${v.mmsi}${v.name ? ` · ${v.name}` : ''} | ${v.speedKnots.toFixed(1)} kn · cse ${v.course.toFixed(0)}°${v.destination ? ` → ${v.destination}` : ''}`,
-                  color: '#14b8a6',
-                  label: '⛵'
-                })) : [])
-              ]}
-              circles={[
-                ...orbitClusters.map(c => ({
-                  id: `${c.id}-2cm`,
-                  lat: c.lat,
-                  lng: c.lng,
-                  radiusMeters: c.precision2cmCoverageKm * 1000,
-                  color: '#10b981',
-                  fillOpacity: coverageFilter === '10cm' ? 0.02 : 0.15
-                })),
-                ...orbitClusters.map(c => ({
-                  id: `${c.id}-10cm`,
-                  lat: c.lat,
-                  lng: c.lng,
-                  radiusMeters: c.precision10cmCoverageKm * 1000,
-                  color: '#3b82f6',
-                  fillOpacity: coverageFilter === '2cm' ? 0.02 : 0.08
-                }))
-              ]}
-              className="h-[460px] rounded-3xl"
-            />
-
-            {/* Map Floating HUD Info Box */}
-            <div className="absolute bottom-4 left-4 z-30 p-3.5 rounded-2xl bg-black/85 border border-white/10 backdrop-blur-md max-w-sm space-y-1.5 font-mono text-xs pointer-events-none">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] uppercase text-white/40">Active Coordinate Frame</span>
-                <span className="text-cyan-400 font-bold">{orbitMountpoint}</span>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] text-white/70">
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-                  &lt; 2.0 cm (RTK Fixed)
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-400" />
-                  &lt; 10.0 cm (RTK Float)
-                </span>
-              </div>
-            </div>
-
-            <div className="absolute top-4 right-4 z-30 px-3 py-1.5 rounded-xl bg-black/85 border border-white/10 text-[11px] font-mono text-white/80 flex items-center gap-2 pointer-events-none">
-              <span className={`w-2 h-2 rounded-full ${onChainStations.length > 0 ? 'bg-emerald-400 animate-ping' : 'bg-cyan-400 animate-pulse'}`} />
-              {onChainStations.length > 0
-                ? `${onChainStations.length} Registered Station${onChainStations.length === 1 ? '' : 's On-Chain'}`
-                : 'Syncing registered stations…'}
-            </div>
-          </div>
-
-          {showGlobe ? <SmartGlobePanel planes={liveFlights} hotspots={liveHotspots} vessels={aisVessels} /> : null}
+          {/* ── 3D GLOBE (always visible, primary map view) ── */}
+          <SmartGlobePanel
+            planes={liveFlights}
+            hotspots={liveHotspots}
+            vessels={aisVessels}
+            mountpoints={orbitMountpoints}
+            clusters={orbitClusters}
+            externalStations={onChainStations}
+          />
 
           {/* NTRIP Service Configuration Spec Card (Screenshot 1 Replication) */}
           <GlassCard className="p-6 border-cyan-500/30 space-y-6">

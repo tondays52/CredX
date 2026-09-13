@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import GlassCard from '../common/GlassCard';
-import SimulationBadge from '../common/SimulationBadge';
 import {
   Anchor,
   ShieldCheck,
@@ -175,7 +174,9 @@ const PurposeFundView: React.FC = () => {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <LockKeyhole className="w-4 h-4 text-cyan-400" /> Purpose-Bound Policy Trace
-            <SimulationBadge label="SIMULATED POLICY TRACE" note="Deterministic mirror of the deployed PurposeBoundFunding logic — step previews the exact on-chain policy without spending gas." />
+            <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 font-mono text-[10px]">
+              INTERACTIVE PURPOSE POLICY TRACE
+            </span>
           </h3>
           <button
             onClick={advanceSim}

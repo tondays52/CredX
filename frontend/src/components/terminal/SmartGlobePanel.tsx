@@ -1,17 +1,21 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import GlassCard from '../common/GlassCard';
-import { Globe, Satellite, Plane, Flame, RefreshCw, AlertTriangle, Loader2, Sailboat } from 'lucide-react';
+import { Globe, Satellite, Plane, Flame, RefreshCw, AlertTriangle, Loader2, Sailboat, Radio, MapPin } from 'lucide-react';
 import {
   GeoOrbitStationOnChain,
   fetchGeoOrbitStations,
 } from '../../services/credXService';
 import { LiveFlightData, LiveHazardHotspot, LiveVesselData } from '../../utils/realGeoDataFeeds';
+import { NTRIPMountpoint, GlobalMinerCluster } from '../../utils/geoOrbitTelemetry';
 
 interface SmartGlobePanelProps {
   planes: LiveFlightData[];
   hotspots: LiveHazardHotspot[];
   vessels: LiveVesselData[];
+  mountpoints?: NTRIPMountpoint[];
+  clusters?: GlobalMinerCluster[];
+  externalStations?: GeoOrbitStationOnChain[];
 }
 
 const DEG = Math.PI / 180;
@@ -69,7 +73,10 @@ const ENTITY_COLORS: Record<string, string> = {
   station: '#34d399',
   plane: '#c084fc',
   fire: '#ef4444',
-  vessel: '#14b8a6'
+  vessel: '#14b8a6',
+  mountpoint: '#f59e0b',
+  cluster: '#38bdf8',
+  onchain: '#a78bfa'
 };
 
 function makeGlowTexture(color: string): THREE.CanvasTexture {
@@ -96,7 +103,7 @@ const glowTextureCache = new Map<string, THREE.CanvasTexture>();
  * objects only: on-chain GeoOrbit stations + OpenSky ADS-B aircraft + NASA
  * FIRMS thermal anomalies + AIS vessels. No simulated tracks.
  */
-const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, vessels }) => {
+const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, vessels, mountpoints = [], clusters = [], externalStations = [] }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
@@ -112,6 +119,15 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  // NTRIP mountpoint coordinates (sampled from GEORBIT_MOUNTPOINTS via clusters)
+  const MOUNTPOINT_COORDS: Record<string, { lat: number; lng: number }> = {
+    AUTO: { lat: 51.9244, lng: 4.4777 },        // Rotterdam — auto-select
+    AUTO_ITRF2020: { lat: 1.3521, lng: 103.82 }, // Singapore — global
+    AUTO_WGS84: { lat: 37.5665, lng: 126.978 },  // Seoul — dynamic
+    AUTO_ITRF2014: { lat: 35.6762, lng: 139.65 },// Tokyo — legacy
+    BRDC: { lat: 39.8283, lng: -77.0369 },        // US East — broadcast
+  };
 
   const renderLayers = useCallback(() => {
     const env = entityGroupRef.current;
@@ -135,12 +151,31 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
       sprite.scale.setScalar(size);
       env.add(sprite);
     };
-    for (const s of stations)
+
+    // On-chain registered stations (from registry logs)
+    const allStations = externalStations.length > 0 ? externalStations : stations;
+    for (const s of allStations)
       add(s.latE7 / 1e7, s.lngE7 / 1e7, 0, ENTITY_COLORS.station, 0.032, `◎ STN#${s.stationId} · hex ${s.hexId}`);
-    for (const p of planes) add(p.latitude, p.longitude, 0, ENTITY_COLORS.plane, 0.026, `✈ ${p.callsign || p.icao24}`);
-    for (const h of hotspots) add(h.latitude, h.longitude, 0, ENTITY_COLORS.fire, 0.02, `🔥 ${h.satellite}`);
-    for (const v of vessels) add(v.latitude, v.longitude, 0, ENTITY_COLORS.vessel, 0.022, `⛵ ${v.name || v.mmsi}`);
-  }, [stations, planes, hotspots, vessels]);
+
+    // NTRIP Mountpoints
+    for (const mp of mountpoints) {
+      const coord = MOUNTPOINT_COORDS[mp.name];
+      if (coord) add(coord.lat, coord.lng, 0.008, ENTITY_COLORS.mountpoint, 0.038, `📡 NTRIP: ${mp.name} · ${mp.format} · Port ${mp.port}`);
+    }
+
+    // Global Miner Clusters
+    for (const c of clusters)
+      add(c.lat, c.lng, 0.004, ENTITY_COLORS.cluster, 0.044, `📶 ${c.name} · ${c.count} stations · 2cm: ${c.precision2cmCoverageKm}km`);
+
+    // ADS-B Aircraft
+    for (const p of planes) add(p.latitude, p.longitude, 0.012, ENTITY_COLORS.plane, 0.026, `✈ ${p.callsign || p.icao24} (${p.originCountry}) Alt: ${p.baroAltitude ? p.baroAltitude + 'm' : 'GND'}`);
+
+    // NASA FIRMS Thermal Anomalies
+    for (const h of hotspots) add(h.latitude, h.longitude, 0, ENTITY_COLORS.fire, 0.02, `🔥 ${h.satellite} · Brightness: ${h.brightness}K`);
+
+    // AIS Maritime Vessels
+    for (const v of vessels) add(v.latitude, v.longitude, 0, ENTITY_COLORS.vessel, 0.022, `⛵ ${v.name || v.mmsi} · ${v.speedKnots.toFixed(1)} kn`);
+  }, [stations, externalStations, mountpoints, clusters, planes, hotspots, vessels]);
 
   useEffect(() => {
     renderLayers();
@@ -315,15 +350,17 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
     dragRef.current = null;
   };
 
+  const displayStations = externalStations.length > 0 ? externalStations : stations;
+
   return (
     <GlassCard className="p-5 border-cyan-500/30 bg-gradient-to-br from-sky-950/20 via-black to-emerald-950/20">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-white font-black text-sm flex items-center gap-2 tracking-tight">
-            <Globe className="w-4 h-4 text-cyan-400" /> GeoOrbit 3D Transparency Globe
+            <Globe className="w-4 h-4 text-cyan-400" /> GeoOrbit 3D Network Globe
           </h3>
           <p className="text-[11px] text-white/50 font-mono mt-0.5">
-            Live objects only: on-chain GNSS stations · ADS-B aircraft · FIRMS thermal anomalies (keyless three.js globe)
+            Live network: NTRIP mountpoints · miner clusters · on-chain stations · ADS-B aircraft · FIRMS anomalies · AIS vessels
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -331,14 +368,14 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
             onClick={refreshStations}
             className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5"
           >
-            <RefreshCw className="w-3 h-3" /> Stations ({stations.length})
+            <RefreshCw className="w-3 h-3" /> Sync ({displayStations.length})
           </button>
         </div>
       </div>
 
       <div
         className="relative mt-3 rounded-2xl overflow-hidden border border-white/10 bg-black/60"
-        style={{ height: 540 }}
+        style={{ height: 560 }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -353,23 +390,49 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
             <div ref={containerRef} className="absolute inset-0" />
             {!ready && (
               <div className="absolute inset-0 flex items-center justify-center gap-2 text-cyan-300 font-mono text-xs">
-                <Loader2 className="w-4 h-4 animate-spin" /> booting globe…
+                <Loader2 className="w-4 h-4 animate-spin" /> Initializing 3D globe…
               </div>
             )}
             {tooltip && (
               <div
-                className="absolute z-20 pointer-events-none px-2 py-1 rounded bg-black/85 border border-white/15 text-[10px] font-mono text-white/90 whitespace-nowrap"
+                className="absolute z-20 pointer-events-none px-2 py-1 rounded bg-black/85 border border-white/15 text-[10px] font-mono text-white/90 whitespace-nowrap max-w-xs"
                 style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
               >
                 {tooltip.text}
               </div>
             )}
+            {/* Legend overlay */}
+            <div className="absolute bottom-3 left-3 z-10 flex flex-col gap-1 pointer-events-none">
+              <div className="flex flex-wrap gap-2">
+                {mountpoints.length > 0 && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-black/70 border border-amber-500/30 text-[9px] font-mono text-amber-300">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> {mountpoints.length} Mountpoints
+                  </span>
+                )}
+                {clusters.length > 0 && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-black/70 border border-sky-500/30 text-[9px] font-mono text-sky-300">
+                    <span className="w-2 h-2 rounded-full bg-sky-400 inline-block" /> {clusters.length} Clusters
+                  </span>
+                )}
+                {displayStations.length > 0 && (
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-black/70 border border-emerald-500/30 text-[9px] font-mono text-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> {displayStations.length} On-chain
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Drag hint */}
+            <div className="absolute top-3 left-3 z-10 px-2 py-1 rounded bg-black/60 border border-white/10 text-[9px] font-mono text-white/40 pointer-events-none">
+              Drag to rotate · Hover to inspect
+            </div>
           </>
         )}
       </div>
 
       <div className="mt-2.5 flex flex-wrap items-center gap-3 text-[10px] font-mono text-white/45">
-        <span className="flex items-center gap-1.5"><Satellite className="w-3 h-3 text-emerald-400" /> {stations.length} on-chain stations</span>
+        <span className="flex items-center gap-1.5"><Radio className="w-3 h-3 text-amber-400" /> {mountpoints.length} NTRIP mountpoints</span>
+        <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3 text-sky-400" /> {clusters.length} miner clusters</span>
+        <span className="flex items-center gap-1.5"><Satellite className="w-3 h-3 text-emerald-400" /> {displayStations.length} on-chain stations</span>
         <span className="flex items-center gap-1.5"><Plane className="w-3 h-3 text-purple-400" /> {planes.length} ADS-B aircraft</span>
         <span className="flex items-center gap-1.5"><Flame className="w-3 h-3 text-red-400" /> {hotspots.length} thermal anomalies</span>
         <span className="flex items-center gap-1.5"><Sailboat className="w-3 h-3 text-teal-400" /> {vessels.length} AIS vessels</span>

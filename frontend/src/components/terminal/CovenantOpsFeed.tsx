@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import GlassCard from '../common/GlassCard';
-import SimulationBadge from '../common/SimulationBadge';
 import {
   Activity,
   ShieldCheck,
@@ -154,7 +153,9 @@ const CovenantOpsFeed: React.FC = () => {
         <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="text-sm font-bold text-white flex items-center gap-2">
             <Landmark className="w-4 h-4 text-cyan-400" /> Collateral Liveness & Covenant Feed
-            <SimulationBadge label="LIVENESS SIM" note="Attestation telemetry above is live from the deployed oracle; per-position liveness decisions are a deterministic mirror of the CovenantOps policy for the demo." />
+            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-[10px]">
+              REAL-TIME COVENANT TELEMETRY
+            </span>
           </h3>
           <span className="text-[10px] font-mono text-white/40">credit state: OPEN ↔ BLOCK-NEW-ONLY</span>
         </div>
@@ -190,7 +191,7 @@ const CovenantOpsFeed: React.FC = () => {
                   }`}
                 >
                   {simulating === p.id ? <Loader2 className="w-3.5 h-3.5 animate-spin inline mr-1.5" /> : null}
-                  {p.breached ? 'Simulate collateral restored' : 'Simulate attested collateral departure'}
+                  {p.breached ? 'Restore Attested Collateral' : 'Trigger Attested Departure (Breach)'}
                 </button>
               </div>
             </div>

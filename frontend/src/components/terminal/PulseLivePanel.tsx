@@ -15,19 +15,25 @@ import {
   Activity,
   Wallet,
 } from 'lucide-react';
-import usePulseLive from '../../hooks/usePulseLive';
 import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
+import type { UsePulseLive } from '../../hooks/usePulseLive';
 
 const fmtUnits = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 0 });
 const shortAddr = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
-const PulseLivePanel: React.FC = () => {
+interface PulseLivePanelProps {
+  /** Single on-chain hook instance owned by the parent DePIN tab, so the
+   *  registry state and settlement ledger are shared and never diverge. */
+  live: UsePulseLive;
+}
+
+const PulseLivePanel: React.FC<PulseLivePanelProps> = ({ live }) => {
   const {
     state, node, ledger, loading, busy, error, lastTx, txLog,
     unpaid, networkQualityPct, ledgerGB, activeSignerLabel, openPicker,
     register, submit, claim, refresh,
     contract,
-  } = usePulseLive();
+  } = live;
 
   const [tag, setTag] = useState('pulse-demo');
   const [mb, setMb] = useState(50000);

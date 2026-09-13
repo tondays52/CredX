@@ -1,19 +1,29 @@
 {
   "manifest_version": 3,
-  "name": "CredX Virtual Node & Attestcoin Daemon",
-  "version": "1.2.0",
-  "description": "Creditcoin DePIN Virtual Node & Attestcoin Light Client Daemon — Share telemetry and cryptographically audit cross-chain Merkle proofs directly in-browser.",
+  "name": "CredX Quantum Node & Credit Passport",
+  "version": "2.0.0",
+  "description": "Creditcoin L1 DePIN Virtual Node, 0x0FD2 Attestcoin Daemon & Cryptographic Credit Passport — Real-time telemetry, 3D holographic mesh, and in-browser ZK Merkle audits.",
   "permissions": [
     "storage",
     "alarms"
+  ],
+  "host_permissions": [
+    "https://rpc.cc3-testnet.creditcoin.network/*"
   ],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
     "default_popup": "popup/popup.html",
-    "default_title": "CredX Virtual Node"
+    "default_title": "CredX Quantum Node & Passport"
   },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",

@@ -23,7 +23,9 @@ import {
   CheckCircle2,
   AlertCircle,
   CandlestickChart,
-  LineChart
+  LineChart,
+  Lock,
+  Compass
 } from 'lucide-react';
 
 interface ArenaChartProps {
@@ -52,7 +54,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
   assetPair,
   binanceSymbol,
   currentPrice,
-  strikePrice,
+  strikePrice: initialStrikePrice,
   timeRemaining,
   round,
   timeframe,
@@ -75,6 +77,9 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
 
   const [chartMode, setChartMode] = useState<'CANDLE' | 'LINE'>('CANDLE');
   const [axisPosition, setAxisPosition] = useState<'LEFT' | 'RIGHT'>('LEFT');
+
+  // Fallback strike price if 0
+  const effectiveStrikePrice = initialStrikePrice > 0 ? initialStrikePrice : (currentPrice > 0 ? currentPrice : ACCURATE_BASE_PRICES[asset] || 100);
 
   const [technicalSignals, setTechnicalSignals] = useState<TechnicalSignals>({
     rsi: 54.2,
@@ -104,14 +109,12 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     return val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // 1. Re-seed clean candles whenever asset or timeframe changes (Prevents cross-asset cliff bug!)
+  // 1. Re-seed clean candles whenever asset or timeframe changes
   useEffect(() => {
     lastAssetRef.current = asset;
 
-    // Use currentPrice if valid for current asset, else accurate base price
     let base = currentPrice > 0 ? currentPrice : (ACCURATE_BASE_PRICES[asset] || 100);
     const expectedBase = ACCURATE_BASE_PRICES[asset] || 100;
-    // Guard against stale cross-asset price
     if (Math.abs(base - expectedBase) / expectedBase > 0.5) {
       base = expectedBase;
     }
@@ -134,10 +137,8 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
 
     const lastCandle = candles[candles.length - 1];
 
-    // Check if price belongs to current asset scale
     const pctDiff = Math.abs(currentPrice - lastCandle.close) / (lastCandle.close || 1);
     if (pctDiff > 0.35) {
-      // In-flight asset switch, ignore rogue tick
       return;
     }
 
@@ -149,7 +150,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     if (timeframe === '1d') candleIntervalMs = 3600 * 1000;
 
     if (now - lastCandle.time >= candleIntervalMs) {
-      // Push new forming candle
       const newCandle: CandleBar = {
         time: now,
         open: lastCandle.close,
@@ -164,21 +164,19 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         candles.shift();
       }
     } else {
-      // Update forming candle
       lastCandle.close = currentPrice;
       lastCandle.high = Math.max(lastCandle.high, currentPrice);
       lastCandle.low = Math.min(lastCandle.low, currentPrice);
       lastCandle.isUp = lastCandle.close >= lastCandle.open;
     }
 
-    // Recalculate MACD & signals
     macdRef.current = calculateMACDSeries(candles);
     const closes = candles.map((c) => c.close);
     const sigs = calculateTechnicalSignals(closes);
     setTechnicalSignals(sigs);
   }, [currentPrice, timeframe]);
 
-  // 3. TradingView-Grade 60FPS Canvas Render Loop (Candlesticks + MACD Sub-Chart + Scales)
+  // 3. TradingView-Grade 60FPS Canvas Render Loop
   useEffect(() => {
     let phase = 0;
 
@@ -213,13 +211,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         return;
       }
 
-      // Layout Dimensions:
-      // When axisPosition === 'LEFT':
-      // - Left Price Scale: 0 to scaleWidth (94px)
-      // - Chart Area: scaleWidth to width
-      // When axisPosition === 'RIGHT':
-      // - Chart Area: 0 to width - scaleWidth
-      // - Right Price Scale: width - scaleWidth to width
       const scaleWidth = 94;
       const chartStartX = axisPosition === 'LEFT' ? scaleWidth : 0;
       const chartEndX = axisPosition === 'LEFT' ? width : width - scaleWidth;
@@ -234,9 +225,9 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       // ─── A. PRICE RANGE & PROJECTIONS ───
       const allHighs = candles.map((c) => c.high);
       const allLows = candles.map((c) => c.low);
-      if (strikePrice > 0) {
-        allHighs.push(strikePrice);
-        allLows.push(strikePrice);
+      if (effectiveStrikePrice > 0) {
+        allHighs.push(effectiveStrikePrice);
+        allLows.push(effectiveStrikePrice);
       }
       if (currentPrice > 0) {
         allHighs.push(currentPrice);
@@ -254,11 +245,9 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.fillStyle = '#060a0f';
       ctx.fillRect(0, 0, width, height);
 
-      // Scale background subtle distinction
       ctx.fillStyle = '#090e15';
       ctx.fillRect(scaleStartX, 0, scaleWidth, height);
 
-      // Scale Separator Border
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
       ctx.lineWidth = 1;
       ctx.beginPath();
@@ -267,15 +256,12 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.lineTo(sepX, height);
       ctx.stroke();
 
-      // Grid Lines
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
-      ctx.lineWidth = 1;
-
-      // Vertical Grid Lines
       const candleSlotWidth = chartWidth / candles.length;
       candles.forEach((c, i) => {
         if (i % 6 === 0) {
           const x = chartStartX + i * candleSlotWidth + candleSlotWidth / 2;
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+          ctx.lineWidth = 1;
           ctx.beginPath();
           ctx.moveTo(x, 0);
           ctx.lineTo(x, timeAxisTop);
@@ -283,19 +269,18 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         }
       });
 
-      // Horizontal Grid Lines & Y-Axis Labels
       const gridSteps = 6;
       for (let i = 0; i <= gridSteps; i++) {
         const gridPrice = minPrice + (i / gridSteps) * priceRange;
         const y = getPriceY(gridPrice);
 
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+        ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(chartStartX, y);
         ctx.lineTo(chartEndX, y);
         ctx.stroke();
 
-        // Y-axis label in Price Scale Margin (Matches user reference image 2)
         ctx.fillStyle = '#64748b';
         ctx.font = '10px monospace';
         if (axisPosition === 'LEFT') {
@@ -307,7 +292,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         }
       }
 
-      // Price Scale Top Header ("USD" as shown in user's image)
       ctx.fillStyle = '#94a3b8';
       ctx.font = 'bold 10px monospace';
       if (axisPosition === 'LEFT') {
@@ -331,7 +315,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         18
       );
 
-      // Real-Time OHLC Bar
       const chgColor = last.isUp ? '#10b981' : '#f43f5e';
       ctx.font = '10px monospace';
       ctx.fillStyle = '#64748b';
@@ -354,32 +337,92 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.fillStyle = chgColor;
       ctx.fillText(formatPriceValue(last.close), overlayLeft + 290, 34);
 
-      // ─── D. STRIKE PRICE REFERENCE LINE & SCALE PILL ───
-      if (strikePrice > 0) {
-        const strikeY = getPriceY(strikePrice);
-        ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([5, 4]);
+      // ─── D. VERTICAL ROUND START / ORIGIN LOCK LINE ───
+      // Mark round start at 16 candles back (fixed epoch start line on canvas)
+      const startCandleIdx = Math.max(4, candles.length - 16);
+      const startOriginX = chartStartX + startCandleIdx * candleSlotWidth + candleSlotWidth / 2;
+
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.moveTo(startOriginX, 42);
+      ctx.lineTo(startOriginX, mainHeight);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Start Origin Badge
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.2)';
+      ctx.strokeStyle = 'rgba(56, 189, 248, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.roundRect(startOriginX - 44, 46, 88, 18, 4);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = '#38bdf8';
+      ctx.font = 'bold 8.5px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText('ROUND START', startOriginX, 58);
+
+      // ─── E. HORIZONTAL STRIKE / STARTING PRICE REFERENCE LINE ───
+      if (effectiveStrikePrice > 0) {
+        const strikeY = getPriceY(effectiveStrikePrice);
+
+        // Shaded Target Payoff Corridor if user has an active bet
+        if (userBet) {
+          if (userBet.direction === 'UP') {
+            const gradUp = ctx.createLinearGradient(0, 0, 0, strikeY);
+            gradUp.addColorStop(0, 'rgba(16, 185, 129, 0.12)');
+            gradUp.addColorStop(1, 'rgba(16, 185, 129, 0.01)');
+            ctx.fillStyle = gradUp;
+            ctx.fillRect(startOriginX, 0, chartEndX - startOriginX, strikeY);
+          } else {
+            const gradDown = ctx.createLinearGradient(0, strikeY, 0, mainHeight);
+            gradDown.addColorStop(0, 'rgba(244, 63, 94, 0.01)');
+            gradDown.addColorStop(1, 'rgba(244, 63, 94, 0.12)');
+            ctx.fillStyle = gradDown;
+            ctx.fillRect(startOriginX, strikeY, chartEndX - startOriginX, mainHeight - strikeY);
+          }
+        }
+
+        // Luminous Fixed Strike Baseline
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1.8;
+        ctx.setLineDash([6, 4]);
         ctx.beginPath();
         ctx.moveTo(chartStartX, strikeY);
         ctx.lineTo(chartEndX, strikeY);
         ctx.stroke();
         ctx.setLineDash([]);
 
+        // Small Strike Flag on Chart
+        ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+        ctx.strokeStyle = '#f59e0b';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const flagX = chartStartX + 12;
+        ctx.roundRect(flagX, strikeY - 18, 124, 16, 3);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = '#fbbf24';
+        ctx.font = 'bold 8.5px monospace';
+        ctx.textAlign = 'left';
+        ctx.fillText(`★ STRIKE START: $${formatPriceValue(effectiveStrikePrice)}`, flagX + 5, strikeY - 6.5);
+
         // Strike Target Pill in Price Scale
         const pillX = axisPosition === 'LEFT' ? 4 : chartEndX + 4;
         const pillW = scaleWidth - 8;
-        ctx.fillStyle = 'rgba(245, 158, 11, 0.95)';
+        ctx.fillStyle = '#f59e0b';
         ctx.beginPath();
         ctx.roundRect(pillX, strikeY - 9, pillW, 18, 4);
         ctx.fill();
         ctx.fillStyle = '#070b0e';
         ctx.font = 'bold 9px monospace';
         ctx.textAlign = 'center';
-        ctx.fillText(formatPriceValue(strikePrice), pillX + pillW / 2, strikeY + 3.5);
+        ctx.fillText(formatPriceValue(effectiveStrikePrice), pillX + pillW / 2, strikeY + 3.5);
       }
 
-      // ─── E. JAPANESE CANDLESTICKS OR PRO LINE ───
+      // ─── F. JAPANESE CANDLESTICKS OR PRO LINE ───
       const candleBodyWidth = Math.max(3, candleSlotWidth * 0.68);
 
       if (chartMode === 'CANDLE') {
@@ -393,7 +436,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
           const isBull = c.close >= c.open;
           const barColor = isBull ? '#10b981' : '#f43f5e';
 
-          // Wick
           ctx.strokeStyle = barColor;
           ctx.lineWidth = 1.2;
           ctx.beginPath();
@@ -401,7 +443,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
           ctx.lineTo(x, lowY);
           ctx.stroke();
 
-          // Body
           const bodyY = Math.min(openY, closeY);
           const bodyH = Math.max(2, Math.abs(closeY - openY));
 
@@ -409,8 +450,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
           ctx.fillRect(x - candleBodyWidth / 2, bodyY, candleBodyWidth, bodyH);
         });
       } else {
-        // Mountain / Line mode
-        const isAbove = currentPrice >= strikePrice;
+        const isAbove = currentPrice >= effectiveStrikePrice;
         const themeColor = isAbove ? '#10b981' : '#f43f5e';
         const themeRGB = isAbove ? '16, 185, 129' : '244, 63, 94';
 
@@ -425,7 +465,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         });
         ctx.stroke();
 
-        // Area fill
         const lastX = chartStartX + (candles.length - 1) * candleSlotWidth + candleSlotWidth / 2;
         ctx.lineTo(lastX, mainHeight);
         ctx.lineTo(chartStartX + candleSlotWidth / 2, mainHeight);
@@ -437,9 +476,9 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         ctx.fill();
       }
 
-      // ─── F. CURRENT PRICE LINE & SCALE PILL ───
+      // ─── G. CURRENT PRICE LINE & SCALE PILL ───
       const currentY = getPriceY(currentPrice);
-      const isAboveStrike = currentPrice >= strikePrice;
+      const isAboveStrike = currentPrice >= effectiveStrikePrice;
       const liveColor = isAboveStrike ? '#10b981' : '#f43f5e';
 
       ctx.strokeStyle = liveColor;
@@ -451,7 +490,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Pulsing Beacon on Current Price
       const lastCandleX = chartStartX + (candles.length - 1) * candleSlotWidth + candleSlotWidth / 2;
       const pulseSize = 4 + Math.sin(phase * 3) * 2;
       ctx.beginPath();
@@ -464,7 +502,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.fillStyle = liveColor;
       ctx.fill();
 
-      // Current Price Pill on Price Scale
       const currPillX = axisPosition === 'LEFT' ? 4 : chartEndX + 4;
       const currPillW = scaleWidth - 8;
       ctx.fillStyle = liveColor;
@@ -476,12 +513,10 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.textAlign = 'center';
       ctx.fillText(formatPriceValue(currentPrice), currPillX + currPillW / 2, currentY + 3.5);
 
-      // ─── G. SUB-PANEL: MACD (12, 26, 9) (Matching TradingView Image 1) ───
-      // Divider
+      // ─── H. SUB-PANEL: MACD (12, 26, 9) ───
       ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
       ctx.fillRect(0, mainHeight + 2, width, 1);
 
-      // MACD Header Label & Values
       const macdPoints = macdRef.current;
       const lastMacd = macdPoints[macdPoints.length - 1] || { macd: 0, signal: 0, hist: 0 };
 
@@ -500,7 +535,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
       ctx.fillStyle = lastMacd.hist >= 0 ? '#10b981' : '#f43f5e';
       ctx.fillText(`Hist: ${lastMacd.hist >= 0 ? '+' : ''}${lastMacd.hist.toFixed(2)}`, overlayLeft + 300, macdTop - 4);
 
-      // Compute MACD Y-bounds
       if (macdPoints.length > 0) {
         const allM = macdPoints.flatMap((m) => [m.macd, m.signal, m.hist]);
         const maxM = Math.max(1, Math.max(...allM.map(Math.abs)));
@@ -508,7 +542,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
 
         const getMacdY = (v: number) => macdCenterY - (v / maxM) * (macdHeight / 2 - 4);
 
-        // Zero line
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -516,7 +549,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         ctx.lineTo(chartEndX, macdCenterY);
         ctx.stroke();
 
-        // MACD Histogram Bars
         macdPoints.forEach((m, i) => {
           const x = chartStartX + i * candleSlotWidth + candleSlotWidth / 2;
           const barY = getMacdY(m.hist);
@@ -527,7 +559,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
           ctx.fillRect(x - bW / 2, barH >= 0 ? barY : macdCenterY, bW, Math.abs(barH));
         });
 
-        // MACD Line (Blue)
         ctx.strokeStyle = '#38bdf8';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -539,7 +570,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         });
         ctx.stroke();
 
-        // Signal Line (Orange)
         ctx.strokeStyle = '#f59e0b';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -551,7 +581,6 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         });
         ctx.stroke();
 
-        // MACD Axis Ticks
         ctx.fillStyle = '#64748b';
         ctx.font = '9px monospace';
         if (axisPosition === 'LEFT') {
@@ -567,7 +596,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
         }
       }
 
-      // ─── H. BOTTOM TIME AXIS (Matching TradingView Image 1) ───
+      // ─── I. BOTTOM TIME AXIS ───
       ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
       ctx.fillRect(0, timeAxisTop, width, 1);
 
@@ -595,7 +624,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [currentPrice, strikePrice, chartMode, timeframe, assetPair]);
+  }, [currentPrice, effectiveStrikePrice, chartMode, timeframe, assetPair, userBet, axisPosition]);
 
   // Format countdown string mm:ss
   const formatTimer = (seconds: number) => {
@@ -604,12 +633,16 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const deltaFromStrike = currentPrice - strikePrice;
+  const deltaFromStrike = currentPrice - effectiveStrikePrice;
+  const deltaPercent = effectiveStrikePrice > 0 ? (deltaFromStrike / effectiveStrikePrice) * 100 : 0;
   const isPositiveDelta = deltaFromStrike >= 0;
+
+  // Normalized gauge position for Prediction Indicator (-1.5% to +1.5% mapped to 0% to 100%)
+  const clampedDelta = Math.max(-1.5, Math.min(1.5, deltaPercent));
+  const gaugePercent = ((clampedDelta + 1.5) / 3.0) * 100;
 
   return (
     <div className="rounded-[28px] bg-[#070b0e] border border-cyan-500/20 p-6 relative overflow-hidden shadow-2xl space-y-5">
-      {/* Ambient background glow */}
       <div className="absolute top-0 right-0 w-80 h-80 bg-cyan-500/[0.04] rounded-full blur-3xl pointer-events-none" />
 
       {/* Active Position Banner */}
@@ -692,21 +725,21 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
 
         {/* Strike Target, Delta & Working Countdown Timer */}
         <div className="flex flex-wrap items-center gap-3 font-mono">
-          <div className="px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-right">
-            <span className="text-[9px] text-gray-400 block uppercase tracking-wider">STRIKE TARGET</span>
-            <span className="text-sm font-bold text-amber-400">
-              ${formatPriceValue(strikePrice)}
+          <div className="px-3.5 py-2 rounded-xl bg-white/[0.03] border border-amber-500/30 text-right">
+            <span className="text-[9px] text-amber-400/80 block uppercase tracking-wider font-bold">★ ROUND STRIKE START</span>
+            <span className="text-sm font-black text-amber-400">
+              ${formatPriceValue(effectiveStrikePrice)}
             </span>
           </div>
 
           <div className="px-3.5 py-2 rounded-xl bg-white/[0.03] border border-white/[0.08] text-right">
-            <span className="text-[9px] text-gray-400 block uppercase tracking-wider">TARGET DELTA</span>
+            <span className="text-[9px] text-gray-400 block uppercase tracking-wider">OUTCOME DELTA</span>
             <span
               className={`text-sm font-bold ${
                 isPositiveDelta ? 'text-[#10b981]' : 'text-rose-400'
               }`}
             >
-              {isPositiveDelta ? '+' : '-'}${formatPriceValue(Math.abs(deltaFromStrike))}
+              {isPositiveDelta ? '+' : '-'}${formatPriceValue(Math.abs(deltaFromStrike))} ({isPositiveDelta ? '+' : ''}{deltaPercent.toFixed(2)}%)
             </span>
           </div>
 
@@ -721,7 +754,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
             </span>
           </div>
 
-          {/* Manual Settle Button for Testing & Verification */}
+          {/* Manual Settle Button */}
           {onForceSettle && (
             <button
               onClick={onForceSettle}
@@ -746,6 +779,80 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
               {isFastTestMode ? '⚡ 15s Rapid' : 'Standard'}
             </button>
           )}
+        </div>
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════════════
+          NEW: PREDICTION STRIKE BASELINE & DELTA GAUGE (FIXED START LINE)
+      ════════════════════════════════════════════════════════════════════════ */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-rose-950/20 via-[#070b0e] to-emerald-950/20 border border-white/[0.08] space-y-2.5 font-mono">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2">
+            <Target className="w-4 h-4 text-amber-400" />
+            <span className="font-bold text-white uppercase text-[11px]">Prediction Outcome Meter</span>
+            <span className="text-[10px] text-gray-500">· Centered on Fixed Strike Baseline</span>
+          </div>
+
+          <div className="flex items-center gap-3 text-[11px]">
+            <span className="text-rose-400 font-bold">PREDICT DOWN (BEAR)</span>
+            <div className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold text-[10px] flex items-center gap-1">
+              <Lock className="w-2.5 h-2.5" />
+              <span>STRIKE LOCK: ${formatPriceValue(effectiveStrikePrice)}</span>
+            </div>
+            <span className="text-emerald-400 font-bold">PREDICT UP (BULL)</span>
+          </div>
+        </div>
+
+        {/* Dual-Zone Progress Gauge with Solid Fixed Center Start Line */}
+        <div className="relative h-6 rounded-xl bg-black/60 border border-white/10 overflow-hidden flex items-center">
+          {/* Bearish Zone (Left of fixed center) */}
+          <div className="w-1/2 h-full bg-rose-500/[0.08] relative flex justify-end">
+            {!isPositiveDelta && (
+              <div
+                style={{ width: `${Math.min(100, Math.abs(clampedDelta) / 1.5 * 100)}%` }}
+                className="h-full bg-gradient-to-l from-rose-500 to-rose-600/60 shadow-[0_0_12px_#f43f5e] transition-all duration-300"
+              />
+            )}
+          </div>
+
+          {/* FIXED STARTING CENTER LINE (Solid Luminous Anchor) */}
+          <div className="absolute left-1/2 top-0 bottom-0 w-[3px] -translate-x-1/2 bg-amber-400 z-20 shadow-[0_0_10px_#f59e0b]">
+            <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-amber-300 shadow-[0_0_6px_#fbbf24]" />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-amber-300 shadow-[0_0_6px_#fbbf24]" />
+          </div>
+
+          {/* Bullish Zone (Right of fixed center) */}
+          <div className="w-1/2 h-full bg-emerald-500/[0.08] relative flex justify-start">
+            {isPositiveDelta && (
+              <div
+                style={{ width: `${Math.min(100, clampedDelta / 1.5 * 100)}%` }}
+                className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400/80 shadow-[0_0_12px_#10b981] transition-all duration-300"
+              />
+            )}
+          </div>
+
+          {/* Live Dynamic Price Pointer on Gauge */}
+          <div
+            className="absolute top-0 bottom-0 w-[2px] bg-white z-30 transition-all duration-300 pointer-events-none"
+            style={{ left: `${gaugePercent}%` }}
+          >
+            <div
+              className={`absolute -top-1.5 -translate-x-1/2 px-1.5 py-0.5 rounded text-[8px] font-black shadow-md ${
+                isPositiveDelta ? 'bg-emerald-400 text-black' : 'bg-rose-500 text-white'
+              }`}
+            >
+              ${formatPriceValue(currentPrice)}
+            </div>
+          </div>
+        </div>
+
+        {/* Scale labels under meter */}
+        <div className="flex justify-between text-[9px] text-gray-500 px-1">
+          <span className="text-rose-400/70">-1.5% OTM</span>
+          <span className="text-rose-400/70">-0.75%</span>
+          <span className="text-amber-400 font-bold">▲ FIXED START (0.00%)</span>
+          <span className="text-emerald-400/70">+0.75%</span>
+          <span className="text-emerald-400/70">+1.5% ITM</span>
         </div>
       </div>
 
@@ -798,7 +905,7 @@ export const ArenaChart: React.FC<ArenaChartProps> = ({
             </button>
           </div>
 
-          {/* Axis Position Toggle (Left vs Right Price Scale) */}
+          {/* Axis Position Toggle */}
           <div className="flex items-center gap-1 bg-white/[0.03] p-1 rounded-xl border border-white/[0.08]">
             <span className="text-[10px] font-mono text-gray-500 uppercase px-1.5">AXIS:</span>
             <button
