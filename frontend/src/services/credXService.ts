@@ -928,13 +928,13 @@ async function ensureTokenApproval(
   }
 }
 
-export async function addAMMLiquidity(amount0: number, amount1: number): Promise<string> {
-  const signer = await getSigner();
+export async function addAMMLiquidity(amount0: number, amount1: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? (await getSigner());
   const ammAddr = CONTRACTS.reputationAMM;
   const { token0, token1 } = await resolveAmmPair();
-  await ensureTokenApproval(signer, token0.address, ammAddr, ethers.parseUnits(amount0.toString(), token0.decimals));
-  await ensureTokenApproval(signer, token1.address, ammAddr, ethers.parseUnits(amount1.toString(), token1.decimals));
-  const writeAmm = new ethers.Contract(ammAddr, AMM_ABI, signer);
+  await ensureTokenApproval(s, token0.address, ammAddr, ethers.parseUnits(amount0.toString(), token0.decimals));
+  await ensureTokenApproval(s, token1.address, ammAddr, ethers.parseUnits(amount1.toString(), token1.decimals));
+  const writeAmm = new ethers.Contract(ammAddr, AMM_ABI, s);
   const tx = await writeAmm.addLiquidity(
     ethers.parseUnits(amount0.toString(), token0.decimals),
     ethers.parseUnits(amount1.toString(), token1.decimals),
@@ -944,10 +944,10 @@ export async function addAMMLiquidity(amount0: number, amount1: number): Promise
   return receipt.hash as string;
 }
 
-export async function removeAMMLiquidity(liquidity: number): Promise<string> {
-  const signer = await getSigner();
-  const writeAmm = new ethers.Contract(CONTRACTS.reputationAMM, AMM_ABI, signer);
-  const current = await writeAmm.balanceOf(await signer.getAddress());
+export async function removeAMMLiquidity(liquidity: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? (await getSigner());
+  const writeAmm = new ethers.Contract(CONTRACTS.reputationAMM, AMM_ABI, s);
+  const current = await writeAmm.balanceOf(await s.getAddress());
   const amount = ethers.parseUnits(liquidity.toString(), 18) > current
     ? current
     : ethers.parseUnits(liquidity.toString(), 18);
@@ -956,17 +956,22 @@ export async function removeAMMLiquidity(liquidity: number): Promise<string> {
   return receipt.hash as string;
 }
 
-export async function swapViaAMM(amountIn: number, tokenInAddress: string, user: string): Promise<string> {
-  const signer = await getSigner();
+export async function swapViaAMM(amountIn: number, tokenInAddress: string, user: string, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? (await getSigner());
   const ammAddr = CONTRACTS.reputationAMM;
   const amm = readContract(ammAddr, AMM_ABI);
   const { token0, token1 } = await resolveAmmPair();
   const outToken = tokenInAddress.toLowerCase() === token0.address.toLowerCase() ? token1 : token0;
-  const amountInParsed = ethers.parseUnits(amountIn.toString(), tokenInAddress === token0.address ? token0.decimals : token1.decimals);
+  const inDecimals = tokenInAddress.toLowerCase() === token0.address.toLowerCase() ? token0.decimals : token1.decimals;
+  const amountInParsed = ethers.parseUnits(amountIn.toString(), inDecimals);
   const amountOut = await amm.getAmountOut(amountInParsed, tokenInAddress, user);
-  await ensureTokenApproval(signer, tokenInAddress, ammAddr, amountInParsed);
-  const writeAmm = new ethers.Contract(ammAddr, AMM_ABI, signer);
-  const [r0, r1] = await Promise.all([writeAmm.reserve0(), writeAmm.reserve1()]);
+  await ensureTokenApproval(s, tokenInAddress, ammAddr, amountInParsed);
+  // Uniswap-style swap: the AMM measures the input from its own balance delta, so the
+  // input tokens must be transferred INTO the AMM before swap() is called — otherwise
+  // the K-invariant check does the math backwards and always reverts (InvalidK).
+  const tokenInContract = new ethers.Contract(tokenInAddress, CUSD_ABI, s);
+  await (await tokenInContract.transfer(ammAddr, amountInParsed)).wait();
+  const writeAmm = new ethers.Contract(ammAddr, AMM_ABI, s);
   const is0In = tokenInAddress.toLowerCase() === token0.address.toLowerCase();
   const tx = await writeAmm.swap(
     is0In ? 0n : amountOut,

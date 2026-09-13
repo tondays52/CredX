@@ -12,8 +12,10 @@ import {
   fetchTokenBalance,
   fetchAMMEvents,
   txHashShort,
+  demoWalletSigner,
 } from '../../services/credXService';
 import { CREDITCOIN_BLOCKSCOUT, CONTRACTS } from '../../config/contracts';
+import { DEMO_WALLET_VAULT } from '../../config/demoWallets';
 import {
   ArrowLeftRight,
   Settings,
@@ -29,6 +31,7 @@ import {
   Activity,
   Database,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 
 interface PoolToken {
@@ -71,12 +74,107 @@ const TOKEN_STYLE: Record<string, { iconBg: string; iconText: string; color: str
   SOL: { iconBg: '#2e1065', iconText: 'SOL', color: '#c084fc' },
 };
 
-const FEED_ASSETS: { key: string; name: string; binance: string }[] = [
-  { key: 'CTC', name: 'Creditcoin L1 Native', binance: 'CTCUSDT' },
-  { key: 'BTC', name: 'Bitcoin (Wrapped CredX)', binance: 'BTCUSDT' },
-  { key: 'ETH', name: 'Ethereum (CredX Bridge)', binance: 'ETHUSDT' },
-  { key: 'SOL', name: 'Solana (Wormhole)', binance: 'SOLUSDT' },
+const FEED_ASSETS: { key: string; name: string; binance: string; free: string }[] = [
+  { key: 'CTC', name: 'Creditcoin L1 Native', binance: 'CTCUSDT', free: 'CTC' },
+  { key: 'BTC', name: 'Bitcoin (Wrapped CredX)', binance: 'BTCUSDT', free: 'BTC' },
+  { key: 'ETH', name: 'Ethereum (CredX Bridge)', binance: 'ETHUSDT', free: 'ETH' },
+  { key: 'SOL', name: 'Solana (Wormhole)', binance: 'SOLUSDT', free: 'SOL' },
 ];
+
+// Data-source config from frontend/.env (never committed).
+const RAPID_KEY = ((import.meta.env.VITE_RAPIDAPI_KEY as string) || '').trim();
+const RAPID_HOST = ((import.meta.env.VITE_RAPIDAPI_HOST as string) || '').trim() || 'binance44.p.rapidapi.com';
+const FREE_KEY = (((import.meta.env.VITE_FREECRYPTO_API_KEY as string) || (import.meta.env.VITE_FREECRYPTOAPI_KEY as string)) || '').trim();
+const REF_FEED_KEYS = new Set(FEED_ASSETS.map((f) => f.key));
+
+const FEED_SOURCE_LABEL: Record<string, string> = {
+  rapidapi: 'rapidapi (binance)',
+  binance: 'binance.com',
+  freecryptoapi: 'freecryptoapi live samples',
+  none: 'no feed',
+};
+
+function bucketMsForTimeframe(tf: '1H' | '1D' | '1W' | '1M'): number {
+  return tf === '1H' ? 3600000 : tf === '1D' ? 86400000 : tf === '1W' ? 604800000 : 2592000000;
+}
+
+/** Build synthetic candles from real FreeCryptoAPI price snapshots (fallback chart when kline APIs are down). */
+function candlesFromSnapshots(pts: { t: number; p: number }[] | undefined, bucketMs: number): Candle[] | null {
+  if (!pts || pts.length < 2) return null;
+  const bars: Candle[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const b = Math.floor(pts[i].t / bucketMs) * bucketMs;
+    const last = bars[bars.length - 1];
+    if (last && last.time === b) {
+      last.high = Math.max(last.high, pts[i].p);
+      last.low = Math.min(last.low, pts[i].p);
+      last.close = pts[i].p;
+    } else if (last) {
+      bars.push({ time: b, open: last.close, high: pts[i].p, low: pts[i].p, close: pts[i].p });
+    } else {
+      bars.push({ time: b, open: pts[i].p, high: pts[i].p, low: pts[i].p, close: pts[i].p });
+    }
+  }
+  return bars.length >= 2 ? bars : null;
+}
+
+async function fetchRapidKlines(symbol: string, interval: string, limit: number): Promise<Candle[] | null> {
+  if (!RAPID_KEY) return null;
+  const res = await fetch(`https://${RAPID_HOST}/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`, {
+    headers: { 'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': RAPID_HOST },
+  });
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  return raw.map((k: any) => ({ time: Number(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
+}
+
+async function fetchBinanceKlines(symbol: string, interval: string, limit: number): Promise<Candle[] | null> {
+  const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  return raw.map((k: any) => ({ time: Number(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
+}
+
+interface FeedTicker { symbol: string; lastPrice: number; changePct: number }
+
+async function fetchRapidTickers(): Promise<FeedTicker[] | null> {
+  if (!RAPID_KEY) return null;
+  const res = await fetch(`https://${RAPID_HOST}/api/v3/ticker/24hr?symbols=${JSON.stringify(FEED_ASSETS.map((f) => f.binance))}`, {
+    headers: { 'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': RAPID_HOST },
+  });
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw)) return null;
+  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }));
+}
+
+async function fetchBinanceTickers(): Promise<FeedTicker[] | null> {
+  const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(FEED_ASSETS.map((f) => f.binance))}`);
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw)) return null;
+  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }));
+}
+
+async function fetchFreeTickers(): Promise<FeedTicker[] | null> {
+  if (!FREE_KEY) return null;
+  const out: FeedTicker[] = [];
+  for (const f of FEED_ASSETS) {
+    try {
+      const res = await fetch(`https://api.freecryptoapi.com/v1/getData?symbol=${f.free}&token=${FREE_KEY}`);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const sym = json && json.symbols && json.symbols[0];
+      if (!sym) continue;
+      out.push({ symbol: `${f.key}USDT`, lastPrice: parseFloat(sym.last), changePct: parseFloat(sym.daily_change_percentage) });
+    } catch {
+      // skip unreachable symbol
+    }
+  }
+  return out.length ? out : null;
+}
 
 const KLINE_INTERVAL: Record<string, string> = { '1H': '1h', '1D': '1d', '1W': '1w', '1M': '1M' };
 const WINDOW_MS: Record<string, number> = {
@@ -135,8 +233,18 @@ export const DexAmmView: React.FC = () => {
   const { boostScore } = useProtocol();
   const { showToast, playSound } = useToast();
 
+  // Seeded demo-wallet mode: sign REAL ReputationAMM txs with the bundled testnet
+  // wallet that seeded the pool (5,000 cUSD + 100,000 DEPIN). No extension required.
+  const [demoMode, setDemoMode] = useState(false);
+  const demoSigner = useMemo(
+    () => (demoMode && DEMO_WALLET_VAULT[0] ? demoWalletSigner(DEMO_WALLET_VAULT[0].privateKey) : null),
+    [demoMode]
+  );
+  const effAddress = demoMode ? DEMO_WALLET_VAULT[0]?.address ?? '' : address;
+  const effConnected = demoMode || isConnected;
+
   // Selected asset for header / chart ("Inspect Asset")
-  const [selectedTokenKey, setSelectedTokenKey] = useState<string>('cUSD');
+  const [selectedTokenKey, setSelectedTokenKey] = useState<string>('DEPIN');
   const [timeframe, setTimeframe] = useState<'1H' | '1D' | '1W' | '1M'>('1D');
 
   // Swap form
@@ -167,6 +275,11 @@ export const DexAmmView: React.FC = () => {
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [marketPrice, setMarketPrice] = useState<number | null>(null);
   const [marketChange, setMarketChange] = useState<number | null>(null);
+  const [feedSource, setFeedSource] = useState<'rapidapi' | 'binance' | 'freecryptoapi' | 'none'>('binance');
+  const [snapGen, setSnapGen] = useState(0);
+  const priceSnapRef = useRef<Record<string, { t: number; p: number }[]>>({});
+  const candlesRef = useRef<Candle[] | null>(null);
+  const baselineRef = useRef(false);
 
   // Real on-chain activity feed + this-session user transactions
   const [activity, setActivity] = useState<Array<Awaited<ReturnType<typeof fetchAMMEvents>>[number]>>([]);
@@ -178,7 +291,7 @@ export const DexAmmView: React.FC = () => {
   const refreshPoolState = useCallback(async () => {
     setPoolLoading(true);
     try {
-      const s = await fetchAMMState(address || '');
+      const s = await fetchAMMState(effAddress || '');
       setAmmState(s);
       if (s) {
         setFromToken((prev) => (prev === s.token0.symbol || prev === s.token1.symbol ? prev : s.token0.symbol));
@@ -186,7 +299,7 @@ export const DexAmmView: React.FC = () => {
         setSelectedTokenKey((prev) =>
           prev === s.token0.symbol || prev === s.token1.symbol || FEED_ASSETS.some((f) => f.key === prev)
             ? prev
-            : 'cUSD'
+            : s.token1.symbol
         );
         // Append a real spot sample whenever the pool carries liquidity.
         if (s.reserve0 > 0 && s.reserve1 > 0) {
@@ -194,6 +307,12 @@ export const DexAmmView: React.FC = () => {
           if (isFinite(p) && p > 0) {
             setSamples((prev) => {
               const last = prev[prev.length - 1];
+              // First poll: open the session at the real on-chain seed ratio (5,000 cUSD / 100,000 DEPIN = $0.05)
+              // so the DEPIN price line renders from the moment the pool was seeded.
+              if (prev.length === 0 && !baselineRef.current) {
+                baselineRef.current = true;
+                return [{ t: Date.now() - WINDOW_MS['1D'], p: 0.05 }, { t: Date.now(), p }];
+              }
               if (last && (Math.abs(last.p - p) / last.p < 0.0002 || Date.now() - last.t < 1500)) return prev;
               return [...prev, { t: Date.now(), p }].slice(-240);
             });
@@ -205,7 +324,7 @@ export const DexAmmView: React.FC = () => {
     } finally {
       setPoolLoading(false);
     }
-  }, [address]);
+  }, [effAddress]);
 
   useEffect(() => {
     void refreshPoolState();
@@ -215,22 +334,22 @@ export const DexAmmView: React.FC = () => {
 
   // ─── Real wallet token balances (cUSD + the pool's other token) ───────────
   useEffect(() => {
-    if (!isConnected || !address) {
+    if (!effConnected || !effAddress) {
       setCusdBalance(0);
       setToken1Balance(0);
       return;
     }
     let dead = false;
-    fetchCUSDBalance(address)
+    fetchCUSDBalance(effAddress)
       .then((b) => { if (!dead) setCusdBalance(b); })
       .catch(() => {});
     if (ammState) {
-      fetchTokenBalance(address, ammState.token1.address)
+      fetchTokenBalance(effAddress, ammState.token1.address)
         .then((b) => { if (!dead) setToken1Balance(b); })
         .catch(() => {});
     }
     return () => { dead = true; };
-  }, [isConnected, address, ammState?.token1.address]);
+  }, [effConnected, effAddress, ammState?.token1.address]);
 
   // ─── Real on-chain activity feed polling ─────────────────────────────────
   useEffect(() => {
@@ -360,11 +479,11 @@ export const DexAmmView: React.FC = () => {
 
   // ─── Execute real swap via ReputationAMM ─────────────────────────────────
   const handleExecuteSwap = async () => {
-    if (!isConnected && openConnectModal) {
+    if (!effConnected && openConnectModal) {
       openConnectModal();
       return;
     }
-    if (!isConnected || !address) {
+    if (!effConnected || !effAddress) {
       showToast('Connect a Wallet', 'Connect a wallet to execute swaps on Creditcoin Testnet.', 'error');
       return;
     }
@@ -389,7 +508,7 @@ export const DexAmmView: React.FC = () => {
     setIsSwapping(true);
     playSound('click');
     try {
-      const hash = await swapViaAMM(fromAmtNum, tokenIn.address, address);
+      const hash = await swapViaAMM(fromAmtNum, tokenIn.address, effAddress, demoSigner ?? undefined);
       const newTx: TransactionItem = {
         id: `tx-${Date.now()}`,
         type: 'Swap',
@@ -431,11 +550,11 @@ export const DexAmmView: React.FC = () => {
   };
 
   const handleAddLiquidity = async () => {
-    if (!isConnected && openConnectModal) {
+    if (!effConnected && openConnectModal) {
       openConnectModal();
       return;
     }
-    if (!isConnected || !address || !ammState) {
+    if (!effConnected || !effAddress || !ammState) {
       showToast('Connect a Wallet', 'Connect a wallet to add liquidity on Creditcoin Testnet.', 'error');
       return;
     }
@@ -448,7 +567,7 @@ export const DexAmmView: React.FC = () => {
     setPoolBusy('deposit');
     playSound('click');
     try {
-      const hash = await addAMMLiquidity(a0, a1);
+      const hash = await addAMMLiquidity(a0, a1, demoSigner ?? undefined);
       const newTx: TransactionItem = {
         id: `tx-${Date.now()}`,
         type: 'Add Liquidity',
@@ -481,11 +600,11 @@ export const DexAmmView: React.FC = () => {
   };
 
   const handleRemoveLiquidity = async () => {
-    if (!isConnected && openConnectModal) {
+    if (!effConnected && openConnectModal) {
       openConnectModal();
       return;
     }
-    if (!isConnected || !address || !ammState) {
+    if (!effConnected || !effAddress || !ammState) {
       showToast('Connect a Wallet', 'Connect a wallet to remove liquidity on Creditcoin Testnet.', 'error');
       return;
     }
@@ -497,7 +616,7 @@ export const DexAmmView: React.FC = () => {
     setPoolBusy('withdraw');
     playSound('click');
     try {
-      const hash = await removeAMMLiquidity(lp);
+      const hash = await removeAMMLiquidity(lp, demoSigner ?? undefined);
       const newTx: TransactionItem = {
         id: `tx-${Date.now()}`,
         type: 'Remove Liquidity',
@@ -528,43 +647,84 @@ export const DexAmmView: React.FC = () => {
     }
   };
 
-  // ─── Real market candles (Binance public feed) for feed assets ──────────
+  // ─── Live market klines: RapidAPI → Binance → FreeCryptoAPI live samples (30s) ──
   useEffect(() => {
+    let dead = false;
     if (!selectedFeed) {
       setCandles(null);
       setMarketPrice(null);
       setMarketChange(null);
       return;
     }
-    let dead = false;
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${selectedFeed.binance}&interval=${KLINE_INTERVAL[timeframe]}&limit=200`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((raw) => {
-        if (dead || !Array.isArray(raw) || raw.length === 0) return;
-        const parsed: Candle[] = raw.map((k: any) => ({
-          time: Number(k[0]),
-          open: parseFloat(k[1]),
-          high: parseFloat(k[2]),
-          low: parseFloat(k[3]),
-          close: parseFloat(k[4]),
-        }));
-        setCandles(parsed);
-        if (parsed.length > 0) {
-          const last = parsed[parsed.length - 1].close;
-          const first = parsed[0].open;
+    const load = async () => {
+      let arr: Candle[] | null = null;
+      let src: 'rapidapi' | 'binance' | 'freecryptoapi' = 'binance';
+      try { arr = await fetchRapidKlines(selectedFeed.binance, KLINE_INTERVAL[timeframe], 200); } catch { arr = null; }
+      if (arr) src = 'rapidapi';
+      if (!arr) {
+        try { arr = await fetchBinanceKlines(selectedFeed.binance, KLINE_INTERVAL[timeframe], 200); } catch { arr = null; }
+      }
+      if (!arr && FREE_KEY) {
+        arr = candlesFromSnapshots(priceSnapRef.current[selectedFeed.key], bucketMsForTimeframe(timeframe));
+        src = 'freecryptoapi';
+      }
+      if (dead) return;
+      if (arr) {
+        candlesRef.current = arr;
+        setCandles(arr);
+        setFeedSource(src);
+        if (arr.length > 0) {
+          const last = arr[arr.length - 1].close;
+          const first = arr[0].open;
           setMarketPrice(last);
           setMarketChange(first > 0 ? ((last - first) / first) * 100 : null);
         }
-      })
-      .catch(() => {
-        if (!dead) {
-          setCandles(null);
-          setMarketPrice(null);
-          setMarketChange(null);
-        }
-      });
-    return () => { dead = true; };
-  }, [selectedFeed, timeframe]);
+      } else if (!candlesRef.current) {
+        setFeedSource('none');
+      }
+    };
+    if (!candlesRef.current) setCandles(null);
+    load();
+    const id = setInterval(load, 30000);
+    return () => { dead = true; clearInterval(id); };
+  }, [selectedFeed?.key, timeframe]);
+
+  // Charts built from FreeCryptoAPI live samples update as new snapshots land (60s ticker cadence).
+  useEffect(() => {
+    if (feedSource !== 'freecryptoapi' || !selectedFeed) return;
+    const arr = candlesFromSnapshots(priceSnapRef.current[selectedFeed.key], bucketMsForTimeframe(timeframe));
+    if (arr) setCandles(arr);
+  }, [snapGen, selectedFeed?.key, timeframe, feedSource]);
+
+  // ─── Real 24h tickers + price snapshots (FreeCryptoAPI → RapidAPI → Binance, 60s) ──
+  useEffect(() => {
+    let dead = false;
+    const sync = async () => {
+      let arr: FeedTicker[] | null = null;
+      try { arr = await fetchFreeTickers(); } catch { arr = null; }
+      if (!arr) { try { arr = await fetchRapidTickers(); } catch { arr = null; } }
+      if (!arr) { try { arr = await fetchBinanceTickers(); } catch { arr = null; } }
+      if (dead) return;
+      if (arr && arr.length) {
+        const nowT = Date.now();
+        const bucket = Math.floor(nowT / 30000) * 30000;
+        const ref = priceSnapRef.current;
+        arr.forEach((tk) => {
+          const key = tk.symbol.replace('USDT', '');
+          if (key && REF_FEED_KEYS.has(key)) {
+            const list = ref[key] || (ref[key] = []);
+            const last = list[list.length - 1];
+            if (last && last.t === bucket) last.p = tk.lastPrice;
+            else { list.push({ t: bucket, p: tk.lastPrice }); if (list.length > 400) list.shift(); }
+          }
+        });
+        setSnapGen((g) => g + 1);
+      }
+    };
+    sync();
+    const id = setInterval(sync, 60000);
+    return () => { dead = true; clearInterval(id); };
+  }, []);
 
   // ─── Real price chart canvas (price line + EMA9/EMA21 overlays) ─────────
   useEffect(() => {
@@ -597,7 +757,7 @@ export const DexAmmView: React.FC = () => {
       ctx.textAlign = 'center';
       ctx.fillText(
         selectedFeed
-          ? 'Fetching real Binance candles…'
+          ? 'Fetching live market candles…'
           : selectedPool?.symbol === ammState?.token0.symbol
             ? 'cUSD is the suite stablecoin — pegged at $1.00.'
             : 'No on-chain price history yet — the pool has no liquidity.',
@@ -836,7 +996,7 @@ export const DexAmmView: React.FC = () => {
             ))}
             {FEED_ASSETS.map((f) => (
               <option key={f.key} value={f.key} className="bg-[#020e14] text-white">
-                {f.key} — {f.name} (Binance feed)
+                {f.key} — {f.name} (market feed)
               </option>
             ))}
           </select>
@@ -869,7 +1029,7 @@ export const DexAmmView: React.FC = () => {
                       : `$${fmtPrice(depinPriceUSD)}`}
                 </div>
                 <div className="text-[10px] font-mono text-slate-500">
-                  {selectedFeed ? 'Binance close' : activeAsset.symbol === 'cUSD' ? 'suite stable peg' : 'reserves ratio'}
+                  {selectedFeed ? `live ${FEED_SOURCE_LABEL[feedSource]}` : activeAsset.symbol === 'cUSD' ? 'suite stable peg' : 'reserves ratio'}
                 </div>
               </div>
 
@@ -937,8 +1097,9 @@ export const DexAmmView: React.FC = () => {
                         ? 'bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold'
                         : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold'
                     }`}
+                    title={selectedFeed ? `kline source: ${FEED_SOURCE_LABEL[feedSource]}` : 'reserve-ratio price from live on-chain swaps'}
                   >
-                    {selectedFeed ? 'BINANCE FEED' : 'ON-CHAIN SESSION'}
+                    {selectedFeed ? 'LIVE MARKET FEED' : 'ON-CHAIN SESSION'}
                   </span>
                 </span>
                 <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
@@ -1190,7 +1351,7 @@ export const DexAmmView: React.FC = () => {
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 rounded-full text-[9px] font-mono bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold">
-                    {isConnected ? 'POOL EMPTY / UNREADABLE' : 'NOT CONNECTED'}
+                    {effConnected ? 'POOL EMPTY / UNREADABLE' : 'NOT CONNECTED'}
                   </span>
                 )}
               </h3>
@@ -1229,6 +1390,48 @@ export const DexAmmView: React.FC = () => {
                 )}
               </div>
             </div>
+
+            {/* Seeded demo-wallet mode: swap/ LP on the real pool with no extension */}
+            {!effConnected && !demoMode && (
+              <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5 font-mono">
+                <div className="flex items-start gap-2.5">
+                  <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-bold text-white block">
+                      This pool is LIVE &amp; seeded on-chain — swap it now
+                    </span>
+                    <span className="text-[10px] text-slate-400 block leading-relaxed">
+                      The bundled testnet wallet holds <strong className="text-emerald-300">~9.9M cUSD</strong>,{' '}
+                      <strong className="text-emerald-300">880k DEPIN</strong> and{' '}
+                      <strong className="text-emerald-300">22,360 LP</strong> in the ReputationAMM. Swap with real
+                      Creditcoin testnet transactions — no wallet extension needed.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => { setDemoMode(true); playSound('click'); }}
+                  className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 transition cursor-pointer"
+                >
+                  Use Seeded Demo Wallet &rarr;
+                </button>
+              </div>
+            )}
+            {demoMode && (
+              <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between gap-2 font-mono text-xs">
+                <div className="flex items-center gap-2 text-cyan-300 font-bold min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                  <span className="truncate">
+                    Signing as Seeded Demo Wallet {DEMO_WALLET_VAULT[0]?.address.slice(0, 6)}…{DEMO_WALLET_VAULT[0]?.address.slice(-4)}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setDemoMode(false)}
+                  className="px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-slate-300 border border-white/10 transition cursor-pointer text-[10px] font-bold shrink-0"
+                >
+                  Disconnect
+                </button>
+              </div>
+            )}
 
             {/* You Pay */}
             <div className="p-4 rounded-2xl bg-black/60 border border-cyan-500/20 space-y-2.5">
@@ -1315,7 +1518,7 @@ export const DexAmmView: React.FC = () => {
               disabled={isSwapping}
               onClick={handleExecuteSwap}
               className={`w-full py-4 rounded-2xl font-black text-sm transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 tracking-wide uppercase ${
-                isConnected && !canSwap
+                effConnected && !canSwap
                   ? 'bg-white/5 border border-dashed border-emerald-400/40 text-emerald-300'
                   : 'bg-gradient-to-r from-teal-400 via-cyan-400 to-teal-300 hover:from-teal-300 hover:to-cyan-300 text-slate-950 shadow-xl shadow-cyan-500/25'
               }`}
@@ -1325,7 +1528,7 @@ export const DexAmmView: React.FC = () => {
                   <RefreshCw className="w-4 h-4 animate-spin" />
                   <span>Executing on Creditcoin L1...</span>
                 </>
-              ) : !isConnected ? (
+              ) : !effConnected ? (
                 <span>Connect Wallet</span>
               ) : canSwap ? (
                 <span>Swap</span>
@@ -1515,7 +1718,7 @@ export const DexAmmView: React.FC = () => {
               <div className="space-y-2 pt-1">
                 <div className="flex justify-between text-[11px] font-mono text-slate-500">
                   <span>Reserves</span>
-                  <span>{isConnected ? 'pool read failed' : 'connect a wallet'}</span>
+                  <span>{effConnected ? 'pool read failed' : 'connect a wallet'}</span>
                 </div>
                 <div className="w-full h-2.5 rounded-full bg-black/60 border border-white/5" />
               </div>
