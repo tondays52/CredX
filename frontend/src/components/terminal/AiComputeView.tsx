@@ -13,17 +13,14 @@ import {
   ExternalLink,
   Activity,
   Play,
-  AlertTriangle,
   CheckCircle2,
   Server,
   Gauge,
   Timer,
-  BrainCircuit,
   Database,
 } from 'lucide-react';
 import useAiComputeLive from '../../hooks/useAiComputeLive';
 import { CREDITCOIN_BLOCKSCOUT } from '../../config/contracts';
-import { computeYumaConsensus, getSampleYumaNetwork, YumaConsensusResult } from '../../utils/yumaConsensus';
 
 interface AiComputeViewProps {
   hardware?: {
@@ -56,7 +53,7 @@ const AiComputeView: React.FC<AiComputeViewProps> = ({
     register, settle, claim, runBenchmark, refresh, contract,
   } = useAiComputeLive();
 
-  const [subTab, setSubTab] = useState<'market' | 'bench' | 'ledger' | 'consensus'>('market');
+  const [subTab, setSubTab] = useState<'market' | 'bench' | 'ledger'>('market');
 
   // Register form
   const [modelTag, setModelTag] = useState('CRDX-H100');
@@ -66,24 +63,6 @@ const AiComputeView: React.FC<AiComputeViewProps> = ({
   // Settle form
   const [minutes, setMinutes] = useState(5);
   const [grade, setGrade] = useState(3);
-
-  // Yuma model state (local-only educational)
-  const [yumaData, setYumaData] = useState<YumaConsensusResult>(() => {
-    const { W, S } = getSampleYumaNetwork();
-    return computeYumaConsensus(W, S, 10.0, 0.5);
-  });
-  const [rhoParam, setRhoParam] = useState(10.0);
-  const [kappaParam, setKappaParam] = useState(0.5);
-  const [simulateCabalAttack, setSimulateCabalAttack] = useState(false);
-
-  useEffect(() => {
-    const { W, S } = getSampleYumaNetwork();
-    if (simulateCabalAttack) {
-      W[4] = [0, 0, 0, 0, 0.5, 0.5];
-      W[5] = [0, 0, 0, 0, 0.5, 0.5];
-    }
-    setYumaData(computeYumaConsensus(W, S, rhoParam, kappaParam));
-  }, [rhoParam, kappaParam, simulateCabalAttack]);
 
   const busyAny = busy !== null;
 
@@ -227,7 +206,6 @@ const AiComputeView: React.FC<AiComputeViewProps> = ({
           { key: 'market' as const, icon: Server, label: 'Compute Market' },
           { key: 'bench' as const, icon: Zap, label: 'Benchmark & Settle' },
           { key: 'ledger' as const, icon: Database, label: 'On-Chain Ledger' },
-          { key: 'consensus' as const, icon: BrainCircuit, label: 'Yuma Consensus' },
         ]).map(({ key, icon: Icon, label }) => (
           <button
             key={key}
@@ -652,134 +630,7 @@ const AiComputeView: React.FC<AiComputeViewProps> = ({
         </div>
       )}
 
-      {/* ========================================================================= */}
-      {/* TAB 4 — YUMA CONSENSUS (labeled educational whitepaper model)             */}
-      {/* ========================================================================= */}
-      {subTab === 'consensus' && (
-        <div className="space-y-6">
-          <div className="flex items-start gap-3 rounded-2xl border border-sky-500/30 bg-sky-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-sky-200/80">
-            <BrainCircuit className="w-4 h-4 shrink-0 mt-0.5 text-sky-300" />
-            <span className="font-mono">
-              Educational whitepaper model — Yuma consensus incentive mathematics run locally on a synthetic 6-peer
-              network with example stakes. NOT live Bittensor/TAO telemetry; nothing in this tab is attested to Creditcoin.
-              The real, on-chain part of the CredXsor market lives in the Compute Market, Benchmark &amp; Settle and
-              On-Chain Ledger tabs above.
-            </span>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-black/40 border border-white/[0.08] space-y-4">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <span className="text-xs font-mono uppercase text-purple-400 font-bold block">
-                  Yuma Rao Incentive Mechanics
-                </span>
-                <h3 className="text-lg font-bold text-white mt-0.5">
-                  Weight Matrix W &amp; Sigmoid Consensus C = σ(ρ(TᵀS - κ))
-                </h3>
-              </div>
-
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-mono font-bold">
-                {yumaData.isConsensusHealthy ? (
-                  <span className="flex items-center gap-1.5 text-emerald-400 border-emerald-500/30 bg-emerald-500/10 px-3 py-1 rounded-lg">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    Consensus Secure (Loss L = {yumaData.antiCollusionLoss.toFixed(3)} &lt; 0)
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-red-400 border-red-500/30 bg-red-500/10 px-3 py-1 rounded-lg animate-pulse">
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                    Cabal Detected (Loss L = {yumaData.antiCollusionLoss.toFixed(3)} &gt; 0)
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-3 border-t border-white/[0.06] font-mono text-xs">
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-white/60">Sigmoid Temperature (ρ):</span>
-                  <span className="text-purple-300 font-bold">{rhoParam.toFixed(1)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="2"
-                  max="20"
-                  step="0.5"
-                  value={rhoParam}
-                  onChange={(e) => setRhoParam(parseFloat(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-white/60">Consensus Shift (κ):</span>
-                  <span className="text-purple-300 font-bold">{kappaParam.toFixed(2)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="0.2"
-                  max="0.8"
-                  step="0.05"
-                  value={kappaParam}
-                  onChange={(e) => setKappaParam(parseFloat(e.target.value))}
-                  className="w-full accent-purple-500 cursor-pointer"
-                />
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.04] border border-white/10">
-                <div>
-                  <span className="text-white font-bold block text-xs">Simulate Disjoint Cabal</span>
-                  <span className="text-[10px] text-white/40">Peers 4 &amp; 5 only vote for each other</span>
-                </div>
-                <button
-                  onClick={() => setSimulateCabalAttack(!simulateCabalAttack)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono transition cursor-pointer ${
-                    simulateCabalAttack
-                      ? 'bg-red-500/20 text-red-300 border border-red-500/40'
-                      : 'bg-white/10 text-white hover:bg-white/20'
-                  }`}
-                >
-                  {simulateCabalAttack ? 'Active' : 'Off'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto rounded-2xl border border-white/10">
-            <table className="w-full text-left font-mono text-xs bg-black/60">
-              <thead className="bg-white/[0.04] text-white/50 text-[10px] uppercase border-b border-white/10">
-                <tr>
-                  <th className="p-3">UID</th>
-                  <th className="p-3">Role</th>
-                  <th className="p-3">Stake (S)</th>
-                  <th className="p-3">Fisher Rank (R)</th>
-                  <th className="p-3">Consensus (C)</th>
-                  <th className="p-3">Incentive (I)</th>
-                  <th className="p-3">Daily Emission (ΔS)</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.06]">
-                {yumaData.peers.map((peer) => (
-                  <tr key={peer.uid} className="hover:bg-white/[0.02] transition">
-                    <td className="p-3 font-bold text-white">Peer {peer.uid}</td>
-                    <td className="p-3">
-                      {peer.isValidator ? (
-                        <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 font-bold text-[10px]">Validator</span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded bg-blue-500/20 text-blue-300 font-bold text-[10px]">Miner</span>
-                      )}
-                    </td>
-                    <td className="p-3 text-white/80">{peer.stakeTao.toLocaleString()} TAO</td>
-                    <td className="p-3 text-cyan-400 font-bold">{peer.rank.toFixed(4)}</td>
-                    <td className="p-3 text-emerald-400 font-bold">{(peer.consensus * 100).toFixed(1)}%</td>
-                    <td className="p-3 text-purple-300 font-bold">{(peer.incentive * 100).toFixed(2)}%</td>
-                    <td className="p-3 font-bold text-white">{peer.emissionTaoPerDay.toFixed(2)} TAO</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
+      </div>
   );
 };
 

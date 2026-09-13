@@ -49,7 +49,7 @@ export const RyzenTracksShowcase: React.FC<RyzenTracksShowcaseProps> = ({ onSele
       highlights: [
         'Real hardware probing (CPU, GPU, RAM, Live Ping)',
         'Centimeter-level RTK GNSS satellite positioning',
-        'CredXsor Yuma Consensus mathematical engine'
+        'CredXsor on-chain AI compute market with settled sessions'
       ],
       linkHash: '#/depin'
     },
