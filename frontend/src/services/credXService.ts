@@ -1648,6 +1648,66 @@ export async function fetchGeoOrbitState(): Promise<GeoOrbitState | null> {
   }
 }
 
+export interface GeoTelemetryAnchor {
+  operator: string;
+  stationId: number;
+  hexId: string;
+  latE7: number;
+  lngE7: number;
+  hMeters: number;
+  tdop: number;
+  timestamp: number;
+  blockNumber: number;
+  txHash: string;
+}
+
+/** Most recent TelemetryAnchored events emitted by the live GeoOrbitRegistry (via eth_getLogs). */
+export async function fetchGeoTelemetryAnchors(limit = 20): Promise<GeoTelemetryAnchor[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const topic = EVIDENCE_TOPICS.TelemetryAnchored;
+    const windows = [60000, 30000, 15000, 8000];
+    let logs: any[] = [];
+    for (const win of windows) {
+      try {
+        logs = await provider
+          .getLogs({
+            address: CONTRACTS.geoOrbitRegistry,
+            topics: [topic],
+            fromBlock: Math.max(1, latest - win),
+            toBlock: 'latest',
+          })
+          .catch(() => []);
+        if (logs.length > 0) break;
+      } catch {
+        /* try a narrower window */
+      }
+    }
+    const decoder = ethers.AbiCoder.defaultAbiCoder();
+    return logs
+      .slice(-limit)
+      .reverse()
+      .map((log) => {
+        const data = decoder.decode(['int32', 'int32', 'uint32', 'uint8', 'uint256'], log.data);
+        return {
+          operator: ethers.getAddress('0x' + log.topics[1].slice(26)),
+          stationId: Number(log.topics[2]),
+          hexId: '0x' + (log.topics[3] as string).slice(2, 10),
+          latE7: Number(data[0]),
+          lngE7: Number(data[1]),
+          hMeters: Number(data[2]),
+          tdop: Number(data[3]),
+          timestamp: Number(data[4]),
+          blockNumber: Number(log.blockNumber),
+          txHash: String(log.transactionHash),
+        };
+      });
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchGeoOrbitStation(user: string): Promise<GeoOrbitStationView | null> {
   try {
     const c = readContract(CONTRACTS.geoOrbitRegistry, GEOORBIT_ABI);

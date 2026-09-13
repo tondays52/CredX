@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
 import GlassCard from '../common/GlassCard';
 import { Globe, Satellite, Plane, Flame, RefreshCw, AlertTriangle, Loader2, Sailboat } from 'lucide-react';
 import {
@@ -7,211 +8,312 @@ import {
 } from '../../services/credXService';
 import { LiveFlightData, LiveHazardHotspot, LiveVesselData } from '../../utils/realGeoDataFeeds';
 
-const CESIUM_VERSION = '1.111.0';
-const CESIUM_JS = `https://cdn.jsdelivr.net/npm/cesium@${CESIUM_VERSION}/Build/Cesium/Cesium.js`;
-const CESIUM_CSS = `https://cdn.jsdelivr.net/npm/cesium@${CESIUM_VERSION}/Build/Cesium/Widgets/widgets.css`;
-
-declare global {
-  interface Window {
-    Cesium: any;
-  }
-}
-
 interface SmartGlobePanelProps {
   planes: LiveFlightData[];
   hotspots: LiveHazardHotspot[];
   vessels: LiveVesselData[];
 }
 
+const DEG = Math.PI / 180;
+
+function latLngToVec3(lat: number, lng: number, r: number): THREE.Vector3 {
+  const phi = (90 - lat) * DEG;
+  const theta = (lng + 180) * DEG;
+  return new THREE.Vector3(
+    -r * Math.sin(phi) * Math.cos(theta),
+    r * Math.cos(phi),
+    r * Math.sin(phi) * Math.sin(theta)
+  );
+}
+
+/** Procedural dark globe used when the online earth texture cannot load (offline-safe). */
+function createFallbackGlobeTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = 1024;
+  c.height = 512;
+  const ctx = c.getContext('2d')!;
+  const grad = ctx.createLinearGradient(0, 0, 0, 512);
+  grad.addColorStop(0, '#0b1a2b');
+  grad.addColorStop(0.5, '#0a1c33');
+  grad.addColorStop(1, '#0b1a2b');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1024, 512);
+  ctx.strokeStyle = 'rgba(56,189,248,0.30)';
+  ctx.lineWidth = 1;
+  for (let lon = 0; lon <= 360; lon += 20) {
+    ctx.beginPath();
+    ctx.moveTo((lon / 360) * 1024, 0);
+    ctx.lineTo((lon / 360) * 1024, 512);
+    ctx.stroke();
+  }
+  for (let latv = -80; latv <= 120; latv += 20) {
+    const y = ((90 - latv) / 180) * 512;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(1024, y);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = '#06b6d4';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(0, 256);
+  ctx.lineTo(1024, 256);
+  ctx.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+const ENTITY_COLORS: Record<string, string> = {
+  station: '#34d399',
+  plane: '#c084fc',
+  fire: '#ef4444',
+  vessel: '#14b8a6'
+};
+
+function makeGlowTexture(color: string): THREE.CanvasTexture {
+  const size = 48;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, color);
+  g.addColorStop(0.4, color + 'aa');
+  g.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const glowTextureCache = new Map<string, THREE.CanvasTexture>();
+
 /**
- * 3D globe built on Cesium (CDN). Draws real live objects only:
- * on-chain GeoOrbit stations + OpenSky ADS-B aircraft + NASA FIRMS thermal
- * anomalies. No simulated tracks — every entity is a live position.
+ * 3D globe — bundled three.js (no CDN / API key required). Draws real live
+ * objects only: on-chain GeoOrbit stations + OpenSky ADS-B aircraft + NASA
+ * FIRMS thermal anomalies + AIS vessels. No simulated tracks.
  */
 const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, vessels }) => {
   const containerRef = useRef<HTMLDivElement>(null);
-  const viewerRef = useRef<any>(null);
-  const [loadingCesium, setLoadingCesium] = useState(false);
-  const [stations, setStations] = useState<GeoOrbitStationOnChain[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [ready, setReady] = useState(false);
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
+  const globeRef = useRef<THREE.Group | null>(null);
+  const globeMeshRef = useRef<THREE.Mesh | null>(null);
+  const entityGroupRef = useRef<THREE.Group | null>(null);
+  const rafRef = useRef<number>(0);
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; rotY: number; rotX: number } | null>(null);
+  const autoRotateRef = useRef(true);
 
-  const loadGlobeScripts = (): Promise<boolean> =>
-    new Promise((resolve) => {
-      if (window.Cesium) {
-        resolve(true);
-        return;
+  const [stations, setStations] = useState<GeoOrbitStationOnChain[]>([]);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  const renderLayers = useCallback(() => {
+    const env = entityGroupRef.current;
+    if (!env || !rendererRef.current) return;
+    while (env.children.length > 0) {
+      const child = env.children[0] as THREE.Sprite;
+      env.remove(child);
+      child.material.dispose();
+    }
+    const add = (lat: number, lng: number, alt: number, key: string, size: number, name: string) => {
+      let tex = glowTextureCache.get(key);
+      if (!tex) {
+        tex = makeGlowTexture(key);
+        glowTextureCache.set(key, tex);
       }
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = CESIUM_CSS;
-      document.head.appendChild(link);
-      const script = document.createElement('script');
-      script.src = CESIUM_JS;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.head.appendChild(script);
+      const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.userData.name = name;
+      const pos = latLngToVec3(lat, lng, 1.01 + alt);
+      sprite.position.copy(pos);
+      sprite.scale.setScalar(size);
+      env.add(sprite);
+    };
+    for (const s of stations)
+      add(s.latE7 / 1e7, s.lngE7 / 1e7, 0, ENTITY_COLORS.station, 0.032, `◎ STN#${s.stationId} · hex ${s.hexId}`);
+    for (const p of planes) add(p.latitude, p.longitude, 0, ENTITY_COLORS.plane, 0.026, `✈ ${p.callsign || p.icao24}`);
+    for (const h of hotspots) add(h.latitude, h.longitude, 0, ENTITY_COLORS.fire, 0.02, `🔥 ${h.satellite}`);
+    for (const v of vessels) add(v.latitude, v.longitude, 0, ENTITY_COLORS.vessel, 0.022, `⛵ ${v.name || v.mmsi}`);
+  }, [stations, planes, hotspots, vessels]);
+
+  useEffect(() => {
+    renderLayers();
+  }, [renderLayers]);
+
+  const buildGlobe = useCallback((): THREE.Texture => {
+    const tex = new THREE.TextureLoader().load(
+      'https://unpkg.com/three-globe@2.31.0/example/img/earth-night.jpg',
+      (t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+      },
+      undefined,
+      () => {
+        // CDN texture unreachable — swap in the procedural graticule globe so it still renders offline.
+        const mesh = globeMeshRef.current;
+        if (mesh) {
+          const fallback = createFallbackGlobeTexture();
+          (mesh.material as THREE.MeshBasicMaterial).map = fallback;
+          (mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
+        }
+      }
+    );
+    return tex;
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const width = el.clientWidth || 640;
+    const height = el.clientHeight || 540;
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    } catch {
+      setError('WebGL unavailable — falling back to the 2D coverage map.');
+      return;
+    }
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    el.appendChild(renderer.domElement);
+    rendererRef.current = renderer;
+
+    const scene = new THREE.Scene();
+    sceneRef.current = scene;
+
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
+    camera.position.set(0, 0, 3.2);
+    cameraRef.current = camera;
+
+    const globe = new THREE.Group();
+    globe.rotation.y = -0.35;
+    globeRef.current = globe;
+    scene.add(globe);
+
+    const sphere = new THREE.SphereGeometry(1, 128, 64);
+    const globeMesh = new THREE.Mesh(sphere, new THREE.MeshBasicMaterial({ map: buildGlobe() }));
+    globeMeshRef.current = globeMesh;
+    globe.add(globeMesh);
+
+    // Safety net: if the online texture neither loads nor errors (network hang),
+    // swap in the procedural graticule globe so rendering never fails.
+    const swapTimer = window.setTimeout(() => {
+      const mat = globeMesh.material as THREE.MeshBasicMaterial;
+      if (globeMeshRef.current && mat.map && !(mat.map as THREE.Texture).image) {
+        mat.map = createFallbackGlobeTexture();
+        mat.needsUpdate = true;
+      }
+    }, 12000);
+    const haze = new THREE.Mesh(
+      new THREE.SphereGeometry(1.015, 64, 32),
+      new THREE.MeshBasicMaterial({ color: '#06b6d4', transparent: true, opacity: 0.1, side: THREE.FrontSide })
+    );
+    globe.add(haze);
+
+    const starsGeo = new THREE.BufferGeometry();
+    const starPos = new Float32Array(900);
+    for (let i = 0; i < 900; i++) {
+      starPos[i * 3] = (Math.random() - 0.5) * 80;
+      starPos[i * 3 + 1] = (Math.random() - 0.5) * 80;
+      starPos[i * 3 + 2] = (Math.random() - 0.5) * 80 - 20;
+    }
+    starsGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+    scene.add(new THREE.Points(starsGeo, new THREE.PointsMaterial({ color: '#9fd8ff', size: 0.12, transparent: true, opacity: 0.7 })));
+
+    const entities = new THREE.Group();
+    globe.add(entities);
+    entityGroupRef.current = entities;
+
+    const animate = () => {
+      rafRef.current = requestAnimationFrame(animate);
+      if (globeRef.current && autoRotateRef.current && !dragRef.current) {
+        globeRef.current.rotation.y += 0.0014;
+      }
+      renderer.render(scene, camera);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      renderer.setSize(r.width, r.height);
+      if (cameraRef.current) {
+        cameraRef.current.aspect = r.width / r.height;
+        cameraRef.current.updateProjectionMatrix();
+      }
     });
+    ro.observe(containerRef.current ?? el);
+
+    setReady(true);
+
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      window.clearTimeout(swapTimer);
+      ro.disconnect();
+      glowTextureCache.clear();
+      renderer.dispose();
+      sphere.dispose();
+      starsGeo.dispose();
+      el.removeChild(renderer.domElement);
+      rendererRef.current = null;
+      sceneRef.current = null;
+      globeRef.current = null;
+      globeMeshRef.current = null;
+      entityGroupRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const refreshStations = async () => {
     try {
       const list = await fetchGeoOrbitStations();
       setStations(list);
-      renderStations(list);
     } catch {
       /* keep last known set */
     }
   };
 
-  const renderStations = (list: GeoOrbitStationOnChain[]) => {
-    const viewer = viewerRef.current;
-    if (!viewer) return;
-    viewer.entities.removeById('station-layer', true);
-    if (list.length === 0) return;
-    for (const s of list) {
-      viewer.entities.add({
-        id: `station-${s.stationId}`,
-        position: window.Cesium.Cartesian3.fromDegrees(s.lngE7 / 1e7, s.latE7 / 1e7, (s.hMeters || 0)),
-        point: { pixelSize: 10, color: window.Cesium.Color.fromCssColorString('#34d399') },
-        label: {
-          text: `◎ STN#${s.stationId}`,
-          font: '11px monospace',
-          pixelOffset: new window.Cesium.Cartesian2(0, -14),
-          fillColor: window.Cesium.Color.WHITE,
-          style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-          outlineColor: window.Cesium.Color.BLACK,
-          outlineWidth: 3,
-        },
-        description: `On-chain station #${s.stationId} · hex ${s.hexId} · operator ${
-          s.operator.slice(0, 6)
-        }…${s.operator.slice(-4)} · block ${s.blockNumber.toLocaleString()}`,
-      });
-    }
-    viewer.flyTo(viewer.entities);
-  };
-
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingCesium(true);
-      const ok = await loadGlobeScripts();
-      if (cancelled) return;
-      setLoadingCesium(false);
-      if (!ok || !containerRef.current) {
-        setError('Cesium CDN blocked by network/CSP — falling back to the 2D coverage map.');
-        return;
-      }
-      try {
-        window.Cesium.Ion.defaultAccessToken = import.meta.env.VITE_CESIUM_ION_TOKEN || '';
-        const viewer = new window.Cesium.Viewer(containerRef.current, {
-          animation: false,
-          timeline: false,
-          geocoder: false,
-          homeButton: false,
-          sceneModePicker: false,
-          navigationHelpButton: false,
-          baseLayerPicker: false,
-          fullscreenButton: false,
-          baseLayer: window.Cesium.ImageryLayer.fromProviderAsync(
-            window.Cesium.OpenStreetMapImageryProvider.fromUrl('https://tile.openstreetmap.org/')
-          ),
-        });
-        viewer.scene.globe.enableLighting = false;
-        viewerRef.current = viewer;
-        viewer.entities.add({
-          id: 'station-layer',
-          position: window.Cesium.Cartesian3.fromDegrees(0, 0),
-          point: { pixelSize: 0 },
-        });
-        setReady(true);
-      } catch (e: any) {
-        setError(e?.message || 'Failed to boot Cesium globe');
-      }
-    })();
-    return () => {
-      cancelled = true;
-      try {
-        viewerRef.current?.destroy();
-        viewerRef.current = null;
-      } catch {
-        /* noop */
-      }
-    };
+    refreshStations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Live overlay updates: aircraft + thermal anomalies + stations
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !window.Cesium) return;
-    viewer.entities.removeById('air-layer', true);
-    if (planes.length > 0) {
-      for (const f of planes) {
-        viewer.entities.add({
-          id: `air-${f.icao24}`,
-          position: window.Cesium.Cartesian3.fromDegrees(f.longitude, f.latitude, (f.baroAltitude || 0) * 1000),
-          point: { pixelSize: 6, color: window.Cesium.Color.fromCssColorString('#c084fc') },
-          label: {
-            text: `✈ ${f.callsign || f.icao24}`,
-            font: '10px monospace',
-            pixelOffset: new window.Cesium.Cartesian2(0, -10),
-            fillColor: window.Cesium.Color.fromCssColorString('#d8b4fe'),
-            style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-            outlineColor: window.Cesium.Color.BLACK,
-            outlineWidth: 2,
-          },
-        });
-      }
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragRef.current = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, rotY: globeRef.current?.rotation.y ?? 0, rotX: globeRef.current?.rotation.x ?? 0 };
+  };
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const gl = globeRef.current;
+    const cam = cameraRef.current;
+    if (!gl || !cam || !rendererRef.current) return;
+    if (dragRef.current) {
+      const dx = e.clientX - dragRef.current.x;
+      const dy = e.clientY - dragRef.current.y;
+      gl.rotation.y = dragRef.current.rotY + dx * 0.0055;
+      gl.rotation.x = Math.max(-1.2, Math.min(1.2, dragRef.current.rotX + dy * 0.004));
+      return;
     }
-  }, [planes]);
-
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !window.Cesium) return;
-    viewer.entities.removeById('fire-layer', true);
-    if (hotspots.length > 0) {
-      for (const h of hotspots) {
-        viewer.entities.add({
-          id: `fire-${h.latitude}-${h.longitude}`,
-          position: window.Cesium.Cartesian3.fromDegrees(h.longitude, h.latitude, 0),
-          point: { pixelSize: 5, color: window.Cesium.Color.fromCssColorString('#ef4444') },
-          label: {
-            text: `🔥 ${h.satellite}`,
-            font: '9px monospace',
-            pixelOffset: new window.Cesium.Cartesian2(0, -8),
-            fillColor: window.Cesium.Color.fromCssColorString('#fca5a5'),
-            style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-            outlineColor: window.Cesium.Color.BLACK,
-            outlineWidth: 2,
-          },
-        });
-      }
+    // hover tooltip via raycast on sprites
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const nx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(nx, ny), cam);
+    const hits = raycaster.intersectObjects(gl.children, true);
+    const sprite = hits.find((h) => (h.object as THREE.Sprite).isSprite) as { object: THREE.Sprite } | undefined;
+    if (sprite) {
+      setTooltip({ text: String((sprite.object as THREE.Object3D & { userData: { name?: string } }).userData.name ?? ''), x: e.clientX - rect.left, y: e.clientY - rect.top });
+    } else {
+      setTooltip(null);
     }
-  }, [hotspots]);
-
-  useEffect(() => {
-    const viewer = viewerRef.current;
-    if (!viewer || !window.Cesium) return;
-    viewer.entities.removeById('ais-layer', true);
-    if (vessels.length > 0) {
-      for (const v of vessels) {
-        viewer.entities.add({
-          id: `ais-${v.mmsi}`,
-          position: window.Cesium.Cartesian3.fromDegrees(v.longitude, v.latitude, 0),
-          point: { pixelSize: 5, color: window.Cesium.Color.fromCssColorString('#14b8a6') },
-          label: {
-            text: `⛵ ${v.name || v.mmsi}`,
-            font: '9px monospace',
-            pixelOffset: new window.Cesium.Cartesian2(0, -8),
-            fillColor: window.Cesium.Color.fromCssColorString('#5eead4'),
-            style: window.Cesium.LabelStyle.FILL_AND_OUTLINE,
-            outlineColor: window.Cesium.Color.BLACK,
-            outlineWidth: 2,
-          },
-        });
-      }
-    }
-  }, [vessels]);
+  };
+  const onPointerUp = () => {
+    dragRef.current = null;
+  };
 
   return (
     <GlassCard className="p-5 border-cyan-500/30 bg-gradient-to-br from-sky-950/20 via-black to-emerald-950/20">
@@ -221,7 +323,7 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
             <Globe className="w-4 h-4 text-cyan-400" /> GeoOrbit 3D Transparency Globe
           </h3>
           <p className="text-[11px] text-white/50 font-mono mt-0.5">
-            Live objects only: on-chain RNSS stations · ADS-B aircraft · FIRMS thermal anomalies (Cesium Ion)
+            Live objects only: on-chain GNSS stations · ADS-B aircraft · FIRMS thermal anomalies (keyless three.js globe)
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -234,23 +336,34 @@ const SmartGlobePanel: React.FC<SmartGlobePanelProps> = ({ planes, hotspots, ves
         </div>
       </div>
 
-      <div className="relative mt-3 rounded-2xl overflow-hidden border border-white/10 bg-black/60" style={{ height: 540 }}>
-        {loadingCesium ? (
-          <div className="absolute inset-0 flex items-center justify-center gap-2 text-cyan-300 font-mono text-xs">
-            <Loader2 className="w-4 h-4 animate-spin" /> booting Cesium viewer…
-          </div>
-        ) : error ? (
+      <div
+        className="relative mt-3 rounded-2xl overflow-hidden border border-white/10 bg-black/60"
+        style={{ height: 540 }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {error ? (
           <div className="absolute inset-0 flex items-center justify-center gap-2 text-rose-300 font-mono text-xs">
             <AlertTriangle className="w-4 h-4" /> {error}
           </div>
         ) : (
           <>
             <div ref={containerRef} className="absolute inset-0" />
-            {!ready ? (
-              <div className="absolute inset-0 flex items-center justify-center text-white/40 font-mono text-xs z-10 pointer-events-none">
-                initializing…
+            {!ready && (
+              <div className="absolute inset-0 flex items-center justify-center gap-2 text-cyan-300 font-mono text-xs">
+                <Loader2 className="w-4 h-4 animate-spin" /> booting globe…
               </div>
-            ) : null}
+            )}
+            {tooltip && (
+              <div
+                className="absolute z-20 pointer-events-none px-2 py-1 rounded bg-black/85 border border-white/15 text-[10px] font-mono text-white/90 whitespace-nowrap"
+                style={{ left: tooltip.x + 12, top: tooltip.y + 12 }}
+              >
+                {tooltip.text}
+              </div>
+            )}
           </>
         )}
       </div>

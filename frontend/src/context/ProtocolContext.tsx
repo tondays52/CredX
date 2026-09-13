@@ -135,11 +135,8 @@ export interface ProtocolContextType {
   addNexusBeacon: (beacon: import('../utils/nexusTelemetry').NexusBeacon) => void;
   // CredX GeoOrbit Space-Time Mesh & Centimeter Positioning State & Handlers
   orbitConnected: boolean;
-  orbitTotalStations: number;
   orbitMyStationsCount: number;
   orbitClaimableTokens: number;
-  orbitBurnedTokens: number;
-  orbitDataRevenueUSD: number;
   orbitSatellitesLocked: number;
   orbitAccuracyCm: number;
   orbitActiveHexMultiplier: string;
@@ -711,11 +708,8 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   // CredX GeoOrbit RTK Space-Time Mesh State
   // ==========================================
   const [orbitConnected, setOrbitConnected] = useState<boolean>(true);
-  const [orbitTotalStations] = useState<number>(22660);
   const [orbitMyStationsCount] = useState<number>(1);
   const [orbitClaimableTokens, setOrbitClaimableTokens] = useState<number>(48.25);
-  const [orbitBurnedTokens, setOrbitBurnedTokens] = useState<number>(2841920);
-  const [orbitDataRevenueUSD, setOrbitDataRevenueUSD] = useState<number>(354504.35);
   const [orbitSatellitesLocked, setOrbitSatellitesLocked] = useState<number>(38);
   const [orbitAccuracyCm, setOrbitAccuracyCm] = useState<number>(1.2);
   const [orbitActiveHexMultiplier] = useState<string>('6X');
@@ -733,8 +727,6 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const interval = setInterval(() => {
       setOrbitClaimableTokens(prev => +(prev + 0.002).toFixed(4));
-      setOrbitDataRevenueUSD(prev => +(prev + 0.08).toFixed(2));
-      setOrbitBurnedTokens(prev => prev + 1);
       setOrbitStationUptimeHours(prev => +(prev + 0.001).toFixed(3));
 
       // Jitter satellite SNRs slightly for real-time physics tracking realism
@@ -1020,11 +1012,8 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         addNexusBeacon,
         // CredX GeoOrbit State & Handlers
         orbitConnected,
-        orbitTotalStations,
         orbitMyStationsCount,
         orbitClaimableTokens,
-        orbitBurnedTokens,
-        orbitDataRevenueUSD,
         orbitSatellitesLocked,
         orbitAccuracyCm,
         orbitActiveHexMultiplier,

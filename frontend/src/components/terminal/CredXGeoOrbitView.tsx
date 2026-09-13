@@ -34,7 +34,9 @@ import {
   Plane,
   Flame as FireIcon,
   Bot,
-  Sailboat
+  Sailboat,
+  Lock,
+  RefreshCw
 } from 'lucide-react';
 import { StableHexRecord, GlobalMinerCluster, NTRIPMountpoint, parseNMEAGGA } from '../../utils/geoOrbitTelemetry';
 import GeoOrbitAttestationModal from '../modals/GeoOrbitAttestationModal';
@@ -57,18 +59,35 @@ import {
 } from '../../utils/realGeoDataFeeds';
 import {
   fetchGeoOrbitStations,
-  GeoOrbitStationOnChain
+  fetchGeoOrbitState,
+  fetchGeoTelemetryAnchors,
+  GeoOrbitStationOnChain,
+  GeoOrbitState,
+  GeoTelemetryAnchor
 } from '../../services/credXService';
+import { CREDITCOIN_BLOCKSCOUT, CONTRACTS } from '../../config/contracts';
 import SmartGlobePanel from './SmartGlobePanel';
+
+function timeAgo(ts: number): string {
+  const diff = Math.max(0, Date.now() - ts * 1000);
+  if (diff < 60_000) return 'just now';
+  if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+  if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ${Math.floor((diff % 3_600_000) / 60_000)}m ago`;
+  return `${Math.floor(diff / 86_400_000)}d ago`;
+}
+
+const MetricTile: React.FC<{ label: string; value: string; loading: boolean; color: string }> = ({ label, value, loading, color }) => (
+  <div className="p-3 rounded-xl bg-black/40 border border-white/[0.08]">
+    <span className="text-[9px] uppercase font-mono text-white/40 block">{label}</span>
+    <span className={`text-lg font-black font-mono ${color}`}>{loading ? '…' : value}</span>
+  </div>
+);
 
 export const CredXGeoOrbitView: React.FC = () => {
   const {
     orbitConnected,
-    orbitTotalStations,
     orbitMyStationsCount,
     orbitClaimableTokens,
-    orbitBurnedTokens,
-    orbitDataRevenueUSD,
     orbitSatellitesLocked,
     orbitAccuracyCm,
     orbitActiveHexMultiplier,
@@ -126,6 +145,11 @@ export const CredXGeoOrbitView: React.FC = () => {
   const [loadingStations, setLoadingStations] = useState<boolean>(false);
   const [showGlobe, setShowGlobe] = useState<boolean>(false);
 
+  // Real on-chain registry state + TelemetryAnchored ledger (tokenomics, not simulated)
+  const [geoState, setGeoState] = useState<GeoOrbitState | null>(null);
+  const [geoStateLoading, setGeoStateLoading] = useState<boolean>(false);
+  const [telemetryAnchors, setTelemetryAnchors] = useState<GeoTelemetryAnchor[]>([]);
+
   // Real AIS maritime layer (AISStream.io WebSocket)
   const [liveAis, setLiveAis] = useState<boolean>(false);
   const [aisVessels, setAisVessels] = useState<LiveVesselData[]>([]);
@@ -175,6 +199,32 @@ export const CredXGeoOrbitView: React.FC = () => {
     loadOnChainStations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadGeoTokenomics = async (notify = false) => {
+    setGeoStateLoading(true);
+    try {
+      const [state, anchors] = await Promise.all([
+        fetchGeoOrbitState(),
+        fetchGeoTelemetryAnchors(16)
+      ]);
+      setGeoState(state);
+      setTelemetryAnchors(anchors);
+      if (notify) {
+        addToast('success', 'GeoOrbitRegistry Synced', `Registry state + ${anchors.length} recent telemetry anchors read on-chain.`);
+      }
+    } catch {
+      /* keep last known values */
+    } finally {
+      setGeoStateLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadGeoTokenomics();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const registryStations = geoState ? geoState.stationCount : onChainStations.length;
 
   const handleToggleAirspace = async () => {
     if (!liveAirspace) {
@@ -295,7 +345,7 @@ export const CredXGeoOrbitView: React.FC = () => {
       <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-[11px] leading-relaxed text-amber-200/80">
         <SimulationBadge
           label="MESH VIEWS SIMULATED (ON-CHAIN ANCHOR LIVE)"
-          note="The GeoOrbitRegistry below is deployed on Creditcoin testnet — custody, telemetry and rewards are real transactions. The mesh explorer, RTK correction streams and macro tokenomics panels remain locally simulated telemetry."
+          note="The GeoOrbitRegistry below is deployed on Creditcoin testnet — custody, telemetry and rewards are real transactions. The mesh explorer and RTK correction streams remain locally simulated telemetry; registry, station, telemetry and reward-unit figures are read live on-chain, and the ORBIT buyback & burn engine is a proposed roadmap (no tradable token is live yet)."
         />
         <span className="font-mono">
           On-chain layer: LIVE — the GeoOrbitRegistry pane above anchors stations and Proof-of-Space-Time
@@ -373,8 +423,14 @@ export const CredXGeoOrbitView: React.FC = () => {
           <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
             <span className="text-[10px] uppercase font-mono text-white/40 block">Global Stations</span>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-lg font-black font-mono text-white">{orbitTotalStations.toLocaleString()}</span>
-              <span className="text-[10px] text-emerald-400 font-mono font-bold">+1 Mine</span>
+              <span className="text-lg font-black font-mono text-white">
+                {geoStateLoading ? (
+                  <Activity className="w-4 h-4 animate-spin text-cyan-400 inline" />
+                ) : (
+                  registryStations.toLocaleString()
+                )}
+              </span>
+              <span className="text-[10px] text-emerald-400 font-mono font-bold">on-chain</span>
             </div>
           </div>
 
@@ -397,21 +453,29 @@ export const CredXGeoOrbitView: React.FC = () => {
           </div>
 
           <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06]">
-            <span className="text-[10px] uppercase font-mono text-white/40 block">Enterprise Data ARR</span>
+            <span className="text-[10px] uppercase font-mono text-white/40 block">Telemetry Anchored</span>
             <div className="flex items-baseline gap-1.5 mt-0.5">
-              <span className="text-lg font-black font-mono text-amber-400">
-                ${orbitDataRevenueUSD.toLocaleString('en-US', { maximumFractionDigits: 0 })}
+              <span className="text-lg font-black font-mono text-cyan-400">
+                {geoStateLoading ? (
+                  <Activity className="w-4 h-4 animate-spin text-cyan-400 inline" />
+                ) : (
+                  (geoState?.totalTelemetryAnchored ?? 0).toLocaleString()
+                )}
               </span>
-              <span className="text-[10px] text-amber-300 font-mono font-bold">USD</span>
+              <span className="text-[10px] text-white/50 font-mono">Txns on-chain</span>
             </div>
           </div>
 
           <div className="p-3 rounded-xl bg-black/40 border border-white/[0.06] col-span-2 sm:col-span-1">
-            <span className="text-[10px] uppercase font-mono text-white/40 block">Tokens Burned</span>
+            <span className="text-[10px] uppercase font-mono text-white/40 block">Reward Units Issued</span>
             <div className="flex items-center gap-1.5 mt-0.5">
-              <Flame className="w-3.5 h-3.5 text-orange-500 animate-pulse" />
-              <span className="text-sm font-black font-mono text-orange-400">
-                {orbitBurnedTokens.toLocaleString()} ORBIT
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-sm font-black font-mono text-amber-400">
+                {geoStateLoading ? (
+                  <Activity className="w-3.5 h-3.5 animate-spin text-amber-400 inline" />
+                ) : (
+                  (geoState?.totalRewardUnitsIssued ?? 0).toLocaleString('en-US', { maximumFractionDigits: 0 })
+                )}
               </span>
             </div>
           </div>
@@ -1357,145 +1421,203 @@ export const CredXGeoOrbitView: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* SUB-VIEW 4: TOKENOMICS, BUYBACK & BURN ($354k ARR) (Screenshot 3 Replic.)  */}
+      {/* ========================================================================= */}
+      {/* SUB-VIEW 4: TOKENOMICS & BUYBACK & BURN — REAL ON-CHAIN REGISTRY          */}
       {/* ========================================================================= */}
       {subTab === 'tokenomics' && (
         <div className="space-y-6">
-          {/* Headline Revenue & Burn Showcase Card (Direct Screenshot 3 Replication) */}
-          <GlassCard className="p-6 border-orange-500/30 bg-gradient-to-r from-orange-950/20 via-black to-amber-950/25">
+          {/* On-Chain Registry Headline (real contract state, no simulated treasury/burns) */}
+          <GlassCard className="p-6 border-cyan-500/30 bg-gradient-to-r from-cyan-950/20 via-black to-emerald-950/25">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
               <div className="space-y-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 font-mono text-[11px] font-bold flex items-center gap-1.5 w-fit">
-                  <Flame className="w-3.5 h-3.5 animate-pulse" />
-                  Deflationary Enterprise Flywheel · 80% Buyback
+                <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-mono text-[11px] font-bold flex items-center gap-1.5 w-fit">
+                  <ShieldCheck className="w-3.5 h-3.5" />
+                  GeoOrbitRegistry · Live On-Chain (Creditcoin testnet)
                 </span>
 
                 <h3 className="text-2xl lg:text-3xl font-black text-white">
-                  Annual Enterprise Data Revenue: ${orbitDataRevenueUSD.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                  {geoStateLoading ? 'Syncing registry state…' : 'On-Chain GeoOrbit Tokenomics'}
                 </h3>
 
                 <p className="text-xs text-white/70 max-w-2xl leading-relaxed">
-                  Enterprise rovers in precision agriculture (John Deere/Trimble), drone logistics corridors, and municipal smart survey networks pay subscriptions in fiat/stablecoins. 80% of all data revenues are programmatically used to market-buy ORBIT tokens on DEXs and burn them forever.
+                  Every station registration and GNSS telemetry fix is anchored to the GeoOrbitRegistry smart
+                  contract. Reward units are issued on-chain per verified anchor — no simulated treasury, burned
+                  supply or revenue figure is shown on this screen.
                 </p>
+
+                <a
+                  href={`${CREDITCOIN_BLOCKSCOUT}/address/${CONTRACTS.geoOrbitRegistry}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-300 hover:text-cyan-200"
+                >
+                  {CONTRACTS.geoOrbitRegistry} <ExternalLink className="w-3 h-3" />
+                </a>
               </div>
 
-              <div className="text-left lg:text-right shrink-0 p-4 rounded-2xl bg-black/40 border border-white/[0.08]">
-                <span className="text-[10px] uppercase font-mono text-white/40 block">Cumulative Tokens Burned</span>
-                <span className="text-2xl lg:text-3xl font-black font-mono text-orange-400">
-                  {orbitBurnedTokens.toLocaleString()} ORBIT
-                </span>
-                <span className="text-[10px] text-white/40 block mt-1 font-mono">
-                  ~ ${(orbitBurnedTokens * 0.25).toLocaleString('en-US', { maximumFractionDigits: 0 })} USD Market Value
-                </span>
+              <div className="grid grid-cols-2 gap-3 shrink-0 max-w-md w-full">
+                <MetricTile
+                  label="Stations Registered"
+                  value={geoState ? geoState.stationCount.toLocaleString() : '—'}
+                  loading={geoStateLoading}
+                  color="text-white"
+                />
+                <MetricTile
+                  label="Telemetry Anchored"
+                  value={geoState ? geoState.totalTelemetryAnchored.toLocaleString() : '—'}
+                  loading={geoStateLoading}
+                  color="text-cyan-400"
+                />
+                <MetricTile
+                  label="Reward Units Issued"
+                  value={geoState ? geoState.totalRewardUnitsIssued.toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—'}
+                  loading={geoStateLoading}
+                  color="text-amber-400"
+                />
+                <MetricTile
+                  label="Reward per Anchor"
+                  value={geoState ? `${geoState.rewardPerTelemetry.toFixed(4)}` : '—'}
+                  loading={geoStateLoading}
+                  color="text-emerald-400"
+                />
               </div>
             </div>
 
-            {/* Burn Engine Progress Visualizer */}
-            <div className="mt-6 pt-6 border-t border-white/[0.08] space-y-3">
+            <div className="mt-5 pt-4 border-t border-white/[0.08] flex items-start gap-2 text-[11px] font-mono text-white/50">
+              <Info className="w-3.5 h-3.5 text-white/40 mt-0.5 shrink-0" />
+              <span>
+                Rewards accrue as <b className="text-white/80">on-chain reward units</b> claimable per registered
+                station (claimRewards on the registry). There is currently no tradable <b className="text-white/80">ORBIT</b>{' '}
+                token — token distribution and the buyback &amp; burn engine below are a{' '}
+                <b className="text-amber-300">proposed roadmap</b>, subject to governance.
+              </span>
+            </div>
+          </GlassCard>
+
+          {/* ORBIT Buyback & Burn Roadmap (PLANNED — not yet live) */}
+          <GlassCard className="p-6 border-amber-500/25 bg-gradient-to-r from-amber-950/15 via-black to-orange-950/20 space-y-4">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="space-y-1">
+                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono text-[11px] font-bold flex items-center gap-1.5 w-fit">
+                  <Lock className="w-3.5 h-3.5" />
+                  Proposed Roadmap · Not Yet Live
+                </span>
+                <h4 className="text-base lg:text-lg font-bold text-white flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-orange-400" />
+                  ORBIT Buyback & Burn — Deflationary Flywheel
+                </h4>
+              </div>
+              <button
+                onClick={() => loadGeoTokenomics(true)}
+                className="px-3 py-1.5 rounded-lg bg-black/50 hover:bg-black/70 border border-white/10 text-white/70 text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-3 h-3" /> Refresh Registry
+              </button>
+            </div>
+
+            <p className="text-xs text-white/70 leading-relaxed">
+              The design routes 80% of future enterprise data revenue into automated on-chain DEX buybacks that
+              permanently burn ORBIT tokens. No ORBIT token, buyback contract or burn queue is deployed yet — this
+              allocation is a proposal for community governance, not an active mechanism.
+            </p>
+
+            <div className="space-y-2.5 pt-1">
               <div className="flex items-center justify-between text-xs font-mono">
-                <span className="text-white/60">Enterprise Cashflow Burn Allocation</span>
-                <span className="text-orange-400 font-bold">80% Buyback & Burn Active</span>
+                <span className="text-white/60">Proposed Enterprise Cashflow Allocation</span>
+                <span className="text-amber-400 font-bold">80% Buyback & Burn (Proposal)</span>
               </div>
-
               <div className="w-full bg-white/10 rounded-full h-3 overflow-hidden p-0.5">
-                <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 h-full rounded-full w-[80%] transition-all" />
+                <div className="bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 h-full rounded-full w-[80%] opacity-50" />
               </div>
-
               <div className="flex items-center justify-between text-[11px] font-mono text-white/40">
-                <span>0% General Reserve</span>
-                <span className="text-orange-400 font-bold">80% Deflationary DEX Sinks</span>
-                <span>20% Protocol Treasury & Maintenance</span>
+                <span>10% Protocol Treasury &amp; Maintenance</span>
+                <span className="text-amber-300/80 font-bold">80% Deflationary DEX Sinks</span>
+                <span>10% Network Rewards Reserve</span>
               </div>
             </div>
           </GlassCard>
 
-          {/* Enterprise Customer Verticals */}
+          {/* Target Enterprise Verticals (forward-looking, no live ARR claims) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white">Autonomous Agriculture</span>
-                <span className="text-[10px] font-mono text-emerald-400 font-bold">38% ARR</span>
+            {[
+              { title: 'Autonomous Agriculture', desc: 'Tractor guidance and automated crop harvesting rovers requiring 2 cm boundary precision.' },
+              { title: 'UAV Drone Highways', desc: 'Last-mile delivery and inspection drones operating in complex urban air transit corridors.' },
+              { title: 'Port & Maritime Docking', desc: 'Automated container cranes and autonomous tugboats navigating tight harbor berths.' },
+              { title: 'Smart Surveying & BIM', desc: 'Civil engineering firms and GIS cartographers streaming high-rate MSM7 observations.' }
+            ].map((v, idx) => (
+              <div key={idx} className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white">{v.title}</span>
+                  <span className="text-[9px] font-mono text-white/35 uppercase">Target segment</span>
+                </div>
+                <p className="text-[11px] text-white/60">{v.desc}</p>
               </div>
-              <p className="text-[11px] text-white/60">
-                Tractor guidance and automated crop harvesting rovers requiring 2cm boundary precision.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white">UAV Drone Highways</span>
-                <span className="text-[10px] font-mono text-cyan-400 font-bold">29% ARR</span>
-              </div>
-              <p className="text-[11px] text-white/60">
-                Last-mile delivery and inspection drones operating in complex urban air transit corridors.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white">Port & Maritime Docking</span>
-                <span className="text-[10px] font-mono text-amber-400 font-bold">19% ARR</span>
-              </div>
-              <p className="text-[11px] text-white/60">
-                Automated container cranes and autonomous tugboats navigating tight harbor berths.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/[0.06] space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-white">Smart Surveying & BIM</span>
-                <span className="text-[10px] font-mono text-purple-400 font-bold">14% ARR</span>
-              </div>
-              <p className="text-[11px] text-white/60">
-                Civil engineering firms and GIS cartographers streaming high-rate MSM7 observations.
-              </p>
-            </div>
+            ))}
           </div>
 
-          {/* Recent DEX Buyback & Burn Feed */}
+          {/* Live Telemetry Anchor Ledger (real GeoOrbitRegistry.TelemetryAnchored events) */}
           <GlassCard className="p-6 border-white/10 space-y-4">
-            <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
+            <div className="flex items-center justify-between border-b border-white/[0.08] pb-4 gap-3">
               <div>
                 <h4 className="text-base font-bold text-white flex items-center gap-2">
-                  <Flame className="w-4 h-4 text-orange-400" />
-                  Live On-Chain Buyback & Burn Ledger
+                  <Activity className="w-4 h-4 text-emerald-400" />
+                  Live On-Chain Telemetry Anchor Feed
                 </h4>
                 <span className="text-xs text-white/60">
-                  Automatic smart contract burns triggered by enterprise API subscription payments.
+                  GeoOrbitRegistry.TelemetryAnchored events — real transactions, each verifiable on Blockscout.
                 </span>
               </div>
-              <span className="text-xs font-mono text-emerald-400 font-bold">Verified On-Chain</span>
+              <button
+                onClick={() => loadGeoTokenomics(true)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-mono font-bold transition cursor-pointer flex items-center gap-1.5 shrink-0"
+              >
+                <RefreshCw className="w-3 h-3" /> Refresh
+              </button>
             </div>
 
-            <div className="space-y-2">
-              {[
-                { tx: '0x8f2d..391a', amount: '1,420 ORBIT', val: '$355 USD', source: 'John Deere RTK Rover Pool', time: '12m ago' },
-                { tx: '0x1c3e..7b9d', amount: '2,850 ORBIT', val: '$712 USD', source: 'Rotterdam Port AGV Fleet', time: '41m ago' },
-                { tx: '0x4b6a..0f2e', amount: '980 ORBIT', val: '$245 USD', source: 'Wing Drone UTM Corridor', time: '1h 15m ago' },
-                { tx: '0x7e9d..5b7c', amount: '4,100 ORBIT', val: '$1,025 USD', source: 'Leica Surveying Network', time: '3h ago' },
-              ].map((burn, idx) => (
-                <div
-                  key={idx}
-                  className="p-3 rounded-xl bg-black/30 border border-white/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono"
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="w-2 h-2 rounded-full bg-orange-400" />
-                    <div>
-                      <span className="text-white font-bold">{burn.source}</span>
-                      <span className="text-[10px] text-white/40 block">Tx: {burn.tx}</span>
+            {telemetryAnchors.length === 0 ? (
+              <p className="text-xs font-mono text-white/45">
+                {geoStateLoading
+                  ? 'Reading recent anchor events…'
+                  : 'No telemetry anchors in the most recent blocks — anchors stream to the registry per station fix.'}
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {telemetryAnchors.map((a, idx) => (
+                  <div
+                    key={`${a.blockNumber}-${idx}`}
+                    className="p-3 rounded-xl bg-black/30 border border-white/[0.04] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-mono"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-white font-bold">
+                          STN#{a.stationId} · {a.hexId}
+                        </span>
+                        <span className="text-[10px] text-white/40 block truncate">
+                          {a.operator.slice(0, 6)}…{a.operator.slice(-4)} · {a.latE7 / 1e7}°, {a.lngE7 / 1e7}° · block{' '}
+                          {a.blockNumber.toLocaleString()}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4 text-right shrink-0">
+                      <div>
+                        <span className="text-cyan-300 font-bold block">{a.tdop} tdop</span>
+                        <a
+                          href={`${CREDITCOIN_BLOCKSCOUT}/tx/${a.txHash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-[10px] text-white/40 hover:text-emerald-300"
+                        >
+                          Tx: {a.txHash.slice(0, 8)}…{a.txHash.slice(-6)} <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                      <span className="text-white/40 text-[10px] min-w-[70px]">{timeAgo(a.timestamp)}</span>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-4 text-right">
-                    <div>
-                      <span className="text-orange-400 font-bold block">{burn.amount} Burned 🔥</span>
-                      <span className="text-[10px] text-white/40">{burn.val}</span>
-                    </div>
-                    <span className="text-white/40 text-[10px] min-w-[60px]">{burn.time}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </GlassCard>
         </div>
       )}
