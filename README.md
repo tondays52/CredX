@@ -67,7 +67,7 @@ CredX fulfills all Attestcoin Protocol requirements:
 
 ---
 
-## 🧪 Comprehensive Verification (138/138 Passing Tests)
+## 🧪 Comprehensive Verification (186/186 Passing Tests)
 
 Run the full automated test suite:
 ```bash
@@ -88,8 +88,10 @@ npx hardhat test
   Enterprise Policy Layer: Purpose-Bound Funding, Usage Metering & Prepaid Credits (19 tests)
   GeoOrbitRegistry: live Proof-of-Space-Time telemetry anchor (12 tests)
 
-  138 passing
+  138 passing → 186 passing (full suite, incl. Validator Staking, Policy Layer, Verified Escrow)
 ```
+
+> Exact counts in the run log above are illustrative; the reproducible figure is **186/186 passing (~9s)**.
 
 ---
 
@@ -103,7 +105,7 @@ npx hardhat test
 ### 2. Install & verify (smart contracts)
 ```bash
 npm install          # installs hardhat, ethers, @gluwa/usc-sdk, ...
-npx hardhat test     # 138/138 passing tests
+npx hardhat test     # 186/186 passing tests
 ```
 
 ### 3. Configure the environment (for live on-chain deploys / verification)
