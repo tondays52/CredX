@@ -29,7 +29,8 @@
     "NexusEdgeRegistry": "0xc28C0c9e8D81FDF7DFf46a9F458586857928e00B",
     "AiComputeRegistry": "0xB792Ea148D15Da24F93a332Ebf5Cd60Eb1fa785D",
     "ValidatorStakingRegistry": "0x5Ec9546995E71852b5160F1b41432CD37dd27a96",
-    "ReputationFlashBorrower": "0xb11342835BD710B77C7876AdcC37971d95bC4c57"
+    "ReputationFlashBorrower": "0xb11342835BD710B77C7876AdcC37971d95bC4c57",
+    "ReputationPerpetual": "0x216D62597C60767Cb5A9b4948F75049701ed7016"
   },
   "verifierMode": "mock-harness",
   "notes": "AttestationVerifier on this deployment is the MockAttestationOracle (always-pass testnet harness standing in for the Creditcoin 0x0FD2 Attestcoin precompile). RWAInvoiceFinancing (0x05D41AE81c47078DcA0CFF4891A407F4D09E01aA) was added in a follow-up deploy.",
