@@ -135,7 +135,16 @@ cd frontend
 npm install
 npm run dev          # Vite dev server (default http://localhost:5173)
 ```
-In the app: connect a wallet (Creditcoin testnet, chainId `102031`), open the **Proofs & Attest** tab, and click **Verify & Anchor on 0x0FD2** to crypto-verify a fresh Sepolia proof on the live precompile and anchor it with your wallet.
+Live product (testnet, HTTPS): **https://credx-protocol.vercel.app**
+
+In the app: connect a wallet (Creditcoin testnet, chainId `102031`), open the **Credit & Proofs** tab → **Proofs & Attest**, and click **Verify & Anchor on 0x0FD2** to crypto-verify a fresh Sepolia proof on the live precompile and anchor it with your wallet.
+
+Every enterprise-policy pane reads the deployed contracts live:
+- **Purpose-Bound RWA** — `PurposeBoundFunding` vault, attested-tranche gating, covenant freeze/settle
+- **Usage Meters + Prepaid Credits** — prepaid consumed before debt, overdraw reverts `InsufficientPrepaid`
+- **Verified Escrow** — release/refund signed with a connected wallet, proof-gated and replay-guarded
+- **Evidence Registry** — `ProofAnchored` / `EscrowReleased` / `UsageRecorded` / `PrepaidConsumed` recovered via `eth_getLogs`
+- **Credit Passport (SBT)** — embedded in Overview with the real ERC-5192 mint/refresh
 
 ### 6. Load the Chrome Extension (optional)
 Load unpacked in Chrome via `chrome://extensions` from the `chrome-extension/` directory (Manifest V3 Virtual Node & Attestcoin daemon — never stores a private key).
@@ -155,4 +164,5 @@ Load unpacked in Chrome via `chrome://extensions` from the `chrome-extension/` d
 ## 📄 License
 MIT License. Built for Creditcoin BUIDL Hackathon 2026 Fall.
 
-## Demo Video: https://youtu.be/BG1BrVYFH7o
+## 🎥 Demo Video
+Full protocol walkthrough (live 0x0FD2 proof, 5-track ecosystem, enterprise policy layer): **https://youtu.be/BG1BrVYFH7o**
