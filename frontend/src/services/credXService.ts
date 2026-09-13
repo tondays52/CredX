@@ -1869,10 +1869,169 @@ export async function pulseClaimRewards(): Promise<string> {
   return receipt.hash as string;
 }
 
+// ─── Nexus (live on-chain IoT proximity-detection ledger) ───────────────────
+
+export const NEXUS_ABI = [
+  'function owner() view returns (address)',
+  'function paused() view returns (bool)',
+  'function rewardPerDetection() view returns (uint256)',
+  'function maxDetectionsPerBatch() view returns (uint32)',
+  'function minSecondsBetweenBatches() view returns (uint32)',
+  'function edgeCount() view returns (uint256)',
+  'function totalBatchesSettled() view returns (uint256)',
+  'function totalDetectionsAnchored() view returns (uint256)',
+  'function totalRewardUnitsIssued() view returns (uint256)',
+  'function edges(address) view returns (uint256 edgeId, address operator, bytes4 edgeTag, uint256 batchCount, uint256 lastBatchSeq, uint32 lastDetectionsCount, uint8 lastQualityGrade, bytes32 lastMerkleRoot, uint256 totalDetections, uint256 totalRewardUnits, uint256 claimedUnits, uint256 lastBatchTime, bytes32 lastAnchorHash)',
+  'function registerEdge(bytes4 edgeTag)',
+  'function settleBatch(uint32 detectionsCount, uint8 qualityGrade, bytes32 merkleRoot)',
+  'function claimRewards()',
+];
+
+export interface NexusEdgeView {
+  edgeId: number;
+  operator: string;
+  edgeTag: string;
+  batchCount: number;
+  lastBatchSeq: number;
+  lastDetectionsCount: number;
+  lastQualityGrade: number;
+  lastMerkleRoot: string;
+  totalDetections: number;
+  totalRewardUnits: number;
+  claimedUnits: number;
+  lastBatchTime: number;
+  lastAnchorHash: string;
+}
+
+export interface NexusState {
+  owner: string;
+  paused: boolean;
+  rewardPerDetection: number;
+  maxDetectionsPerBatch: number;
+  minSecondsBetweenBatches: number;
+  edgeCount: number;
+  totalBatchesSettled: number;
+  totalDetectionsAnchored: number;
+  totalRewardUnitsIssued: number;
+}
+
+export interface NexusBatchEntry {
+  operator: string;
+  batchSeq: number;
+  merkleRoot: string;
+  detectionsCount: number;
+  qualityGrade: number;
+  rewardUnits: number;
+  timestamp: number;
+  blockNumber: number;
+}
+
+export async function fetchNexusState(): Promise<NexusState | null> {
+  try {
+    const c = readContract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI);
+    const [owner, paused, rpd, maxB, cooldown, edges, batches, detections, units] = await Promise.all([
+      c.owner(), c.paused(), c.rewardPerDetection(), c.maxDetectionsPerBatch(), c.minSecondsBetweenBatches(),
+      c.edgeCount(), c.totalBatchesSettled(), c.totalDetectionsAnchored(), c.totalRewardUnitsIssued(),
+    ]);
+    return {
+      owner: String(owner),
+      paused: Boolean(paused),
+      rewardPerDetection: parseFloat(ethers.formatUnits(rpd, 18)),
+      maxDetectionsPerBatch: Number(maxB),
+      minSecondsBetweenBatches: Number(cooldown),
+      edgeCount: Number(edges),
+      totalBatchesSettled: Number(batches),
+      totalDetectionsAnchored: Number(detections),
+      totalRewardUnitsIssued: parseFloat(ethers.formatUnits(units, 18)),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchNexusEdge(user: string): Promise<NexusEdgeView | null> {
+  try {
+    const c = readContract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI);
+    const e = await c.edges(user);
+    if (e.operator === ethers.ZeroAddress) return null;
+    return {
+      edgeId: Number(e.edgeId),
+      operator: String(e.operator),
+      edgeTag: String(e.edgeTag),
+      batchCount: Number(e.batchCount),
+      lastBatchSeq: Number(e.lastBatchSeq),
+      lastDetectionsCount: Number(e.lastDetectionsCount),
+      lastQualityGrade: Number(e.lastQualityGrade),
+      lastMerkleRoot: String(e.lastMerkleRoot),
+      totalDetections: Number(e.totalDetections),
+      totalRewardUnits: parseFloat(ethers.formatUnits(e.totalRewardUnits, 18)),
+      claimedUnits: parseFloat(ethers.formatUnits(e.claimedUnits, 18)),
+      lastBatchTime: Number(e.lastBatchTime),
+      lastAnchorHash: String(e.lastAnchorHash),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchNexusLedger(limit = 40): Promise<NexusBatchEntry[]> {
+  try {
+    const provider = readProvider();
+    const latest = Number(await provider.getBlockNumber());
+    const fromBlock = Math.max(1, latest - EVIDENCE_FROM_BLOCKS);
+    const logs = await provider
+      .getLogs({ address: CONTRACTS.nexusEdgeRegistry, topics: [EVIDENCE_TOPICS.DetectionBatchSettled], fromBlock, toBlock: 'latest' })
+      .catch(() => []);
+    const decoder = ethers.AbiCoder.defaultAbiCoder();
+    const entries: NexusBatchEntry[] = [];
+    for (const log of logs) {
+      const data = decoder.decode(['uint32', 'uint8', 'uint256', 'uint256'], log.data);
+      entries.push({
+        operator: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        batchSeq: Number(log.topics[2]),
+        merkleRoot: String(log.topics[3]),
+        detectionsCount: Number(data[0]),
+        qualityGrade: Number(data[1]),
+        rewardUnits: parseFloat(ethers.formatUnits(data[2], 18)),
+        timestamp: Number(data[3]),
+        blockNumber: Number(log.blockNumber),
+      });
+    }
+    entries.sort((a, b) => b.blockNumber - a.blockNumber);
+    return entries.slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export async function nexusRegisterEdge(edgeTag: string): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, signer);
+  const tx = await c.registerEdge(edgeTag, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function nexusSettleBatch(detectionsCount: number, qualityGrade: number, merkleRoot: string): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, signer);
+  const tx = await c.settleBatch(detectionsCount, qualityGrade, merkleRoot, { gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
+export async function nexusClaimRewards(): Promise<string> {
+  const signer = await getSigner();
+  const c = new ethers.Contract(CONTRACTS.nexusEdgeRegistry, NEXUS_ABI, signer);
+  const tx = await c.claimRewards({ gasLimit: 300000 });
+  const receipt = await tx.wait();
+  return receipt.hash as string;
+}
+
 // ─── Evidence Registry (attested proofs + proof-gated events, via eth_getLogs) ─
 
 export interface EvidenceEntry {
-  source: 'oracle' | 'escrow' | 'meter' | 'geoorbit' | 'pulse';
+  source: 'oracle' | 'escrow' | 'meter' | 'geoorbit' | 'pulse' | 'nexus';
   kind: string;
   actor: string;
   txHash: string;       // source-chain txHash (oracle/escrow) or event-key seeded
@@ -1889,6 +2048,7 @@ const EVIDENCE_TOPICS = {
   PrepaidConsumed: ethers.id('PrepaidConsumed(address,bytes32,uint256,uint256)'),
   TelemetryAnchored: ethers.id('TelemetryAnchored(address,uint256,bytes32,int32,int32,uint32,uint8,uint256)'),
   BandwidthAnchored: ethers.id('BandwidthAnchored(address,uint256,bytes32,uint32,uint8,uint256,uint256)'),
+  DetectionBatchSettled: ethers.id('DetectionBatchSettled(address,uint256,bytes32,uint32,uint8,uint256,uint256)'),
 };
 
 const EVIDENCE_FROM_BLOCKS = 30000;
@@ -1905,6 +2065,7 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
       provider.getLogs({ address: CONTRACTS.usageMeteringRegistry, topics: [EVIDENCE_TOPICS.PrepaidConsumed], fromBlock, toBlock: 'latest' }).catch(() => []),
       provider.getLogs({ address: CONTRACTS.geoOrbitRegistry, topics: [EVIDENCE_TOPICS.TelemetryAnchored], fromBlock, toBlock: 'latest' }).catch(() => []),
       provider.getLogs({ address: CONTRACTS.pulseBandwidthRegistry, topics: [EVIDENCE_TOPICS.BandwidthAnchored], fromBlock, toBlock: 'latest' }).catch(() => []),
+      provider.getLogs({ address: CONTRACTS.nexusEdgeRegistry, topics: [EVIDENCE_TOPICS.DetectionBatchSettled], fromBlock, toBlock: 'latest' }).catch(() => []),
     ]);
 
     const entries: EvidenceEntry[] = [];
@@ -1990,6 +2151,20 @@ export async function fetchEvidenceRegistry(): Promise<{ entries: EvidenceEntry[
         blockNumber: Number(log.blockNumber),
         verified: true,
         amountUSD: parseFloat(ethers.formatUnits(data[2], 18)),
+      });
+    }
+
+    for (const log of raw[6] || []) {
+      const data = escrowDecoder.decode(['uint32', 'uint8', 'uint256', 'uint256'], log.data);
+      entries.push({
+        source: 'nexus',
+        kind: 'DetectionBatchSettled',
+        actor: ethers.getAddress('0x' + log.topics[1].slice(26)),
+        txHash: ethers.id('nexus:batch:' + String(log.blockNumber) + ':' + String(log.topics[2])),
+        chainId: CREDITCOIN_CHAIN_ID,
+        blockNumber: Number(log.blockNumber),
+        verified: true,
+        amountUSD: null,
       });
     }
 

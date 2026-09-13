@@ -27,6 +27,7 @@ const SOURCE_META: Record<EvidenceEntry['source'], { label: string; color: strin
   meter: { label: 'METERED USAGE', color: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   geoorbit: { label: 'GEOORBIT FIX', color: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
   pulse: { label: 'PULSE EPOCH', color: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
+  nexus: { label: 'NEXUS BATCH', color: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
 };
 
 const ethersZero = '0x0000000000000000000000000000000000000000';
@@ -155,6 +156,7 @@ const EvidenceRegistryView: React.FC = () => {
                       : e.source === 'oracle' ? <Anchor className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
                       : e.source === 'geoorbit' ? <Database className="w-3.5 h-3.5 text-violet-400 shrink-0" />
                       : e.source === 'pulse' ? <Database className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                      : e.source === 'nexus' ? <Database className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                       : <Link2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
                     <span className={`shrink-0 px-2 py-0.5 rounded-md border text-[9px] font-mono ${meta.color}`}>{meta.label}</span>
                     <div className="min-w-0 flex-1">

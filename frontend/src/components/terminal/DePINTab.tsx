@@ -49,7 +49,8 @@ import {
 } from 'lucide-react';
 import GPULeaseModal from '../modals/GPULeaseModal';
 import PulseLivePanel from './PulseLivePanel';
-import { NexusAttestationModal } from '../modals/NexusAttestationModal';
+import NexusLivePanel from './NexusLivePanel';
+import useNexusLive from '../../hooks/useNexusLive';
 import { GeoOrbitAttestationModal } from '../modals/GeoOrbitAttestationModal';
 import { CredXGeoOrbitView } from './CredXGeoOrbitView';
 import { BittensorSubnetView } from './BittensorSubnetView';
@@ -130,7 +131,6 @@ const DePINTab: React.FC = () => {
     // CredX Nexus IoT Edge & Fleet State
     nexusActive,
     nexusMode,
-    nexusClaimableTokens,
     nexusTotalBeacons,
     nexusTeamMembers,
     nexusFleetsCount,
@@ -146,8 +146,6 @@ const DePINTab: React.FC = () => {
     nexusMapTheme,
     toggleNexusNode,
     setNexusMode,
-    claimNexusTokens,
-    attestNexusBatch,
     setNexusRecencyFilter,
     setNexusRecencyMaxMinutes,
     setNexusMapTheme,
@@ -180,6 +178,7 @@ const DePINTab: React.FC = () => {
   } = useProtocol();
   const { addToast } = useToast();
   const pulseLive = usePulseLive();
+  const nexusLive = useNexusLive();
 
   const [activeSector, setActiveSector] = useState<DePINSector>('pulse');
   const [activePulseTab, setActivePulseTab] = useState<PulseSubTab>('dashboard');
@@ -189,7 +188,6 @@ const DePINTab: React.FC = () => {
   const [selectedBeacon, setSelectedBeacon] = useState<any | null>(null);
   const [selectedFleetFilter, setSelectedFleetFilter] = useState<string>('All');
   const [pathsActive, setPathsActive] = useState(true);
-  const [nexusModalOpen, setNexusModalOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [bellDrawerOpen, setBellDrawerOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
@@ -1744,6 +1742,8 @@ const DePINTab: React.FC = () => {
             </button>
           </div>
 
+          <NexusLivePanel beaconLeaves={nexusDiscoveredBeacons.map((b) => String(b.macHash ?? b.id ?? '').toLowerCase()).filter(Boolean) as string[]} />
+
           {/* ========================================================================= */}
           {/* VIEW 1: EDGE NODE OPERATOR APP (Directly matching Mobile Screenshots 1 & 2) */}
           {/* ========================================================================= */}
@@ -1879,12 +1879,21 @@ const DePINTab: React.FC = () => {
 
                     <div className="pt-2">
                       <span className="text-[10px] uppercase font-mono tracking-wider text-white/40 block">
-                        READY TO CLAIM
+                        READY TO CLAIM <span className="text-emerald-400/60 normal-case tracking-normal">· on-chain NEXUS units</span>
                       </span>
                       <div className="text-3xl font-black font-mono text-white flex items-baseline gap-2 mt-1">
-                        {nexusClaimableTokens.toFixed(4)}{' '}
+                        {nexusLive.edge ? nexusLive.unpaid.toFixed(2) : '0.0000'}{' '}
                         <span className="text-base text-emerald-400 font-bold font-sans">NEXUS</span>
                       </div>
+                      {nexusLive.edge && nexusLive.edge.batchCount > 0 ? (
+                        <div className="text-[10px] font-mono text-white/40 mt-0.5">
+                          earned across {nexusLive.edge.batchCount} settled batch{nexusLive.edge.batchCount === 1 ? '' : 'es'} · {nexusLive.edge.lastBatchSeq ? `seq #${nexusLive.edge.lastBatchSeq}` : ''}
+                        </div>
+                      ) : (
+                        <div className="text-[10px] font-mono text-white/40 mt-0.5">
+                          no on-chain edge yet — commit a batch to earn NEXUS units
+                        </div>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2 pt-2">
@@ -1905,11 +1914,17 @@ const DePINTab: React.FC = () => {
                       </button>
 
                       <button
-                        onClick={claimNexusTokens}
-                        disabled={nexusClaimableTokens <= 0}
+                        onClick={() => {
+                          if (!nexusLive.isConnected) {
+                            addToast('info', 'Connect Wallet', 'Connect a wallet to claim NEXUS units on Creditcoin.');
+                            return;
+                          }
+                          nexusLive.claim();
+                        }}
+                        disabled={nexusLive.busy !== null || !nexusLive.edge || nexusLive.unpaid <= 0}
                         className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-400 hover:bg-emerald-300 text-black font-bold text-xs flex items-center justify-center gap-2 transition disabled:opacity-50 shadow-lg shadow-emerald-500/20"
                       >
-                        <ArrowDown className="w-4 h-4 stroke-[3]" />
+                        {nexusLive.busy === 'claim' ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDown className="w-4 h-4 stroke-[3]" />}
                         <span>Claim NEXUS</span>
                       </button>
                     </div>
@@ -1991,11 +2006,23 @@ const DePINTab: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => setNexusModalOpen(true)}
-                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-xs hover:brightness-110 active:scale-98 transition flex items-center gap-2 shrink-0 shadow-lg shadow-emerald-500/20"
+                      onClick={() => {
+                        if (!nexusLive.isConnected) {
+                          addToast('info', 'Connect Wallet', 'Connect a wallet to commit detection batches to Creditcoin.');
+                          return;
+                        }
+                        const leaves = nexusDiscoveredBeacons.map((b) => String(b.macHash ?? b.id ?? '').toLowerCase()).filter(Boolean) as string[];
+                        nexusLive.commitBatch(leaves.length > 0 ? leaves.length : 4, leaves);
+                      }}
+                      disabled={nexusLive.busy !== null}
+                      className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 text-black font-bold text-xs hover:brightness-110 active:scale-98 transition flex items-center gap-2 shrink-0 shadow-lg shadow-emerald-500/20 disabled:opacity-60"
                     >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Attest to Creditcoin (+25 CTS)</span>
+                      {nexusLive.busy === 'settle' || nexusLive.busy === 'register' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                      )}
+                      <span>Commit Batch to Creditcoin</span>
                     </button>
                   </div>
 
@@ -2037,12 +2064,12 @@ const DePINTab: React.FC = () => {
                       <span className="text-emerald-400 font-bold text-sm">1.65x Active</span>
                     </div>
                     <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-                      <span className="text-white/40 text-[10px] block">Uncommitted Packets</span>
+                      <span className="text-white/40 text-[10px] block">Uncommitted Packets · local stream</span>
                       <span className="text-cyan-300 font-bold text-sm">{nexusUncommittedPackets} pkts</span>
                     </div>
                     <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-                      <span className="text-white/40 text-[10px] block">Pending CTS Boost</span>
-                      <span className="text-emerald-400 font-bold text-sm">+25 Points</span>
+                      <span className="text-white/40 text-[10px] block">Claimable NEXUS · live on-chain</span>
+                      <span className="text-emerald-400 font-bold text-sm">{nexusLive.edge ? `${nexusLive.unpaid.toFixed(1)} NX` : '0 NX'}</span>
                     </div>
                   </div>
                 </GlassCard>
@@ -2181,14 +2208,14 @@ const DePINTab: React.FC = () => {
                 <div className="space-y-6">
                   {/* Top Metric Cards (Row 1 from Screenshot 1) */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {/* Card 1: Total Beacons */}
+                    {/* Card 1: Edge Nodes (live on-chain) */}
                     <GlassCard className="p-5 border-white/[0.08] flex items-center justify-between">
                       <div>
-                        <span className="text-white/40 text-xs font-mono block">Total Beacons</span>
+                        <span className="text-white/40 text-xs font-mono block">Edge Nodes · live</span>
                         <div className="text-2xl font-black font-mono text-white mt-1">
-                          {nexusTotalBeacons}
+                          {nexusLive.state?.edgeCount ?? nexusTotalBeacons}
                         </div>
-                        <span className="text-[11px] text-white/50 mt-0.5 block">Registered devices</span>
+                        <span className="text-[11px] text-white/50 mt-0.5 block">Registered on NexusEdgeRegistry</span>
                       </div>
                       <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                         <Radio className="w-6 h-6" />
@@ -2283,9 +2310,9 @@ const DePINTab: React.FC = () => {
 
                       <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.06] flex items-center justify-between">
                         <div>
-                          <span className="text-white/40 text-xs font-mono block">Total detected beacons</span>
-                          <div className="text-3xl font-black font-mono text-white mt-1">{nexusTotalDetections}</div>
-                          <span className="text-[11px] text-white/50 mt-0.5 block">In selected range</span>
+                          <span className="text-white/40 text-xs font-mono block">Detections anchored · live</span>
+                          <div className="text-3xl font-black font-mono text-white mt-1">{(nexusLive.state?.totalDetectionsAnchored ?? nexusTotalDetections).toLocaleString()}</div>
+                          <span className="text-[11px] text-white/50 mt-0.5 block">Across {nexusLive.state?.totalBatchesSettled ?? '…'} settled batches on CC3</span>
                         </div>
                         <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
                           <Radio className="w-6 h-6" />
@@ -2641,10 +2668,17 @@ const DePINTab: React.FC = () => {
                           <div className="pt-2 border-t border-white/[0.06] flex items-center justify-between">
                             <span className="text-[10px] text-white/40">Merkle Leaf: {selectedBeacon.merkleLeaf.slice(0, 18)}...</span>
                             <button
-                              onClick={() => setNexusModalOpen(true)}
-                              className="px-3 py-1.5 rounded-xl bg-emerald-500 text-black font-bold text-xs hover:brightness-110 transition"
+                              onClick={() => {
+                                if (!nexusLive.isConnected) {
+                                  addToast('info', 'Connect Wallet', 'Connect a wallet to commit detection batches to Creditcoin.');
+                                  return;
+                                }
+                                nexusLive.commitBatch(1, [String(selectedBeacon.macHash ?? selectedBeacon.id ?? '').toLowerCase()]);
+                              }}
+                              disabled={nexusLive.busy !== null}
+                              className="px-3 py-1.5 rounded-xl bg-emerald-500 text-black font-bold text-xs hover:brightness-110 transition disabled:opacity-60"
                             >
-                              Attest via 0x0FD2 (+25 CTS)
+                              {nexusLive.busy === 'settle' ? <Loader2 className="w-3 h-3 animate-spin inline" /> : null} Commit Beacon
                             </button>
                           </div>
                         </div>
@@ -2663,10 +2697,18 @@ const DePINTab: React.FC = () => {
                       <p className="text-xs text-white/40 mt-0.5">Raw BLE advertising packet stream hashed for Creditcoin Merkle inclusion.</p>
                     </div>
                     <button
-                      onClick={() => setNexusModalOpen(true)}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-500 text-black font-bold text-xs"
+                      onClick={() => {
+                        if (!nexusLive.isConnected) {
+                          addToast('info', 'Connect Wallet', 'Connect a wallet to commit detection batches to Creditcoin.');
+                          return;
+                        }
+                        const leaves = nexusDiscoveredBeacons.map((b) => String(b.macHash ?? b.id ?? '').toLowerCase()).filter(Boolean) as string[];
+                        nexusLive.commitBatch(leaves.length > 0 ? leaves.length : 4, leaves);
+                      }}
+                      disabled={nexusLive.busy !== null}
+                      className="px-3.5 py-1.5 rounded-xl bg-emerald-500 text-black font-bold text-xs disabled:opacity-60"
                     >
-                      Commit Batch to Creditcoin
+                      {nexusLive.busy === 'settle' || nexusLive.busy === 'register' ? <Loader2 className="w-3 h-3 animate-spin inline" /> : null} Commit Batch to Creditcoin
                     </button>
                   </div>
 
@@ -2820,12 +2862,12 @@ const DePINTab: React.FC = () => {
                         </div>
                         <div>
                           <span className="text-white font-bold text-xs block">CredX Nexus</span>
-                          <span className="text-[11px] text-white/40 font-mono">{nexusClaimableTokens.toFixed(4)} NEXUS</span>
+                          <span className="text-[11px] text-white/40 font-mono">{(nexusLive.edge ? nexusLive.unpaid : 0).toFixed(2)} NEXUS unclaimed (live)</span>
                         </div>
                       </div>
                       <div className="text-right font-mono">
-                        <span className="text-white font-bold text-xs block">$ {(nexusClaimableTokens * 0.82).toFixed(2)}</span>
-                        <span className="text-[10px] text-emerald-400">+12.4%</span>
+                        <span className="text-white font-bold text-xs block">{nexusLive.edge ? `${nexusLive.edge.totalDetections.toLocaleString()} detections` : '—'}</span>
+                        <span className="text-[10px] text-emerald-400">{nexusLive.state ? `${nexusLive.state.edgeCount} edge nodes on-chain` : '…'}</span>
                       </div>
                     </div>
 
@@ -2896,11 +2938,11 @@ const DePINTab: React.FC = () => {
                           <CheckCircle2 className="w-3.5 h-3.5" />
                         </div>
                         <div>
-                          <span className="text-white font-bold text-[11px] block">Proof of Proximity Batch</span>
-                          <span className="text-[9px] text-white/40">0x0FD2 • Precompile Attested</span>
+                          <span className="text-white font-bold text-[11px] block">Detection Batch Settlement</span>
+                          <span className="text-[9px] text-white/40">on-chain via NexusEdgeRegistry</span>
                         </div>
                       </div>
-                      <span className="text-emerald-400 font-bold text-[11px]">+25 CTS</span>
+                      <span className="text-emerald-400 font-bold text-[11px]">{nexusLive.state ? `+${nexusLive.state.totalRewardUnitsIssued.toFixed(0)} NX issued` : 'live…'}</span>
                     </div>
 
                     <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] flex items-center justify-between">
@@ -2909,23 +2951,17 @@ const DePINTab: React.FC = () => {
                           <ArrowDown className="w-3.5 h-3.5" />
                         </div>
                         <div>
-                          <span className="text-white font-bold text-[11px] block">Claimed NEXUS Yield</span>
-                          <span className="text-[9px] text-white/40">Completed • Wallet Settled</span>
+                          <span className="text-white font-bold text-[11px] block">Settled detection anchors</span>
+                          <span className="text-[9px] text-white/40">live from CC3 ledger</span>
                         </div>
                       </div>
-                      <span className="text-white font-bold text-[11px]">+0.5104 NEXUS</span>
+                      <span className="text-white font-bold text-[11px]">{(nexusLive.state?.totalDetectionsAnchored ?? 0).toLocaleString()} detections</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           )}
-
-          {/* Attestation Modal */}
-          <NexusAttestationModal
-            isOpen={nexusModalOpen}
-            onClose={() => setNexusModalOpen(false)}
-          />
         </div>
       )}
 
@@ -3198,7 +3234,6 @@ const DePINTab: React.FC = () => {
 
       {/* Modals */}
       <GPULeaseModal isOpen={gpuModalOpen} onClose={() => setGpuModalOpen(false)} cluster={selectedGPU} />
-      <NexusAttestationModal isOpen={nexusModalOpen} onClose={() => setNexusModalOpen(false)} />
 
       {/* 1. Mobile Node Pairing Modal (Circled QR Code Icon) */}
       <Modal
@@ -3464,7 +3499,8 @@ const DePINTab: React.FC = () => {
               </span>
             </div>
             <p className="text-white/80 leading-relaxed font-mono text-[11px]">
-              Discover and capture real-time telemetry from nearby IoT hardware (Smartwatches, Beacons, ColdChain sensors, Smart Meters) and display it locally (SIMULATED — nothing is committed to Creditcoin L1 in this panel).
+              Discover and capture real-time telemetry from nearby IoT hardware (Smartwatches, Beacons, ColdChain sensors, Smart Meters) via Web Bluetooth, then commit a signed detection batch to the NexusEdgeRegistry on Creditcoin L1 for real NEXUS rewards.{" "}
+              <span className="text-emerald-400">REAL-BLE capture · on-chain settlements.</span>
             </p>
           </div>
 
@@ -3472,7 +3508,7 @@ const DePINTab: React.FC = () => {
             <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.08] flex items-center justify-between">
               <div>
                 <span className="text-white font-bold block">Web Bluetooth (BLE) Radio</span>
-                <span className="text-white/40 text-[10px]">Direct 2.4 GHz RF advertising packet sniffing</span>
+                <span className="text-white/40 text-[10px]">Direct 2.4 GHz RF advertising packet capture (browser grants access)</span>
               </div>
               <button
                 onClick={handleScanRealBluetoothDevice}
@@ -3491,12 +3527,17 @@ const DePINTab: React.FC = () => {
               <button
                 onClick={() => {
                   setIotModalOpen(false);
-                  setNexusModalOpen(true);
-                  addToast('success', 'Sensor Packet Captured', 'Live device packet verified and prepared for Merkle inclusion.');
+                  if (!nexusLive.isConnected) {
+                    addToast('info', 'Connect Wallet', 'Connect a wallet to commit the captured batch to Creditcoin.');
+                    return;
+                  }
+                  const leaves = nexusDiscoveredBeacons.map((b) => String(b.macHash ?? b.id ?? '').toLowerCase()).filter(Boolean) as string[];
+                  nexusLive.commitBatch(leaves.length > 0 ? leaves.length : 4, leaves);
+                  addToast('success', 'Batch Broadcast', 'Detection batch submitted to NexusEdgeRegistry on Creditcoin L1.');
                 }}
                 className="px-3 py-1.5 rounded-lg bg-cyan-400 text-black font-bold text-xs hover:bg-cyan-300 transition cursor-pointer"
               >
-                Capture Telemetry
+                Commit & Capture
               </button>
             </div>
           </div>
