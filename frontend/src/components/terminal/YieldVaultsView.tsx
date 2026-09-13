@@ -110,19 +110,112 @@ export interface AutopilotAgent {
   description: string;
 }
 
-// ─── Real market feed types & helpers (Binance) ─────────────────────────────
+// ─── Real market feed types & helpers (RapidAPI → Binance → FreeCryptoAPI) ─
 interface Candle { time: number; open: number; high: number; low: number; close: number }
 interface Ticker { symbol: string; lastPrice: number; changePct: number }
 type MarketTimeframe = '1H' | '1D' | '1W' | '1M';
 
-const REAL_FEED_ASSETS: { key: string; name: string; binance: string }[] = [
-  { key: 'CTC', name: 'Creditcoin L1 Native', binance: 'CTCUSDT' },
-  { key: 'BTC', name: 'Bitcoin (Wrapped CredX)', binance: 'BTCUSDT' },
-  { key: 'ETH', name: 'Ethereum (CredX Bridge)', binance: 'ETHUSDT' },
-  { key: 'SOL', name: 'Solana (Wormhole)', binance: 'SOLUSDT' },
+// Data-source config: RapidAPI key/host + FreeCryptoAPI token from frontend/.env.local (never committed).
+const RAPID_KEY = ((import.meta.env.VITE_RAPIDAPI_KEY as string) || '').trim();
+const RAPID_HOST = ((import.meta.env.VITE_RAPIDAPI_HOST as string) || '').trim() || 'binance44.p.rapidapi.com';
+const FREE_KEY = (((import.meta.env.VITE_FREECRYPTO_API_KEY as string) || (import.meta.env.VITE_FREECRYPTOAPI_KEY as string)) || '').trim();
+
+const REAL_FEED_ASSETS: { key: string; name: string; binance: string; free: string }[] = [
+  { key: 'CTC', name: 'Creditcoin L1 Native', binance: 'CTCUSDT', free: 'CTC' },
+  { key: 'BTC', name: 'Bitcoin (Wrapped CredX)', binance: 'BTCUSDT', free: 'BTC' },
+  { key: 'ETH', name: 'Ethereum (CredX Bridge)', binance: 'ETHUSDT', free: 'ETH' },
+  { key: 'SOL', name: 'Solana (Wormhole)', binance: 'SOLUSDT', free: 'SOL' },
 ];
+const REF_FEED_KEYS = new Set(REAL_FEED_ASSETS.map((f) => f.key));
 
 const KLINE_INTERVAL: Record<MarketTimeframe, string> = { '1H': '1h', '1D': '1d', '1W': '1w', '1M': '1M' };
+
+const FEED_SOURCE_LABEL: Record<string, string> = {
+  rapidapi: 'rapidapi (binance)',
+  binance: 'binance.com',
+  freecryptoapi: 'freecryptoapi live samples',
+  none: 'no feed',
+};
+
+function bucketMsForTimeframe(tf: MarketTimeframe): number {
+  return tf === '1H' ? 3600000 : tf === '1D' ? 86400000 : tf === '1W' ? 604800000 : 2592000000;
+}
+
+/** Build synthetic candles from real FreeCryptoAPI price snapshots (fallback chart when kline APIs are down). */
+function candlesFromSnapshots(pts: { t: number; p: number }[] | undefined, bucketMs: number): Candle[] | null {
+  if (!pts || pts.length < 2) return null;
+  const bars: Candle[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const b = Math.floor(pts[i].t / bucketMs) * bucketMs;
+    const last = bars[bars.length - 1];
+    if (last && last.time === b) {
+      last.high = Math.max(last.high, pts[i].p);
+      last.low = Math.min(last.low, pts[i].p);
+      last.close = pts[i].p;
+    } else if (last) {
+      bars.push({ time: b, open: last.close, high: pts[i].p, low: pts[i].p, close: pts[i].p });
+    } else {
+      bars.push({ time: b, open: pts[i].p, high: pts[i].p, low: pts[i].p, close: pts[i].p });
+    }
+  }
+  return bars.length >= 2 ? bars : null;
+}
+
+async function fetchRapidKlines(symbol: string, interval: string, limit: number): Promise<Candle[] | null> {
+  if (!RAPID_KEY) return null;
+  const res = await fetch(`https://${RAPID_HOST}/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`, {
+    headers: { 'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': RAPID_HOST },
+  });
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  return raw.map((k: any) => ({ time: Number(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
+}
+
+async function fetchBinanceKlines(symbol: string, interval: string, limit: number): Promise<Candle[] | null> {
+  const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`);
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  return raw.map((k: any) => ({ time: Number(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]), low: parseFloat(k[3]), close: parseFloat(k[4]) }));
+}
+
+async function fetchRapidTickers(): Promise<Ticker[] | null> {
+  if (!RAPID_KEY) return null;
+  const res = await fetch(`https://${RAPID_HOST}/api/v3/ticker/24hr?symbols=${JSON.stringify(REAL_FEED_ASSETS.map((f) => f.binance))}`, {
+    headers: { 'X-RapidAPI-Key': RAPID_KEY, 'X-RapidAPI-Host': RAPID_HOST },
+  });
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw)) return null;
+  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }));
+}
+
+async function fetchBinanceTickers(): Promise<Ticker[] | null> {
+  const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(REAL_FEED_ASSETS.map((f) => f.binance))}`);
+  if (!res.ok) return null;
+  const raw = await res.json();
+  if (!Array.isArray(raw)) return null;
+  return raw.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }));
+}
+
+async function fetchFreeTickers(): Promise<Ticker[] | null> {
+  if (!FREE_KEY) return null;
+  const out: Ticker[] = [];
+  for (const f of REAL_FEED_ASSETS) {
+    try {
+      const res = await fetch(`https://api.freecryptoapi.com/v1/getData?symbol=${f.free}&token=${FREE_KEY}`);
+      if (!res.ok) continue;
+      const json = await res.json();
+      const sym = json && json.symbols && json.symbols[0];
+      if (!sym) continue;
+      out.push({ symbol: `${f.key}USDT`, lastPrice: parseFloat(sym.last), changePct: parseFloat(sym.daily_change_percentage) });
+    } catch {
+      // skip unreachable symbol
+    }
+  }
+  return out.length ? out : null;
+}
 
 function emaArray(values: number[], period: number): number[] {
   const k = 2 / (period + 1);
@@ -201,6 +294,10 @@ export const YieldVaultsView: React.FC = () => {
   const [candles, setCandles] = useState<Candle[] | null>(null);
   const [marketLoading, setMarketLoading] = useState(false);
   const [tickers, setTickers] = useState<Ticker[]>([]);
+  const [feedSource, setFeedSource] = useState<'rapidapi' | 'binance' | 'freecryptoapi' | 'none'>('binance');
+  const [snapGen, setSnapGen] = useState(0);
+  const priceSnapRef = useRef<Record<string, { t: number; p: number }[]>>({});
+  const candlesRef = useRef<Candle[] | null>(null);
   const chartCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const selectedFeed = REAL_FEED_ASSETS.find((f) => f.key === feedKey) || REAL_FEED_ASSETS[0];
@@ -1676,58 +1773,73 @@ export const YieldVaultsView: React.FC = () => {
     });
   }, [agentLogs, streamFilter]);
 
-  // ─── Live Binance candles for the analytics chart (auto-refresh 30s) ──────
+  // ─── Live klines: RapidAPI → Binance → FreeCryptoAPI live samples (30s) ──
   useEffect(() => {
     let dead = false;
     if (!selectedFeed) {
       setCandles(null);
       return;
     }
-    const load = () => {
-      setMarketLoading(true);
-      fetch(`https://api.binance.com/api/v3/klines?symbol=${selectedFeed.binance}&interval=${KLINE_INTERVAL[timeframe]}&limit=200`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((raw) => {
-          if (dead) return;
-          if (!Array.isArray(raw) || raw.length === 0) {
-            setMarketLoading(false);
-            return;
-          }
-          setCandles(
-            raw.map((k: any) => ({
-              time: Number(k[0]),
-              open: parseFloat(k[1]),
-              high: parseFloat(k[2]),
-              low: parseFloat(k[3]),
-              close: parseFloat(k[4]),
-            }))
-          );
-          setMarketLoading(false);
-        })
-        .catch(() => {
-          // transient failure: keep last chart + indicators, just retry next tick
-          if (!dead) setMarketLoading(false);
-        });
+    const load = async () => {
+      let arr: Candle[] | null = null;
+      let src: 'rapidapi' | 'binance' | 'freecryptoapi' = 'binance';
+      try { arr = await fetchRapidKlines(selectedFeed.binance, KLINE_INTERVAL[timeframe], 200); } catch { arr = null; }
+      if (arr) src = 'rapidapi';
+      if (!arr) {
+        try { arr = await fetchBinanceKlines(selectedFeed.binance, KLINE_INTERVAL[timeframe], 200); } catch { arr = null; }
+      }
+      if (!arr && FREE_KEY) {
+        arr = candlesFromSnapshots(priceSnapRef.current[selectedFeed.key], bucketMsForTimeframe(timeframe));
+        src = 'freecryptoapi';
+      }
+      if (dead) return;
+      if (arr) {
+        candlesRef.current = arr;
+        setCandles(arr);
+        setFeedSource(src);
+      } else if (!candlesRef.current) {
+        setFeedSource('none');
+      }
+      setMarketLoading(false);
     };
     setCandles(null);
+    setMarketLoading(true);
     load();
     const id = setInterval(load, 30000);
     return () => { dead = true; clearInterval(id); };
-  }, [selectedFeed, timeframe]);
+  }, [selectedFeed?.key, timeframe]);
 
-  // ─── Real 24h tickers (market table, 60s) ────────────────────────────────
+  // Charts built from FreeCryptoAPI live samples update as new snapshots land (60s ticker cadence).
+  useEffect(() => {
+    if (feedSource !== 'freecryptoapi' || !selectedFeed) return;
+    const arr = candlesFromSnapshots(priceSnapRef.current[selectedFeed.key], bucketMsForTimeframe(timeframe));
+    if (arr) setCandles(arr);
+  }, [snapGen, selectedFeed?.key, timeframe, feedSource]);
+
+  // ─── Real 24h tickers + price snapshots (FreeCryptoAPI → RapidAPI → Binance, 60s) ──
   useEffect(() => {
     let dead = false;
-    const sync = () => {
-      fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${JSON.stringify(REAL_FEED_ASSETS.map((f) => f.binance))}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((arr) => {
-          if (dead || !Array.isArray(arr)) return;
-          setTickers(
-            arr.map((t: any) => ({ symbol: String(t.symbol), lastPrice: parseFloat(t.lastPrice), changePct: parseFloat(t.priceChangePercent) }))
-          );
-        })
-        .catch(() => {});
+    const sync = async () => {
+      let arr: Ticker[] | null = null;
+      try { arr = await fetchFreeTickers(); } catch { arr = null; }
+      if (!arr) { try { arr = await fetchRapidTickers(); } catch { arr = null; } }
+      if (!arr) { try { arr = await fetchBinanceTickers(); } catch { arr = null; } }
+      if (dead) return;
+      if (arr && arr.length) {
+        setTickers(arr);
+        const nowT = Date.now();
+        const bucket = Math.floor(nowT / 30000) * 30000;
+        const ref = priceSnapRef.current;
+        arr.forEach((tk) => {
+          const key = tk.symbol.replace('USDT', '');
+          if (!REF_FEED_KEYS.has(key)) return;
+          const list = ref[key] || (ref[key] = []);
+          const last = list[list.length - 1];
+          if (last && last.t === bucket) last.p = tk.lastPrice;
+          else { list.push({ t: bucket, p: tk.lastPrice }); if (list.length > 400) list.shift(); }
+        });
+        setSnapGen((g) => g + 1);
+      }
     };
     sync();
     const id = setInterval(sync, 60000);
@@ -1760,7 +1872,7 @@ export const YieldVaultsView: React.FC = () => {
       ctx.fillStyle = 'rgba(148, 163, 184, 0.6)';
       ctx.font = '11px monospace';
       ctx.textAlign = 'center';
-      ctx.fillText(marketLoading ? 'Fetching real Binance candles…' : 'No candles available right now.', width / 2, height / 2);
+      ctx.fillText(marketLoading ? 'Fetching live candles...' : 'No candles available right now.', width / 2, height / 2);
       return;
     }
 
@@ -2586,7 +2698,7 @@ export const YieldVaultsView: React.FC = () => {
             <div className="flex items-center justify-between px-1 font-mono text-[10px] text-slate-500">
               <span className="flex items-center gap-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                LIVE &bull; auto-refresh 30s &bull; EMA9 <span className="text-cyan-400">—</span> EMA21 <span className="text-purple-400">—</span> on {selectedFeed.binance}
+                LIVE &bull; auto-refresh 30s &bull; EMA9 <span className="text-cyan-400">—</span> EMA21 <span className="text-purple-400">—</span> on {selectedFeed.binance} &bull; via <span className="text-emerald-400">{FEED_SOURCE_LABEL[feedSource]}</span>
               </span>
               <span>
                 {candles && candles.length > 0
