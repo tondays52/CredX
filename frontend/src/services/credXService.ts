@@ -1014,28 +1014,28 @@ export async function resolveYieldVaultPair(): Promise<{
   return { stakingToken: st, rewardToken: rt, credXHub: hubAddr, baseDenominator: base };
 }
 
-export async function vaultStake(amount: number): Promise<string> {
-  const signer = await getSigner();
+export async function vaultStake(amount: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? (await getSigner());
   const { stakingToken } = await resolveYieldVaultPair();
-  await ensureTokenApproval(signer, stakingToken.address, CONTRACTS.reputationYieldVault, ethers.parseUnits(amount.toString(), stakingToken.decimals));
-  const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, signer);
+  await ensureTokenApproval(s, stakingToken.address, CONTRACTS.reputationYieldVault, ethers.parseUnits(amount.toString(), stakingToken.decimals));
+  const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, s);
   const tx = await write.stake(ethers.parseUnits(amount.toString(), stakingToken.decimals), { gasLimit: 400000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function vaultUnstake(amount: number): Promise<string> {
-  const signer = await getSigner();
+export async function vaultUnstake(amount: number, signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? (await getSigner());
   const { stakingToken } = await resolveYieldVaultPair();
-  const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, signer);
+  const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, s);
   const tx = await write.unstake(ethers.parseUnits(amount.toString(), stakingToken.decimals), { gasLimit: 400000 });
   const receipt = await tx.wait();
   return receipt.hash as string;
 }
 
-export async function vaultClaimRewards(): Promise<string> {
-  const signer = await getSigner();
-  const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, signer);
+export async function vaultClaimRewards(signer?: ethers.Signer): Promise<string> {
+  const s = signer ?? (await getSigner());
+  const write = new ethers.Contract(CONTRACTS.reputationYieldVault, YIELD_VAULT_ABI, s);
   const tx = await write.claimRewards({ gasLimit: 400000 });
   const receipt = await tx.wait();
   return receipt.hash as string;

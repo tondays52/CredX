@@ -56,7 +56,9 @@ import {
   vaultStake,
   vaultUnstake,
   vaultClaimRewards,
+  demoWalletSigner,
 } from '../../services/credXService';
+import { DEMO_WALLET_VAULT } from '../../config/demoWallets';
 
 // ─── Interfaces ─────────────────────────────────────────────────────────────
 export interface VaultAsset {
@@ -165,10 +167,23 @@ function macdPoint(values: number[]): { macd: number; signal: number; hist: numb
 const fmtNum = (v: number | null | undefined, maxDig = 2): string =>
   v == null || !isFinite(v) ? '—' : v.toLocaleString('en-US', { maximumFractionDigits: maxDig });
 
+/** Bundled CC3 testnet wallet that seeded the ReputationYieldVault (25,250 cUSD staked → live on-chain). */
+const DEMO_ROOT_WALLET = DEMO_WALLET_VAULT.find((v) => v.id === 'credx-root');
+
 export const YieldVaultsView: React.FC = () => {
   const { showToast, playSound } = useToast();
   const { boostScore } = useProtocol();
   const { balanceCTC, address, isConnected } = useWeb3();
+
+  // Seeded demo-wallet mode: sign REAL vault txs with the bundled testnet wallet
+  // that seeded the vault (25,250 cUSD staked). No extension required.
+  const [demoMode, setDemoMode] = useState(false);
+  const demoSigner = useMemo(
+    () => (demoMode && DEMO_ROOT_WALLET ? demoWalletSigner(DEMO_ROOT_WALLET.privateKey) : null),
+    [demoMode]
+  );
+  const effAddress = demoMode ? DEMO_ROOT_WALLET?.address ?? '' : address;
+  const effConnected = demoMode || isConnected;
 
   const [vaultState, setVaultState] = useState<Awaited<ReturnType<typeof fetchYieldVaultState>>>(null);
   const [walletCUSDBalance, setWalletCUSDBalance] = useState(0);
@@ -721,19 +736,19 @@ export const YieldVaultsView: React.FC = () => {
   // Live ReputationYieldVault read + wallet cUSD balance
   useEffect(() => {
     let cancelled = false;
-    if (!isConnected || !address) {
+    if (!effConnected || !effAddress) {
       setVaultState(null);
       setWalletCUSDBalance(0);
       return;
     }
-    fetchYieldVaultState(address)
+    fetchYieldVaultState(effAddress)
       .then((state) => {
         if (!cancelled) setVaultState(state);
       })
       .catch(() => {
         if (!cancelled) setVaultState(null);
       });
-    fetchCUSDBalance(address)
+    fetchCUSDBalance(effAddress)
       .then((bal) => {
         if (!cancelled) setWalletCUSDBalance(bal);
       })
@@ -743,7 +758,7 @@ export const YieldVaultsView: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [isConnected, address]);
+  }, [effConnected, effAddress]);
 
   // Filtered Vaults for Catalog
   const filteredVaults = useMemo(() => {
@@ -1442,9 +1457,9 @@ export const YieldVaultsView: React.FC = () => {
 
   // ─── Real-Time Deposit (Stake), Withdraw (Unstake) & Claim Handlers ───────
   const refreshVaultState = async () => {
-    if (!address) return;
+    if (!effAddress) return;
     try {
-      const state = await fetchYieldVaultState(address);
+      const state = await fetchYieldVaultState(effAddress);
       if (state) setVaultState(state);
     } catch {
       // keep last known state
@@ -1452,7 +1467,7 @@ export const YieldVaultsView: React.FC = () => {
   };
 
   const handleExecuteDeposit = async () => {
-    if (!isConnected || !address) {
+    if (!effConnected || !effAddress) {
       showToast('Connect Wallet', 'Connect your wallet to stake into the deployed ReputationYieldVault.', 'error');
       return;
     }
@@ -1467,7 +1482,7 @@ export const YieldVaultsView: React.FC = () => {
     }
     setStakingAction('stake');
     try {
-      const hash = await vaultStake(amountNum);
+      const hash = await vaultStake(amountNum, demoSigner ?? undefined);
       playSound('fanfare');
       boostScore(30, 'CredX Vault Liquidity Allocation');
       showToast('Stake Submitted', `Staked ${amountNum} ${stakingTokenSymbol} into ReputationYieldVault. Tx: ${hash.slice(0, 12)}…`, 'success');
@@ -1491,7 +1506,7 @@ export const YieldVaultsView: React.FC = () => {
   };
 
   const handleExecuteWithdraw = async () => {
-    if (!isConnected || !address) {
+    if (!effConnected || !effAddress) {
       showToast('Connect Wallet', 'Connect your wallet to unstake from the deployed ReputationYieldVault.', 'error');
       return;
     }
@@ -1506,7 +1521,7 @@ export const YieldVaultsView: React.FC = () => {
     }
     setStakingAction('unstake');
     try {
-      const hash = await vaultUnstake(amountNum);
+      const hash = await vaultUnstake(amountNum, demoSigner ?? undefined);
       playSound('success');
       showToast('Unstake Submitted', `Withdrew ${amountNum} ${stakingTokenSymbol} back to your connected wallet. Tx: ${hash.slice(0, 12)}…`, 'success');
       setWithdrawalRequests((prev) => [
@@ -1529,7 +1544,7 @@ export const YieldVaultsView: React.FC = () => {
   };
 
   const handleClaimRewards = async () => {
-    if (!isConnected || !address) {
+    if (!effConnected || !effAddress) {
       showToast('Connect Wallet', 'Connect your wallet to claim rewards from the deployed ReputationYieldVault.', 'error');
       return;
     }
@@ -1539,7 +1554,7 @@ export const YieldVaultsView: React.FC = () => {
     }
     setStakingAction('claim');
     try {
-      const hash = await vaultClaimRewards();
+      const hash = await vaultClaimRewards(demoSigner ?? undefined);
       playSound('fanfare');
       boostScore(25, 'CredX Vault Reward Harvest');
       showToast('Rewards Claimed', `${realClaimable?.toFixed(4)} ${rewardTokenSymbol} claimed to your wallet. Tx: ${hash.slice(0, 12)}…`, 'success');
@@ -1661,31 +1676,43 @@ export const YieldVaultsView: React.FC = () => {
     });
   }, [agentLogs, streamFilter]);
 
-  // ─── Live Binance candles for the analytics chart ─────────────────────────
+  // ─── Live Binance candles for the analytics chart (auto-refresh 30s) ──────
   useEffect(() => {
     let dead = false;
     if (!selectedFeed) {
       setCandles(null);
       return;
     }
-    setMarketLoading(true);
-    fetch(`https://api.binance.com/api/v3/klines?symbol=${selectedFeed.binance}&interval=${KLINE_INTERVAL[timeframe]}&limit=200`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((raw) => {
-        if (dead || !Array.isArray(raw) || raw.length === 0) return;
-        setCandles(
-          raw.map((k: any) => ({
-            time: Number(k[0]),
-            open: parseFloat(k[1]),
-            high: parseFloat(k[2]),
-            low: parseFloat(k[3]),
-            close: parseFloat(k[4]),
-          }))
-        );
-      })
-      .catch(() => { if (!dead) setCandles(null); })
-      .finally(() => { if (!dead) setMarketLoading(false); });
-    return () => { dead = true; };
+    const load = () => {
+      setMarketLoading(true);
+      fetch(`https://api.binance.com/api/v3/klines?symbol=${selectedFeed.binance}&interval=${KLINE_INTERVAL[timeframe]}&limit=200`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((raw) => {
+          if (dead) return;
+          if (!Array.isArray(raw) || raw.length === 0) {
+            setMarketLoading(false);
+            return;
+          }
+          setCandles(
+            raw.map((k: any) => ({
+              time: Number(k[0]),
+              open: parseFloat(k[1]),
+              high: parseFloat(k[2]),
+              low: parseFloat(k[3]),
+              close: parseFloat(k[4]),
+            }))
+          );
+          setMarketLoading(false);
+        })
+        .catch(() => {
+          // transient failure: keep last chart + indicators, just retry next tick
+          if (!dead) setMarketLoading(false);
+        });
+    };
+    setCandles(null);
+    load();
+    const id = setInterval(load, 30000);
+    return () => { dead = true; clearInterval(id); };
   }, [selectedFeed, timeframe]);
 
   // ─── Real 24h tickers (market table, 60s) ────────────────────────────────
@@ -1829,7 +1856,7 @@ export const YieldVaultsView: React.FC = () => {
                   <span className="text-xs text-cyan-300 font-normal"> {stakingTokenSymbol}</span>
                 </span>
                 <span className="text-[9px] text-cyan-400 block">
-                  {vaultState ? 'Live on-chain' : isConnected ? 'Read unavailable' : 'Connect wallet'}
+                  {vaultState ? 'Live on-chain' : effConnected ? 'Read unavailable' : 'Connect wallet'}
                 </span>
               </div>
 
@@ -2323,6 +2350,46 @@ export const YieldVaultsView: React.FC = () => {
                 </div>
               </div>
 
+              {!effConnected && !demoMode && (
+                <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 space-y-2.5 font-mono">
+                  <div className="flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-bold text-white block">
+                        This vault is LIVE &amp; seeded on-chain — try it now
+                      </span>
+                      <span className="text-[10px] text-slate-400 block leading-relaxed">
+                        The bundled testnet wallet has <strong className="text-emerald-300">25,250 cUSD staked</strong> and{' '}
+                        <strong className="text-emerald-300">1,000,000 DEPIN</strong> funded for rewards. Stake, accrue and claim
+                        with real Creditcoin testnet transactions — no wallet extension needed.
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setDemoMode(true); playSound('click'); }}
+                    className="w-full py-2.5 rounded-xl text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 transition cursor-pointer"
+                  >
+                    Use Seeded Demo Wallet &rarr;
+                  </button>
+                </div>
+              )}
+              {demoMode && (
+                <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-between gap-2 font-mono text-xs">
+                  <div className="flex items-center gap-2 text-cyan-300 font-bold min-w-0">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                    <span className="truncate">
+                      Signing as Seeded Demo Wallet {DEMO_ROOT_WALLET?.address.slice(0, 6)}…{DEMO_ROOT_WALLET?.address.slice(-4)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => setDemoMode(false)}
+                    className="px-2.5 py-1 rounded-lg bg-black/40 hover:bg-black/60 text-slate-300 border border-white/10 transition cursor-pointer text-[10px] font-bold shrink-0"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/60 border border-white/10 font-mono text-xs">
                 <button
                   onClick={() => setActionTab('deposit')}
@@ -2515,6 +2582,20 @@ export const YieldVaultsView: React.FC = () => {
             </div>
 
             <canvas ref={chartCanvasRef} className="w-full h-60 rounded-2xl bg-[#020b12] border border-white/10" />
+
+            <div className="flex items-center justify-between px-1 font-mono text-[10px] text-slate-500">
+              <span className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                LIVE &bull; auto-refresh 30s &bull; EMA9 <span className="text-cyan-400">—</span> EMA21 <span className="text-purple-400">—</span> on {selectedFeed.binance}
+              </span>
+              <span>
+                {candles && candles.length > 0
+                  ? `last candle ${new Date(candles[candles.length - 1].time).toLocaleTimeString()}`
+                  : marketLoading
+                    ? 'fetching real candles…'
+                    : 'waiting for candles…'}
+              </span>
+            </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="p-3 rounded-2xl bg-black/50 border border-cyan-500/20">
