@@ -84,7 +84,7 @@ export async function getRealDevicePhysicalPosition(quality: 1 | 4 | 5 = 4): Pro
         });
       },
       (err) => {
-        reject(err);
+        reject(new Error(err?.message || 'Failed to acquire device geolocation coordinates.'));
       },
       {
         enableHighAccuracy: true,

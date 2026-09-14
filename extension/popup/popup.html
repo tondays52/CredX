@@ -277,7 +277,7 @@
         </div>
 
         <div id="customKeyContainer" class="custom-key-row hidden">
-          <input id="customKeyInput" type="text" placeholder="0x... or 64-char hex private key" spellcheck="false" class="font-mono">
+          <input id="customKeyInput" type="text" placeholder="0x... or 64-char hex private key" aria-label="Custom Private Key or Address" spellcheck="false" class="font-mono">
           <button id="applyKeyBtn" class="btn-micro font-mono">Auth</button>
         </div>
 
@@ -309,8 +309,8 @@
             <span class="swap-bal font-mono" id="swapFromBal">Bal: 1,248.50</span>
           </div>
           <div class="swap-input-row">
-            <input id="swapInputAmount" type="number" step="any" placeholder="0.0" value="50" class="font-mono swap-num-input">
-            <select id="swapFromToken" class="swap-select font-mono">
+            <input id="swapInputAmount" type="number" step="any" placeholder="0.0" value="50" aria-label="Swap input amount" class="font-mono swap-num-input">
+            <select id="swapFromToken" aria-label="Select swap source token" class="swap-select font-mono">
               <option value="CTC">CTC</option>
               <option value="cUSD">cUSD</option>
               <option value="CTS">CTS</option>
@@ -330,8 +330,8 @@
             <span class="swap-bal font-mono" id="swapToBal">Bal: 4,500.00</span>
           </div>
           <div class="swap-input-row">
-            <input id="swapOutputAmount" type="number" readonly placeholder="0.0" value="32.50" class="font-mono swap-num-input readonly-input">
-            <select id="swapToToken" class="swap-select font-mono">
+            <input id="swapOutputAmount" type="number" readonly placeholder="0.0" value="32.50" aria-label="Estimated swap receive amount" class="font-mono swap-num-input readonly-input">
+            <select id="swapToToken" aria-label="Select swap target token" class="swap-select font-mono">
               <option value="cUSD" selected>cUSD</option>
               <option value="CTC">CTC</option>
               <option value="CTS">CTS</option>

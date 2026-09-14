@@ -597,10 +597,10 @@ const AITab: React.FC = () => {
               <div className="lg:col-span-7 space-y-4">
                 {/* Source Chain */}
                 <div className="space-y-1.5">
-                  <label id="ctl-aittab-sourcechain" className="text-[10px] font-mono text-gray-500 uppercase flex items-center justify-between">
+                  <div id="ctl-aittab-sourcechain" className="text-[10px] font-mono text-gray-500 uppercase flex items-center justify-between">
                     <span>Source Network (Attestation Origin)</span>
                     <span className="text-cyan-400">Chain ID: {signalChainId}</span>
-                  </label>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="group" aria-labelledby="ctl-aittab-sourcechain">
                     {[
                       { name: 'Sepolia', id: 11155111 },

@@ -95,16 +95,14 @@ export function cleanGpuRenderer(rawGpu: string): string {
     cleaned = angleMatch[1].trim();
   }
 
-  // Remove driver boilerplate
+  // Remove driver boilerplate linearly without regex backtracking
+  const cutIndex = cleaned.search(/\s+(?:Direct3D\d*|vs_\d+_\d+|ps_\d+_\d+|D3D\d*|OpenGL|vulkan)\b/i);
+  if (cutIndex !== -1) {
+    cleaned = cleaned.slice(0, cutIndex);
+  }
   cleaned = cleaned
-    .replace(/\s*Direct3D\d+.*$/i, '')
-    .replace(/\s*vs_\d+_\d+.*$/i, '')
-    .replace(/\s*ps_\d+_\d+.*$/i, '')
-    .replace(/\s*D3D\d+.*$/i, '')
     .replace(/\(R\)/gi, '')
     .replace(/\(TM\)/gi, '')
-    .replace(/\s*OpenGL.*$/i, '')
-    .replace(/\s*vulkan.*$/i, '')
     .trim();
 
   // If empty or generic fallback

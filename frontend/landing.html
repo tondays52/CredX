@@ -634,8 +634,8 @@
     const savingsText = document.getElementById('heroSavingsText');
 
     function updateHeroCalc() {
-      const score = parseInt(scoreSlider.value);
-      const borrow = parseInt(borrowSlider.value);
+      const score = Number.parseInt(scoreSlider.value, 10);
+      const borrow = Number.parseInt(borrowSlider.value, 10);
 
       if (scoreNum) scoreNum.innerText = score;
       if (scoreSliderText) scoreSliderText.innerText = `${score} CTS`;

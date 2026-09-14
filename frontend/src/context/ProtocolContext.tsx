@@ -395,9 +395,9 @@ export const ProtocolProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }>>(() => {
     return [
       { id: 'dev-1', name: 'Local Node', ip: '—', flag: '🌐', timeConnected: 'Not connected', score: 95, points: 737.5625, status: 'Not Connected' },
-      { id: 'dev-2', name: 'Mobile Edge Relay', ip: '10.0.0.55', flag: '🌐', timeConnected: '0 day, 9 hrs, 56 mins', score: 82, points: 329.5417, status: 'Not Connected' },
-      { id: 'dev-3', name: 'Home WiFi Beacon', ip: '10.0.0.51', flag: '🌐', timeConnected: '0 day, 3 hrs, 51 mins', score: 75, points: 214.9375, status: 'Not Connected' },
-      { id: 'dev-4', name: 'Office Fiber Bridge', ip: '10.0.0.50', flag: '🌐', timeConnected: '0 day, 20 hrs, 25 mins', score: 88, points: 1057.6875, status: 'Not Connected' }
+      { id: 'dev-2', name: 'Mobile Edge Relay', ip: '—', flag: '🌐', timeConnected: '0 day, 9 hrs, 56 mins', score: 82, points: 329.5417, status: 'Not Connected' },
+      { id: 'dev-3', name: 'Home WiFi Beacon', ip: '—', flag: '🌐', timeConnected: '0 day, 3 hrs, 51 mins', score: 75, points: 214.9375, status: 'Not Connected' },
+      { id: 'dev-4', name: 'Office Fiber Bridge', ip: '—', flag: '🌐', timeConnected: '0 day, 20 hrs, 25 mins', score: 88, points: 1057.6875, status: 'Not Connected' }
     ];
   });
 

@@ -1515,10 +1515,11 @@ export const DexAmmView: React.FC = () => {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-[10px] uppercase font-mono text-slate-400 block mb-1">
+              <label htmlFor="ctl-dexamm-dep0" className="text-[10px] uppercase font-mono text-slate-400 block mb-1">
                 {selectedPool.token0} Deposit Amount
               </label>
               <input
+                id="ctl-dexamm-dep0"
                 type="number"
                 value={depositAmt0}
                 onChange={(e) => setDepositAmt0(e.target.value)}
@@ -1527,10 +1528,11 @@ export const DexAmmView: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-[10px] uppercase font-mono text-slate-400 block mb-1">
+              <label htmlFor="ctl-dexamm-dep1" className="text-[10px] uppercase font-mono text-slate-400 block mb-1">
                 {selectedPool.token1} Deposit Amount
               </label>
               <input
+                id="ctl-dexamm-dep1"
                 type="number"
                 value={depositAmt1}
                 onChange={(e) => setDepositAmt1(e.target.value)}

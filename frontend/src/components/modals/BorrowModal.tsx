@@ -87,7 +87,7 @@ const BorrowModal: React.FC<BorrowModalProps> = ({ isOpen, onClose }) => {
         </div>
 
         <div>
-          <label id="ctl-borrowmodal-collat" className="text-[11px] font-medium text-white/70 block mb-1.5">Collateral Asset</label>
+          <span id="ctl-borrowmodal-collat" className="text-[11px] font-medium text-white/70 block mb-1.5">Collateral Asset</span>
           <div className="grid grid-cols-3 gap-2" role="group" aria-labelledby="ctl-borrowmodal-collat">
             {['ETH', 'WBTC', 'CTC'].map((token) => (
               <button
