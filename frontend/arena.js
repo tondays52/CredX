@@ -271,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function updateStatsUI() {
-    paperBalanceDisplay.innerHTML = `PAPER <span class="balance-amt">$${paperBalance.toLocaleString('en-US')}</span>`;
+    paperBalanceDisplay.textContent = `PAPER $${paperBalance.toLocaleString('en-US')}`;
     streakBadge.innerText = `🔥 Win Streak: ${currentWinStreak}`;
 
     if (currentWinStreak >= 3) {

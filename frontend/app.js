@@ -414,7 +414,7 @@ function selectFlashAmount(amount) {
   const estimatedProfit = (amount * 0.0142).toFixed(2); // ~1.42% net profit
 
   document.getElementById('flashPrincipalText').textContent = `$${amount.toLocaleString()} cUSD`;
-  document.getElementById('flashFeeText').innerHTML = `$${fee.toFixed(2)} cUSD <span class="text-[10px] text-slate-500">(Saved $${saved.toFixed(2)} vs standard)</span>`;
+  document.getElementById('flashFeeText').textContent = `$${fee.toFixed(2)} cUSD (Saved $${saved.toFixed(2)} vs standard)`;
   document.getElementById('flashProfitText').textContent = `+$${Number.parseFloat(estimatedProfit).toLocaleString()} cUSD`;
 }
 
@@ -428,25 +428,25 @@ function runFlashLoanSimulation() {
 
   playSoundEffect('harvest');
   progressBar.style.width = '25%';
-  progressText.innerHTML = `<span>Step 1: Borrowing $${selectedFlashAmount.toLocaleString()} from LendingPool (0x0FD2)...</span><span>25%</span>`;
+  progressText.textContent = `Step 1: Borrowing $${selectedFlashAmount.toLocaleString()} from LendingPool (0x0FD2)... 25%`;
 
   setTimeout(() => {
     progressBar.style.width = '55%';
-    progressText.innerHTML = `<span>Step 2: Swapping on Uniswap v3 ➔ Curve Pool Arbitrage...</span><span>55%</span>`;
+    progressText.textContent = `Step 2: Swapping on Uniswap v3 ➔ Curve Pool Arbitrage... 55%`;
     playSoundEffect('harvest');
   }, 700);
 
   setTimeout(() => {
     progressBar.style.width = '85%';
-    progressText.innerHTML = `<span>Step 3: Repaying Principal + 0.01% Fee ($${(selectedFlashAmount * 0.0001).toFixed(2)})...</span><span>85%</span>`;
+    progressText.textContent = `Step 3: Repaying Principal + 0.01% Fee ($${(selectedFlashAmount * 0.0001).toFixed(2)})... 85%`;
     playSoundEffect('harvest');
   }, 1400);
 
   setTimeout(() => {
     progressBar.style.width = '100%';
-    progressText.innerHTML = `<span>Step 4: Atomic Settlement Complete! Net Profit Captured: +$${(selectedFlashAmount * 0.0142).toFixed(2)}</span><span>100%</span>`;
+    progressText.textContent = `Step 4: Atomic Settlement Complete! Net Profit Captured: +$${(selectedFlashAmount * 0.0142).toFixed(2)} (100%)`;
     playSoundEffect('success');
-    btn.innerHTML = `<span>🎉 Arbitrage Settled in Block #1,928,452!</span>`;
+    btn.textContent = `🎉 Arbitrage Settled in Block #1,928,452!`;
     setTimeout(() => {
       closeGameModal('flashLoanModal');
       showStatus(`⚡ Flash Loan Arbitrage Executed! Profit: +$${(selectedFlashAmount * 0.0142).toFixed(2)} cUSD (0.01% Super-Prime Fee Paid).`, "success");
@@ -562,19 +562,19 @@ function runHardwareLeaseSimulation() {
 
   playSoundEffect('harvest');
   bar.style.width = '30%';
-  text.innerHTML = `<span>Step 1: Verifying node operator CTS 794 &ge; 750 on Creditcoin...</span><span>30%</span>`;
+  text.textContent = `Step 1: Verifying node operator CTS 794 >= 750 on Creditcoin... 30%`;
 
   setTimeout(() => {
     bar.style.width = '65%';
-    text.innerHTML = `<span>Step 2: Securing $${selectedGpuCost.toLocaleString()} credit line with $0 upfront collateral...</span><span>65%</span>`;
+    text.textContent = `Step 2: Securing $${selectedGpuCost.toLocaleString()} credit line with $0 upfront collateral... 65%`;
     playSoundEffect('harvest');
   }, 750);
 
   setTimeout(() => {
     bar.style.width = '100%';
-    text.innerHTML = `<span>Step 3: Escrow disbursed to NVIDIA Hardware Vendor! Cluster Activated.</span><span>100%</span>`;
+    text.textContent = `Step 3: Escrow disbursed to NVIDIA Hardware Vendor! Cluster Activated (100%)`;
     playSoundEffect('success');
-    btn.innerHTML = `<span>🎉 Lease Active! Cluster Dispatched to Operator</span>`;
+    btn.textContent = `🎉 Lease Active! Cluster Dispatched to Operator`;
 
     setTimeout(() => {
       closeGameModal('depinLeaseModal');
@@ -692,7 +692,7 @@ function executeGatherDailyDemo() {
   const claimBtn = document.getElementById('claimHarvestBtn');
   claimBtn.disabled = true;
   claimBtn.className = "w-full py-3.5 rounded-xl bg-slate-700 text-slate-400 font-extrabold text-xs transition-all flex items-center justify-center space-x-2";
-  claimBtn.innerHTML = "<span>Click crop tiles above to harvest!</span>";
+  claimBtn.textContent = "Click crop tiles above to harvest!";
   openGameModal('pixelsHarvestModal');
 }
 
@@ -714,7 +714,7 @@ function harvestTile(el, baseAmount) {
     const claimBtn = document.getElementById('claimHarvestBtn');
     claimBtn.disabled = false;
     claimBtn.className = "w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 font-extrabold text-xs transition-all flex items-center justify-center space-x-2 shadow-lg shadow-emerald-500/25";
-    claimBtn.innerHTML = `<span>🎉 Claim Daily Total (${currentHarvestTotal} GAME)</span>`;
+    claimBtn.textContent = `🎉 Claim Daily Total (${currentHarvestTotal} GAME)`;
     playSoundEffect('success');
   }
 }

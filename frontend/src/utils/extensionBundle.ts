@@ -995,14 +995,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (hwMemoryValue) hwMemoryValue.innerText = ram + " GB RAM";
   if (hwGpuValue) hwGpuValue.innerText = "DirectX/Metal GPU";
 
-  // Telemetry ticker
+  // Active mining simulation loop
   setInterval(() => {
     if (state.isNodeActive) {
       state.uptimeSeconds += 1;
       state.credXPoints = Number((state.credXPoints + 0.15).toFixed(1));
       if (state.uptimeSeconds % 3 === 0) state.bandwidthSharedMB = Number((state.bandwidthSharedMB + 0.01).toFixed(2));
       
-      if (pointsValue) pointsValue.innerHTML = state.credXPoints.toLocaleString(undefined, { minimumFractionDigits: 1 }) + ' <span class="holo-unit">PTS</span>';
+      if (pointsValue) pointsValue.textContent = state.credXPoints.toLocaleString(undefined, { minimumFractionDigits: 1 }) + " PTS";
       if (bandwidthValue) bandwidthValue.innerText = state.bandwidthSharedMB.toFixed(2) + " MB";
       const h = Math.floor(state.uptimeSeconds / 3600).toString().padStart(2, '0');
       const m = Math.floor((state.uptimeSeconds % 3600) / 60).toString().padStart(2, '0');
@@ -1034,7 +1034,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.credXPoints += 150;
         updateWalletUI();
         syncChainBtn.disabled = false;
-        syncChainBtn.innerHTML = "<span>⚡ Sync Proof to Creditcoin (+35 CTS)</span>";
+        syncChainBtn.textContent = "⚡ Sync Proof to Creditcoin (+35 CTS)";
         showToast("✅ Merkle state relayed! +35 CTS added to Creditcoin Profile");
       }, 1200);
     });
@@ -1061,11 +1061,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (proofStreamList) {
           const it = document.createElement('div');
           it.className = 'stream-item';
-          it.innerHTML = '<div class="stream-top"><span class="stream-hash font-mono">0x' + secureRandom().toString(16).slice(2, 6) + '...' + secureRandom().toString(16).slice(2, 6) + '</span><span class="stream-badge text-green font-mono">VERIFIED</span></div><div class="stream-sub">Creditcoin OCCR Loan Repay • 1,200 cUSD • Merkle Leaf Proven</div>';
+          const topDiv = document.createElement('div');
+          topDiv.className = 'stream-top';
+          const hashSpan = document.createElement('span');
+          hashSpan.className = 'stream-hash font-mono';
+          hashSpan.textContent = '0x' + secureRandom().toString(16).slice(2, 6) + '...' + secureRandom().toString(16).slice(2, 6);
+          const badgeSpan = document.createElement('span');
+          badgeSpan.className = 'stream-badge text-green font-mono';
+          badgeSpan.textContent = 'VERIFIED';
+          topDiv.appendChild(hashSpan);
+          topDiv.appendChild(badgeSpan);
+          const subDiv = document.createElement('div');
+          subDiv.className = 'stream-sub';
+          subDiv.textContent = 'Creditcoin OCCR Loan Repay • 1,200 cUSD • Merkle Leaf Proven';
+          it.appendChild(topDiv);
+          it.appendChild(subDiv);
           proofStreamList.prepend(it);
         }
         auditNowBtn.disabled = false;
-        auditNowBtn.innerHTML = "<span>🛡️ Audit &amp; Verify Real MPT Proof</span>";
+        auditNowBtn.textContent = "🛡️ Audit & Verify Real MPT Proof";
         showToast("✅ In-Browser Light Client: Proof cryptographically verified!");
       }, 1000);
     });
@@ -1099,7 +1113,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       signAuthTokenBtn.innerText = "Signing OCCR Proof...";
       setTimeout(() => {
         signAuthTokenBtn.disabled = false;
-        signAuthTokenBtn.innerHTML = "<span>✍️ Sign OCCR Auth Token</span>";
+        signAuthTokenBtn.textContent = "✍️ Sign OCCR Auth Token";
         showToast("✅ Cryptographic Proof Signed! Valid EIP-191 OCCR Token.");
       }, 800);
     });
@@ -1114,7 +1128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         state.cusdBalance += 250;
         updateWalletUI();
         claimFaucetBtn.disabled = false;
-        claimFaucetBtn.innerHTML = "<span>🚰 Sync 100 CTC Faucet</span>";
+        claimFaucetBtn.textContent = "🚰 Sync 100 CTC Faucet";
         showToast("🚰 Faucet received: +100 CTC and +250 cUSD credited!");
       }, 900);
     });
@@ -1137,18 +1151,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function calculateSwapOutput() {
-    const from = swapFromToken.value;
-    const to = swapToToken.value;
-    const inAmt = Number.parseFloat(swapInputAmount.value) || 0;
+    const from = swapFromToken ? swapFromToken.value : 'CTC';
+    const to = swapToToken ? swapToToken.value : 'cUSD';
+    const inputVal = Number.parseFloat(swapInputAmount.value) || 0;
     if (from === to) {
-      if (swapOutputAmount) swapOutputAmount.value = inAmt.toFixed(2);
+      if (swapOutputAmount) swapOutputAmount.value = inputVal.toFixed(2);
       if (swapRateLabel) swapRateLabel.innerText = "1 " + from + " = 1 " + to;
       return;
     }
     const rate = SWAP_RATES[from + '-' + to] || 1.0;
-    if (swapOutputAmount) swapOutputAmount.value = (inAmt * rate).toFixed(2);
+    if (swapOutputAmount) swapOutputAmount.value = (inputVal * rate).toFixed(2);
     if (swapRateLabel) swapRateLabel.innerText = "1 " + from + " ≈ " + rate.toFixed(4) + " " + to;
-    if (executeSwapBtn) executeSwapBtn.innerHTML = "<span>🔄 Swap " + from + " ➔ " + to + "</span>";
+    if (executeSwapBtn) executeSwapBtn.textContent = "🔄 Swap " + from + " ➔ " + to;
   }
 
   if (swapInputAmount) swapInputAmount.addEventListener('input', calculateSwapOutput);
@@ -1165,8 +1179,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (executeSwapBtn) {
     executeSwapBtn.addEventListener('click', () => {
-      const from = swapFromToken.value;
-      const to = swapToToken.value;
+      const from = swapFromToken ? swapFromToken.value : 'CTC';
+      const to = swapToToken ? swapToToken.value : 'cUSD';
       const inAmt = Number.parseFloat(swapInputAmount.value) || 0;
       const outAmt = Number.parseFloat(swapOutputAmount.value) || 0;
       if (inAmt <= 0) return;
@@ -1181,7 +1195,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (to === 'CTS') state.ctsBalance += outAmt;
         updateWalletUI();
         executeSwapBtn.disabled = false;
-        executeSwapBtn.innerHTML = "<span>🔄 Swap " + from + " ➔ " + to + "</span>";
+        executeSwapBtn.textContent = "🔄 Swap " + from + " ➔ " + to;
         showToast("✅ Swapped " + inAmt + " " + from + " for " + outAmt + " " + to + "!");
       }, 1000);
     });
