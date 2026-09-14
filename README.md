@@ -1,4 +1,4 @@
-# 🛡️ CredX Protocol: Cross-Chain Trustless Credit Bureau & Multi-Track Super-App
+# 🛡️ CredX Protocol: Cross-Chain Trustless Credit Bureau & Multi-Track App
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 [![Creditcoin](https://img.shields.io/badge/Network-Creditcoin%20L1%20Testnet%20(102031)-00FF66.svg)](https://creditcoin.org)
